@@ -227,17 +227,50 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   const results = []
   for (const text of payloads) {
     const row = Engine.run("x " + text, { providers: ["commands"], commands: [{ keyword: "x", run: "printf %s {q} \"it's\"" }] }, {})[0]
-    const out = execFileSync("bash", ["-c", row.run.target]).toString()
+    const out = execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg]).toString()
     results.push(out === text + "it's")
   }
   const ran = fs.readdirSync(dir)
   fs.rmSync(dir, { recursive: true, force: true })
   const ok = results.every(Boolean) && ran.length === 0
   console.log((ok ? "ok  " : "FAIL") + "  shell quoting holds for " + payloads.length + " payloads" + (ran.length ? "; ran: " + ran.join(",") : "")); if (!ok) fails++ }
-{ const off = Engine.run("say hi", { providers: ["commands"], commands: [{ keyword: "say", run: "notify-send \"{q}\"" }, { keyword: "s1", run: "echo '{q}'" }] }, {})
-  const off1 = Engine.run("s1 hi", { providers: ["commands"], commands: [{ keyword: "s1", run: "echo '{q}'" }] }, {})
-  const ok = off.length === 1 && !off[0].run && /switched off/.test(off[0].title) && off1.length === 1 && !off1[0].run
-  console.log((ok ? "ok  " : "FAIL") + "  a run command with {q} inside quotes is refused"); if (!ok) fails++ }
+// Templates that evaluate a value or hide quoting from a naive scanner. Each
+// either refuses or runs with the payload left as text.
+{ const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-tmpl-")
+  // No backtick here: bash rejects an arithmetic expression containing one
+  // before it evaluates the subscript, which would hide the danger.
+  const payload = "a[$(touch " + dir + "/sub)]"
+  const templates = [
+    "cat <<EOF\n{q}\nEOF",                    // heredoc bodies expand $( ) and backticks
+    "echo $(( {q} ))",                          // arithmetic evaluates a[$(cmd)]
+    "echo ${a[{q}]}",
+    "(( {q} )) && echo",
+    "[[ {q} -gt 0 ]] && echo",
+    "let n={q}",
+    "# \"\necho \"{q}\"",                       // a quote in a comment
+    "printf %s \"pre-{q}-post\"",
+    "echo {q} # trailing {q}"
+  ]
+  const verdicts = []
+  for (const tmpl of templates) {
+    const row = Engine.run("x " + payload, { providers: ["commands"], commands: [{ keyword: "x", run: tmpl }] }, {})[0]
+    if (!row.run) { verdicts.push("refused"); continue }
+    try { execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg], { stdio: "pipe" }) } catch (e) {}
+    verdicts.push("ran")
+  }
+  const marks = fs.readdirSync(dir)
+  fs.rmSync(dir, { recursive: true, force: true })
+  const want = "ran|refused|refused|refused|refused|refused|ran|ran|ran"
+  const ok = marks.length === 0 && verdicts.join("|") === want
+  console.log((ok ? "ok  " : "FAIL") + "  templates that evaluate are refused, the rest run the text as text" + (ok ? "" : " → " + verdicts.join("|") + " marks:" + marks)); if (!ok) fails++ }
+{ const row = Engine.run("x a b", { providers: ["commands"], commands: [{ keyword: "x", run: "printf '[%s]' {q} \"<{q}>\"" }] }, {})[0]
+  const out = require("child_process").execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg]).toString()
+  console.log((out === "[a b][<a b>]" ? "ok  " : "FAIL") + "  {q} is one word bare and inside double quotes → " + out); if (out !== "[a b][<a b>]") fails++ }
+{ const dq = Engine.run("say hi", { providers: ["commands"], commands: [{ keyword: "say", run: "notify-send \"{q}\"" }] }, {})
+  const sq = Engine.run("s1 hi", { providers: ["commands"], commands: [{ keyword: "s1", run: "echo '{q}'" }] }, {})
+  const ok = dq.length === 1 && dq[0].run && dq[0].run.target === "notify-send \"${1}\"" && sq.length === 1 && !sq[0].run && /switched off/.test(sq[0].title)
+  console.log((ok ? "ok  " : "FAIL") + "  {q} in double quotes runs as $1; in single quotes it's refused"); if (!ok) fails++ }
 // An emoji with quotes and shell syntax reaches the insert script and wl-copy
 // unchanged, and nothing in it runs. Both tools are stubs that record what they got.
 { const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
@@ -377,9 +410,11 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 { const F = load(P + "providers/files.js")
   let req = null
   const first = run("~-rf notes", ["files"], { home: "/h", requestFiles: (k, a) => { req = { k, a } } })
-  const dash = req.a.indexOf("--")
-  check("files: asks fd with an argv, words never read as options",
-    req && req.a[0] === "fd" && dash > 0 && req.a.slice(dash + 1).length === 1 && req.a.includes("--and=\\-[^/]*r[^/]*f") && first[0].title === "Searching…", JSON.stringify(req && req.a))
+  const lit = req.a[0], fuzzy = req.a[1]
+  check("files: a literal walk, then a fuzzy one, words never read as options",
+    req.a.length === 2 && lit[0] === "fd" && fuzzy[0] === "fd"
+    && lit.slice(lit.indexOf("--") + 1).join() === "[^/]*notes[^/]*/?$" && lit.includes("--and=\\-rf")
+    && fuzzy.slice(fuzzy.indexOf("--") + 1).length === 1 && fuzzy.includes("--and=\\-[^/]*r[^/]*f") && first[0].title === "Searching…", JSON.stringify(req && req.a))
   const out = "/h/Documents/notes.md\0/h/notes/\0/h/x/n-o-t-e-s.txt\0/h/other.md\0/h/Documents/no"
   const entries = F.parse(out, "/h")
   check("files: NUL output parsed, unterminated tail dropped", entries.length === 4 && entries[1].dir && entries[1].rel === "notes", JSON.stringify(entries))

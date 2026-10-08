@@ -15,7 +15,7 @@ File search, keybindings, web addresses and colours are adapted from [evindor/ke
 
 It also fixes three things found reading upstream:
 
-- A keyword command's `{q}` was substituted with a replacement *string*, so typed text containing `$'` or `` $` `` could pull the rest of the template back in unquoted and run it. A `run` template with `{q}` inside quotes is now refused, with a message, because single-quoting only protects a bare word.
+- A keyword command's `{q}` was substituted with a replacement *string*, so typed text containing `$'` or `` $` `` could pull the rest of the template back in unquoted and run it. Even fixed, splicing quoted text into a script stayed fragile (heredocs and comments defeat it), so `run` commands now get the typed text as `$1`: `{q}` becomes `"$1"`, which bash expands as a value and never parses as code. Templates where bash would evaluate that value anyway are refused with a message: `{q}` in single quotes, and arithmetic or array subscripts (`$(( ))`, `(( ))`, `[[ ]]`, `let`, `${a[…]}`), where `a[$(cmd)]` runs `cmd`.
 - Copied text was put on a `bash` command line, where any process can read it. It now goes to `wl-copy` on stdin.
 - A test executed a payload containing `rm -rf ~`, which a quoting regression would have run for real. Test payloads now only create marker files in a temporary folder.
 
@@ -115,9 +115,9 @@ All of these come with Omarchy:
 
 - The only network request is to `https://open.er-api.com/v6/latest/USD`, made when you convert currency and the saved rates are out of date. The rates update once a day. What you type is not sent anywhere, except the text you search with a web keyword like `g` and the prompt you give your agent with `ai`.
 - It writes only to `~/.cache/omarchy-commandbar/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches) and your pinned apps. It does not change your Hyprland or Omarchy config files.
-- It reads `~/.local/state/omarchy/clipboard-history.json` only while a `cb ` query is on screen, and forgets it when the bar closes. It never writes that file.
+- It reads `~/.local/state/omarchy/clipboard-history.json` once, the first time you type `cb ` after opening the bar, and forgets it and every row built from it when the bar closes. It isn't watched, so a copy landing while you browse can't move the rows under the selection; reopen to see it. It never writes that file.
 - `~` searches run `fd` as an argument list with your words regex-escaped, under your home folder, stopping after 400 hits or 3 seconds. Hidden files are left out unless `"files": { "hidden": true }`.
-- Keybindings come from sourcing Omarchy's `omarchy-menu-keybindings`, at most every 30 seconds and only once you type something.
+- Keybindings come from sourcing Omarchy's `omarchy-menu-keybindings`, at most every 30 seconds and only once you type something. They depend on that script doing nothing but define functions when sourced with `--print`.
 - The cache files are read and written only through `bin/commandbar-cache`. It refuses symlinks, hard links, files you don't own and files over a size limit (4 KiB for the last query, 64 KiB for app counts, 256 KiB for rates), and saves each file through a private temporary file.
 - It sets its hotkey in the running Hyprland with `hyprctl eval`, and sets it again after Hyprland reloads its config. The hotkey is removed when the plugin is disabled or removed.
 - It lists only your own processes, and quits one only when you press Enter on it.
@@ -165,7 +165,7 @@ Put your settings in `~/.config/omarchy/extensions/commandbar.json`. They overri
 }
 ```
 
-`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is shell-quoted, so it can't change the command itself.
+`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is passed as `$1`, so it can't change the command itself; see the list of refused templates above.
 
 ## Asking your agent
 

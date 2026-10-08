@@ -127,12 +127,18 @@ Item {
     root.forget()
   }
 
-  // What was read for one session of the bar goes when it closes.
+  // What was read while the bar was open (clipboard history, file listings,
+  // the rows built from them) goes when it closes.
   function forget() {
     root.clipboardWanted = false
     root.clipboard = []
     root.files = null
     root.filesWantKey = ""
+    root.filesWantArgv = null
+    if (filesProc.running) filesProc.signal(15)
+    // Rows hold clipboard texts and file paths; a kept query is recomputed
+    // from scratch on the next open.
+    root.results = []
   }
 
   function dismiss() {
@@ -231,8 +237,9 @@ Item {
     root.perform(row.alt)
   }
 
-  // Only "run" (your own keyword commands) reaches a shell; every other kind
-  // is an argument list or stdin. An unknown kind does nothing.
+  // "shell" (your keyword commands: typed text as $1) and "run" (fixed
+  // strings built by providers, such as the emoji insert) reach bash; every
+  // other kind is an argument list or stdin. An unknown kind does nothing.
   function perform(run) {
     if (run.kind === "app") root.launchApp(run.target, run.action)
     else if (run.kind === "window") root.focusWindow(run.target)
@@ -241,6 +248,7 @@ Item {
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
+    else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
     else console.warn("commandbar: unknown action kind " + run.kind)
   }
@@ -270,8 +278,13 @@ Item {
     if (!copyProc.running) root.copyNext()
   }
 
+  // The item leaves the queue as its wl-copy starts, so one that never
+  // starts can't sit at the head and put every later copy one behind.
+  property var copyCurrent: null
+
   function copyNext() {
     if (root.copyQueue.length === 0) return
+    root.copyCurrent = root.copyQueue.shift()
     copyProc.stdinEnabled = true
     copyProc.running = true
   }
@@ -282,7 +295,9 @@ Item {
     id: copyProc
     command: ["wl-copy"]
     onStarted: {
-      var next = root.copyQueue.shift()
+      var next = root.copyCurrent
+      root.copyCurrent = null
+      if (!next) { copyProc.stdinEnabled = false; return }
       root.copyPaste = next.paste
       copyProc.write(next.text)
       copyProc.stdinEnabled = false
@@ -314,8 +329,10 @@ Item {
 
   // ---------------------------------------------------------------- clipboard history
 
-  // Read only while a "cb " query is on screen, and dropped when the bar
-  // closes, so the history isn't held in this process the rest of the time.
+  // Read the first time a "cb " query is typed after the bar opens, once:
+  // not watched, so a copy landing while you browse can't move the rows
+  // under the selection. Dropped when the bar closes, so the history isn't
+  // held in this process the rest of the time.
   property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"   // the shell sets this too
   readonly property string clipboardPath: root.home + "/.local/state/omarchy/clipboard-history.json"
   property bool clipboardWanted: false
@@ -326,9 +343,9 @@ Item {
   FileView {
     id: clipboardFile
     path: root.clipboardWanted ? root.clipboardPath : ""
-    watchChanges: true
     printErrors: false
     onLoaded: {
+      if (!root.clipboardWanted) return
       try {
         var data = JSON.parse(text())
         root.clipboard = Array.isArray(data) ? data : []
@@ -337,30 +354,40 @@ Item {
       }
       if (root.opened) root.recompute()
     }
-    onFileChanged: reload()
   }
 
   // ---------------------------------------------------------------- files
 
-  // One fd walk at a time. A newer query stops a walk still running; when it
-  // exits, the newest wanted query starts. Results are kept for one query.
+  // One fd walk at a time. A query asks for a list of walks (literal, then
+  // fuzzy), run in turn, their results merged and shown as each lands. A
+  // newer query stops a walk still running; when it exits, the newest wanted
+  // query starts. Results are kept for one query.
   property var files: null            // { key, entries }
   property string filesWantKey: ""
-  property var filesWantArgv: null
+  property var filesWantArgv: null    // the walks still to run for filesWantKey
+  property var filesSeen: ({})        // paths already listed for this key
 
-  function requestFiles(key, argv) {
+  function requestFiles(key, argvs) {
     if (root.filesWantKey === key) return
     root.filesWantKey = key
-    root.filesWantArgv = argv
+    root.filesWantArgv = argvs
+    root.filesSeen = ({})   // the old key's rows stay on screen until the first walk lands
     if (filesProc.running) filesProc.signal(15)
     else root.startFiles()
   }
 
+  // The next walk starts only once the previous one has both exited and
+  // delivered its output, so old output can't be filed under a new key.
+  property bool filesStreamDone: true
+  property bool filesExited: true
+
   function startFiles() {
-    if (!root.filesWantArgv) return
+    if (!root.filesWantArgv || root.filesWantArgv.length === 0 || !root.filesStreamDone || !root.filesExited) return
+    root.filesStreamDone = false
+    root.filesExited = false
     filesProc.forKey = root.filesWantKey
-    filesProc.command = root.filesWantArgv
-    root.filesWantArgv = null
+    filesProc.command = root.filesWantArgv[0]
+    root.filesWantArgv = root.filesWantArgv.slice(1)
     filesProc.running = true
     filesWatchdog.restart()
   }
@@ -371,22 +398,33 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        if (filesProc.forKey !== root.filesWantKey) return
-        root.files = { key: filesProc.forKey, entries: Files.parse(text, root.home) }
-        if (root.opened) root.recompute()
+        root.filesStreamDone = true
+        if (root.opened && filesProc.forKey !== "" && filesProc.forKey === root.filesWantKey) {
+          var merged = root.files && root.files.key === filesProc.forKey ? root.files.entries.slice() : []
+          var seen = root.filesSeen
+          var found = Files.parse(text, root.home)
+          for (var i = 0; i < found.length; i++)
+            if (!seen[found[i].path]) { seen[found[i].path] = true; merged.push(found[i]) }
+          root.files = { key: filesProc.forKey, entries: merged }
+          root.recompute()
+        }
+        root.startFiles()
       }
     }
-    onExited: { filesWatchdog.stop(); root.startFiles() }
+    onExited: { filesWatchdog.stop(); root.filesExited = true; root.startFiles() }
   }
 
-  // A huge home folder can take a while; what fd found by then is kept.
+  // A huge home folder can take a while; fd is stopped after 3 s. Whatever it
+  // had written out by then is used (unmeasured how much that is).
   Timer { id: filesWatchdog; interval: 3000; onTriggered: if (filesProc.running) filesProc.signal(15) }
 
   // ---------------------------------------------------------------- hotkeys
 
   // omarchy-menu-keybindings keeps its own cache keyed on `hyprctl binds`,
-  // so this is cheap; it runs at most once per open, and only once something
-  // asks for keybindings.
+  // so this is cheap. Bindings mix into ordinary results, so any typed query
+  // asks; it runs at most every 30 s. It depends on the script's top level
+  // doing nothing but define functions under --print: if an Omarchy update
+  // changes that, the keybinding rows go empty.
   property string hotkeysText: ""
   property real hotkeysAt: 0
 

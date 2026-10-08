@@ -26,8 +26,9 @@ function words(query) {
 
 function escapeRegex(word) { return word.replace(/[.*+?^${}()|[\]\\\/-]/g, "\\$&") }
 
-// Fuzzy: the letters in order, anywhere within one path segment.
-function pattern(word) { return Array.from(word).map(escapeRegex).join("[^/]*") }
+// Fuzzy: the letters in order, anywhere within one path segment. Literal:
+// the word itself.
+function pattern(word, fuzzy) { return fuzzy ? Array.from(word).map(escapeRegex).join("[^/]*") : escapeRegex(word) }
 
 // Null when there's nothing worth asking fd.
 function key(query, settings) {
@@ -36,13 +37,22 @@ function key(query, settings) {
   return ws.join(" ").toLowerCase() + (settings && settings.hidden ? "\nh" : "")
 }
 
-function argv(query, home, settings) {
+// Two walks, run one after the other: names containing the words as typed,
+// then the fuzzy match. fd stops at CANDIDATES hits in no particular order,
+// and a fuzzy pattern matches so much that a single walk can stop before it
+// reaches the obvious answer ("~notes" missing notes.rs); the literal walk
+// finds far fewer names, so it gets them all.
+function argvs(query, home, settings) {
+  return [argv(query, home, settings, false), argv(query, home, settings, true)]
+}
+
+function argv(query, home, settings, fuzzy) {
   var ws = words(query)
   var out = ["fd", "--ignore-case", "--full-path", "--color", "never", "--absolute-path",
              "--base-directory", home, "--max-results", String(CANDIDATES), "--threads", "2", "--print0"]
   if (settings && settings.hidden) out.push("--hidden", "--exclude", ".git")
-  for (var i = 0; i < ws.length - 1; i++) out.push("--and=" + pattern(ws[i]))
-  out.push("--", "[^/]*" + pattern(ws[ws.length - 1]) + "[^/]*/?$")
+  for (var i = 0; i < ws.length - 1; i++) out.push("--and=" + pattern(ws[i], fuzzy))
+  out.push("--", "[^/]*" + pattern(ws[ws.length - 1], fuzzy) + "[^/]*/?$")
   return out
 }
 
@@ -139,7 +149,7 @@ var provider = {
     if (!k) return [{ title: "Type a file or folder name", subtitle: "At least two letters · searches under ~", score: 40, copy: "" }]
     var have = ctx.files
     if (!have || have.key !== k) {
-      if (ctx.requestFiles) ctx.requestFiles(k, argv(m[1], ctx.home, settings))
+      if (ctx.requestFiles) ctx.requestFiles(k, argvs(m[1], ctx.home, settings))
       // Rows from the previous query stay until fd answers, so the list
       // doesn't flash empty on every keystroke.
       if (!have) return [{ title: "Searching…", subtitle: "Files", score: 40, copy: "" }]
