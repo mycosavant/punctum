@@ -8,6 +8,7 @@ import qs.Ui
 import "lib/Engine.js" as Engine
 import "lib/tzcities.js" as Tz
 import "lib/Hotkey.js" as Hotkey
+import "lib/Geometry.js" as Geometry
 import "providers/files.js" as Files
 
 // Spotlight-style command bar. The UI and the data it needs (config, exchange
@@ -70,9 +71,6 @@ Item {
   property int footerHeight: Math.max(Style.space(32), Style.font.caption + Style.spacing.md * 2)
   readonly property int tileSize: Math.max(Style.space(30), Style.font.iconLarge + Style.space(12))
   readonly property int tileRadius: root.cornerRadius > 0 ? Style.space(7) : 0
-  // Results show up to 7 rows before scrolling; the ? list is allowed to
-  // grow so it fits without scrolling, as far as the screen allows.
-  readonly property int maxRows: 7
   // Alt+1 … Alt+9 run the first nine results; the ? list doesn't have them.
   readonly property int quickKeys: root.showingHelp ? 0 : 9
   readonly property bool showingHelp: root.rows.length > 0 && !!root.rows[0].help
@@ -88,11 +86,60 @@ Item {
   }
   readonly property real listHeight: {
     var total = 0
-    for (var i = 0; i < root.rows.length && (root.showingHelp || i < root.maxRows); i++)
-      total += root.rowSize(root.rows[i])
-    return Math.min(total, panel.height * 0.6)
+    for (var i = 0; i < root.rows.length; i++) total += root.rowSize(root.rows[i])
+    // The ? list may grow to fit; results stop at the height you sized the card to.
+    return Math.min(total, root.showingHelp ? Math.max(panel.height * 0.6, root.geometry.listHeight) : root.geometry.listHeight)
   }
-  property int cardWidth: Math.min(Style.space(640), panel.width - Style.gapsOut * 2)
+  readonly property int cardWidth: Math.round(root.geometry.width)
+
+  // ---------------------------------------------------------------- position and size
+
+  // Drag the card by its edges, footer or the space around the search field;
+  // resize it from the grip in its bottom-right corner. Where you leave it is
+  // saved (cache geometry.json) and used from then on; "Reset command bar
+  // position" goes back to the "window" section of the config.
+  property var savedGeometry: null
+  property var liveGeometry: null     // while a drag or resize is under way
+  readonly property var geometry: Geometry.clamp(
+    root.liveGeometry || Geometry.merge(root.savedGeometry, Geometry.defaults(root.config.window, root.rowHeight)),
+    Math.max(1, panel.width), Math.max(1, panel.height), Style.gapsOut, 0)
+
+  function loadGeometry(text) {
+    try { var g = JSON.parse(text); if (g && typeof g === "object") root.savedGeometry = g } catch (e) {}
+  }
+
+  function saveGeometry() {
+    if (!root.liveGeometry) return
+    var g = root.geometry
+    root.savedGeometry = { cx: g.cx, top: g.top, width: Math.round(g.width), listHeight: Math.round(g.listHeight) }
+    root.liveGeometry = null
+    root.cacheWrite("geometry.json", JSON.stringify(root.savedGeometry))
+  }
+
+  function resetGeometry() {
+    root.savedGeometry = null
+    root.liveGeometry = null
+    root.cacheWrite("geometry.json", "{}")
+  }
+
+  // ---------------------------------------------------------------- frosted glass
+
+  // The card is drawn in the theme's own menu colour at "glass.opacity" and
+  // Hyprland blurs what's behind it (a layer rule set at runtime, like the
+  // hotkey). Blur needs decoration.blur.enabled in your Hyprland config.
+  readonly property bool glassOn: !root.config.glass || root.config.glass.enabled !== false
+  readonly property var glassLevels: Geometry.glass(Color.menu.scrim.a,
+    root.glassOn ? Number((root.config.glass && root.config.glass.opacity) || 0.78) : 1)
+
+  function applyLayerRule() {
+    Quickshell.execDetached(["hyprctl", "eval",
+      'hl.layer_rule({ name = "hypha-commandbar-glass", match = { namespace = "^omarchy-commandbar$" }, blur = '
+      + (root.glassOn ? "true" : "false") + ", ignore_alpha = " + root.glassLevels.ignoreAlpha + " })"])
+  }
+
+  onGlassLevelsChanged: layerRuleDebounce.restart()
+  onGlassOnChanged: layerRuleDebounce.restart()
+  Timer { id: layerRuleDebounce; interval: 300; onTriggered: root.applyLayerRule() }
 
   // Nothing is listed until there's a query, so an empty bar is just the input.
   readonly property var rows: results
@@ -249,6 +296,7 @@ Item {
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
     else if (run.kind === "note") root.addNote(run.path, run.target)
+    else if (run.kind === "reset-geometry") root.resetGeometry()
     else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
     else console.warn("commandbar: unknown action kind " + run.kind)
@@ -565,7 +613,7 @@ Item {
   Connections {
     target: Hyprland
     function onRawEvent(event) {
-      if (event && String(event.name) === "configreloaded") root.ensureHotkey()
+      if (event && String(event.name) === "configreloaded") { root.ensureHotkey(); layerRuleDebounce.restart() }
     }
   }
 
@@ -936,6 +984,8 @@ Item {
     root.cacheRead("last-query", root.loadLastQuery)
     root.cacheRead("launches.json", root.loadLaunches)
     root.cacheRead("pinned-apps.json", root.loadPinned)
+    root.cacheRead("geometry.json", root.loadGeometry)
+    layerRuleDebounce.restart()
     root.cacheRead("rates.json", root.loadRates)
     root.refreshAgent()
   }
@@ -1092,7 +1142,7 @@ Item {
 
     Rectangle {
       anchors.fill: parent
-      color: root.scrim
+      color: Qt.rgba(root.scrim.r, root.scrim.g, root.scrim.b, root.glassLevels.scrim)
     }
 
     MouseArea {
@@ -1105,14 +1155,36 @@ Item {
       width: root.cardWidth
       height: contentTopInset + contentBottomInset + layout.implicitHeight
       radius: root.cornerRadius
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: Math.round(panel.height * 0.22)
-      color: root.background
+      x: Geometry.x(root.geometry, panel.width)
+      // The top is kept where you put it unless the card would run off the
+      // bottom, then it moves up just enough.
+      y: Math.max(Style.gapsOut, Math.min(Geometry.y(root.geometry, panel.height), panel.height - height - Style.gapsOut))
+      color: Qt.rgba(root.background.r, root.background.g, root.background.b, root.background.a * root.glassLevels.card)
       borderSpec: root.borderSpec
       padding: root.contentMargin
       Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
 
-      MouseArea { anchors.fill: parent; onClicked: {} }
+      // Clicks on the card stay on it; a press and drag moves it.
+      MouseArea {
+        id: dragArea
+        anchors.fill: parent
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
+        property point start
+        property var startGeometry
+        onPressed: function(mouse) {
+          start = mapToItem(null, mouse.x, mouse.y)
+          startGeometry = root.geometry
+          root.lastPointer = Qt.point(-1, -1)
+        }
+        onPositionChanged: function(mouse) {
+          if (!pressed) return
+          var p = mapToItem(null, mouse.x, mouse.y)
+          var g = startGeometry
+          root.liveGeometry = Geometry.moved(g, Geometry.x(g, panel.width) + p.x - start.x, Geometry.y(g, panel.height) + p.y - start.y, panel.width, panel.height)
+        }
+        onReleased: { root.saveGeometry(); input.forceActiveFocus() }
+        onClicked: {}
+      }
 
       Column {
         id: layout
@@ -1534,6 +1606,53 @@ Item {
             }
             Keycap { visible: primary.text !== ""; label: "↵"; anchors.verticalCenter: parent.verticalCenter; foreground: root.foreground; fontFamily: root.fontFamily; rounded: root.cornerRadius > 0 }
           }
+        }
+      }
+
+      // The resize grip: drag the bottom-right corner. Width and the most
+      // results shown before scrolling are both saved.
+      Item {
+        width: Style.space(18)
+        height: Style.space(18)
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        z: 10
+
+        Canvas {
+          anchors.fill: parent
+          anchors.margins: Style.space(4)
+          opacity: gripArea.containsMouse || gripArea.pressed ? 0.7 : 0.3
+          onPaint: {
+            var c = getContext("2d")
+            c.reset()
+            c.strokeStyle = root.foreground
+            c.lineWidth = 1
+            for (var i = 1; i <= 3; i++) {
+              c.beginPath()
+              c.moveTo(width, height - width * i / 3)
+              c.lineTo(width - width * i / 3, height)
+              c.stroke()
+            }
+          }
+        }
+
+        MouseArea {
+          id: gripArea
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.SizeFDiagCursor
+          property point start
+          property var startGeometry
+          onPressed: function(mouse) {
+            start = mapToItem(null, mouse.x, mouse.y)
+            startGeometry = root.geometry
+          }
+          onPositionChanged: function(mouse) {
+            if (!pressed) return
+            var p = mapToItem(null, mouse.x, mouse.y)
+            root.liveGeometry = Geometry.resized(startGeometry, p.x - start.x, p.y - start.y, panel.width)
+          }
+          onReleased: { root.saveGeometry(); input.forceActiveFocus() }
         }
       }
     }

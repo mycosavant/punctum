@@ -3,6 +3,8 @@
   "providers": ["commands", "notes", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
   "apps": { "pinned": [] },
   "files": { "hidden": false },
+  "window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 },
+  "glass": { "enabled": true, "opacity": 0.78 },
   "notes": { "inbox": "", "format": "- {date} {time} {text}" },
   "math": { "precision": 10 },
   "currency": { "home": "USD", "favorites": ["EUR", "GBP"] },

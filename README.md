@@ -10,6 +10,9 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Web addresses**: `example.com/docs` opens in your browser.
 - **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
 - **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
+- **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/commandbar-note` writes it: text on stdin, symlinks refused, never creates the folder.
+- **Frosted glass**: the card is the theme's menu colour at `"glass": { "opacity": 0.78 }` with Hyprland blurring what's behind it. Needs `decoration.blur.enabled` in your Hyprland config; `"glass": { "enabled": false }` makes it solid.
+- **Move and resize**: drag the card by its edges or footer, resize from the grip in the bottom-right corner. It stays where you leave it (`~/.cache/omarchy-commandbar/geometry.json`); the command "Reset command bar position" goes back to `"window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 }`.
 
 File search, keybindings, web addresses and colours are adapted from [evindor/keystroke](https://github.com/evindor/keystroke) (MIT); each file says which part.
 

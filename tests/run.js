@@ -502,4 +502,24 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("note helper: empty input writes nothing", note(dir + "/Empty.md", " \n").status !== 0 && !fs.existsSync(dir + "/Empty.md"))
   fs.rmSync(dir, { recursive: true, force: true }) }
 
+
+{ const G = load(P + "lib/Geometry.js")
+  const base = G.defaults({}, 48)
+  check("geometry: defaults centre the card near the top", base.cx === 0.5 && base.top === 0.22 && base.width === 640 && base.listHeight === 336)
+  const m = G.merge({ cx: 0.3, width: "wide", junk: 1 }, base)
+  check("geometry: saved fields win, bad ones fall back", m.cx === 0.3 && m.width === 640 && m.top === 0.22 && !("junk" in m))
+  const c = G.clamp({ cx: 0.99, top: -1, width: 5000, listHeight: 50 }, 1920, 1080, 10, 0)
+  check("geometry: kept on screen and above the minimums", c.width === 1900 && c.cx === 0.5 && c.top > 0 && c.listHeight === G.MIN_LIST, JSON.stringify(c))
+  const mv = G.moved(base, 100, 200, 1920, 1080)
+  check("geometry: a drag moves the card's corner", G.x(mv, 1920) === 100 && G.y(mv, 1080) === 200 && mv.width === 640)
+  const rs = G.resized(base, 200, 100, 1920)
+  check("geometry: resizing keeps the left edge", G.x(rs, 1920) === G.x(base, 1920) && rs.width === 840 && rs.listHeight === 436)
+  check("geometry: can't resize below the minimum", G.resized(base, -1000, -1000, 1920).width === G.MIN_WIDTH)
+  const gl = G.glass(0.5, 0.78)
+  check("glass: only the card is above the blur line", gl.scrim < gl.ignoreAlpha && gl.ignoreAlpha < gl.card, JSON.stringify(gl))
+  const dense = G.glass(0.9, 0.78)
+  check("glass: a theme with a heavy scrim gets it lightened under the line", dense.scrim < dense.ignoreAlpha && dense.ignoreAlpha < dense.card, JSON.stringify(dense))
+  const off = G.glass(0.5, 1)
+  check("glass: opacity 1 means a solid card", off.card === 1 && off.scrim === 0.5) }
+
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)
