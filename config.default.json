@@ -1,8 +1,9 @@
 {
   "hotkey": "SUPER + PERIOD",
-  "providers": ["commands", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
+  "providers": ["commands", "notes", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
   "apps": { "pinned": [] },
   "files": { "hidden": false },
+  "notes": { "inbox": "", "format": "- {date} {time} {text}" },
   "math": { "precision": 10 },
   "currency": { "home": "USD", "favorites": ["EUR", "GBP"] },
   "emoji": { "onEnter": "paste" },

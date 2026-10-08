@@ -248,6 +248,7 @@ Item {
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
+    else if (run.kind === "note") root.addNote(run.path, run.target)
     else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
     else console.warn("commandbar: unknown action kind " + run.kind)
@@ -307,6 +308,46 @@ Item {
         Quickshell.execDetached(["bash", "-c", "sleep 0.15; wtype -M shift -k Insert -m shift"])
       root.copyPaste = false
       root.copyNext()
+    }
+  }
+
+  // ---------------------------------------------------------------- inbox note
+
+  // bin/commandbar-note appends the line, which it reads from stdin. One at a
+  // time; a note added while one is being written waits its turn.
+  property var noteQueue: []
+  property var noteCurrent: null
+
+  function addNote(path, line) {
+    root.noteQueue.push({ path: String(path), line: String(line) })
+    if (!noteProc.running) root.noteNext()
+  }
+
+  function noteNext() {
+    if (root.noteQueue.length === 0) return
+    root.noteCurrent = root.noteQueue.shift()
+    noteProc.command = ["python3", "-I", root.pluginDir + "/bin/commandbar-note", root.noteCurrent.path]
+    noteProc.stdinEnabled = true
+    noteProc.running = true
+  }
+
+  Process {
+    id: noteProc
+    onStarted: {
+      noteProc.write(root.noteCurrent ? root.noteCurrent.line : "")
+      noteProc.stdinEnabled = false
+    }
+    stderr: StdioCollector { id: noteErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      var done = root.noteCurrent
+      root.noteCurrent = null
+      var name = done ? done.path.split("/").pop() : "the inbox"
+      if (exitCode === 0)
+        Quickshell.execDetached(["omarchy-notification-send", "-g", "󰎞", "-t", "2500", "Noted", "Added to " + name])
+      else
+        Quickshell.execDetached(["omarchy-notification-send", "-g", "󰎞", "-u", "critical", "Note not saved",
+          (String(noteErr.text || "").trim() || "commandbar-note failed").slice(0, 200)])
+      root.noteNext()
     }
   }
 

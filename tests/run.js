@@ -186,8 +186,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Clipboard history|Find files|Keybindings|Open a web address|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[7].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Keybindings|Open a web address|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[8].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -469,5 +469,37 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("pins: an empty bar with no pins lists nothing", Engine.run("", config, { apps, launches: {} }).length === 0)
   const hit = run("fire", ["apps"], { pinnedApps: ["firefox"] })[0]
   check("pins: a pinned app says so in search, and can be unpinned", hit.title === "Firefox" && /^Pinned · /.test(hit.subtitle) && hit.pinned && hit.appId === "firefox") }
+
+
+{ const N = x => run(x, ["notes"], { home: "/h", now })
+  check("notes: unset inbox says how to set it", /Set your inbox/.test(N("n hi")[0].title) && !N("n hi")[0].run)
+  const r = Engine.run("n call the $& dentist", Object.assign({}, config, { providers: ["notes"], notes: { inbox: "~/Vault/Inbox.md" } }), { home: "/h", now })[0]
+  check("notes: the line is formatted, ~ expanded, $& kept literal",
+    r.run.kind === "note" && r.run.path === "/h/Vault/Inbox.md" && r.run.target === "- 2026-09-23 14:00 call the $& dentist" && r.subtitle === "→ ~/Vault/Inbox.md", JSON.stringify(r.run))
+  const rel = Engine.run("n x", Object.assign({}, config, { providers: ["notes"], notes: { inbox: "Vault/Inbox.md" } }), { home: "/h", now })[0]
+  check("notes: a relative inbox path counts as unset", !rel.run)
+  check("notes: mode chip", (Engine.mode("n x", config) || {}).label === "Note") }
+
+// bin/commandbar-note, run for real in a temporary folder.
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-note-")
+  const note = (path, input) => spawnSync("python3", ["-I", P + "bin/commandbar-note", path], { input })
+  const inbox = dir + "/Inbox.md"
+  fs.writeFileSync(inbox, "# Inbox\n- old")                 // no trailing newline
+  const a = note(inbox, "- first\u0007 $(touch " + dir + "/pwned)\n")
+  const b = note(inbox, "- second")
+  const text = fs.readFileSync(inbox, "utf8")
+  check("note helper: appends on a new line, drops control characters, runs nothing",
+    a.status === 0 && b.status === 0 && text === "# Inbox\n- old\n- first $(touch " + dir + "/pwned)\n- second\n" && !fs.existsSync(dir + "/pwned"), JSON.stringify(text))
+  fs.writeFileSync(dir + "/target.md", "")
+  fs.symlinkSync(dir + "/target.md", dir + "/link.md")
+  const l = note(dir + "/link.md", "- x")
+  check("note helper: refuses a symlink", l.status !== 0 && fs.readFileSync(dir + "/target.md", "utf8") === "")
+  const m = note(dir + "/missing/Inbox.md", "- x")
+  check("note helper: never creates a folder", m.status !== 0 && !fs.existsSync(dir + "/missing"))
+  const n = note(dir + "/New.md", "- x")
+  check("note helper: a new note is private", n.status === 0 && (fs.statSync(dir + "/New.md").mode & 0o777) === 0o600)
+  check("note helper: empty input writes nothing", note(dir + "/Empty.md", " \n").status !== 0 && !fs.existsSync(dir + "/Empty.md"))
+  fs.rmSync(dir, { recursive: true, force: true }) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

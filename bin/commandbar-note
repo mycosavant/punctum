@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""Append one line, read from stdin, to a note file (the Obsidian inbox).
+
+    commandbar-note <absolute path to the note>
+
+- The line arrives on stdin, never in the arguments, so it can't be read
+  from /proc/<pid>/cmdline. Control characters are dropped and it is cut at
+  4 KiB.
+- The file is opened with O_NOFOLLOW and O_APPEND under an exclusive lock;
+  a symlink, something that isn't a regular file, or a file someone else
+  owns is refused. A new file is created 0600.
+- The folder must already exist: this never creates a vault.
+- If the file doesn't end with a newline, one is added first, so the line
+  never joins the last line of the note.
+"""
+import fcntl
+import os
+import stat
+import sys
+
+MAX = 4096
+
+
+def main(argv):
+    if len(argv) != 1 or not os.path.isabs(argv[0]):
+        print("usage: commandbar-note /absolute/path/to/Inbox.md < line", file=sys.stderr)
+        return 2
+    path = argv[0]
+    if not os.path.isdir(os.path.dirname(path)):
+        print("no such folder: " + os.path.dirname(path), file=sys.stderr)
+        return 1
+
+    raw = sys.stdin.buffer.read(MAX * 4).decode("utf-8", "replace")
+    line = "".join(c for c in raw if c == "\t" or ord(c) >= 0x20 and ord(c) != 0x7F)[:MAX].strip()
+    if not line:
+        return 1
+
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid():
+            print("refusing " + path + ": not a regular file of yours", file=sys.stderr)
+            return 1
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        prefix = b""
+        if os.fstat(fd).st_size > 0:
+            with open(path, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as r:
+                r.seek(-1, os.SEEK_END)
+                if r.read(1) != b"\n":
+                    prefix = b"\n"
+        os.write(fd, prefix + line.encode("utf-8") + b"\n")
+    finally:
+        os.close(fd)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except OSError as e:
+        print("commandbar-note: " + str(e), file=sys.stderr)
+        sys.exit(1)
