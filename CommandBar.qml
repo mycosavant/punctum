@@ -8,6 +8,7 @@ import qs.Ui
 import "lib/Engine.js" as Engine
 import "lib/tzcities.js" as Tz
 import "lib/Hotkey.js" as Hotkey
+import "providers/files.js" as Files
 
 // Spotlight-style command bar. The UI and the data it needs (config, exchange
 // rates, zone offsets) live here; what a query *means* is decided by the
@@ -123,11 +124,21 @@ Item {
   function close() {
     root.opened = false
     root.saveLastQuery()
+    root.forget()
+  }
+
+  // What was read for one session of the bar goes when it closes.
+  function forget() {
+    root.clipboardWanted = false
+    root.clipboard = []
+    root.files = null
+    root.filesWantKey = ""
   }
 
   function dismiss() {
     root.opened = false
     root.saveLastQuery()
+    root.forget()
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "hypha.commandbar")
   }
@@ -159,8 +170,17 @@ Item {
       windows: root.windows,
       launches: root.launches,
       agent: root.agent,
+      clipboard: root.clipboard,
+      files: root.files,
+      hotkeys: root.hotkeysText,
+      pinnedApps: root.pinnedApps,
+      home: root.home,
+      omarchyPath: root.omarchyPath,
       requestProcesses: root.requestProcesses,
-      requestRates: root.refreshRates
+      requestRates: root.refreshRates,
+      requestFiles: root.requestFiles,
+      requestHotkeys: root.requestHotkeys,
+      requestClipboard: root.requestClipboard
     })
     root.mode = Engine.mode(input.text, root.config)
     if (root.selectedIndex >= root.rows.length) root.selectedIndex = Math.max(0, root.rows.length - 1)
@@ -192,11 +212,7 @@ Item {
     if (!row) return
     if (row.run) {
       root.finish()
-      if (row.run.kind === "app") root.launchApp(row.run.target, row.run.action)
-      else if (row.run.kind === "window") root.focusWindow(row.run.target)
-      else if (row.run.kind === "open") Quickshell.execDetached(["xdg-open", row.run.target])
-      else if (row.run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-agent", row.run.target])
-      else Quickshell.execDetached(["bash", "-c", row.run.target])
+      root.perform(row.run)
       return
     }
     if (row.complete && !row.copy) { root.complete(row); return }
@@ -205,12 +221,52 @@ Item {
     root.copyText(row.copy)
   }
 
+  // Shift+Enter: the row's second action (copy instead of paste, a terminal
+  // in a file's folder). Rows without one do what Enter does.
+  function activateAlt(index) {
+    var row = root.rows[index]
+    if (!row) return
+    if (!row.alt) { root.activate(index); return }
+    root.finish()
+    root.perform(row.alt)
+  }
+
+  // Only "run" (your own keyword commands) reaches a shell; every other kind
+  // is an argument list or stdin. An unknown kind does nothing.
+  function perform(run) {
+    if (run.kind === "app") root.launchApp(run.target, run.action)
+    else if (run.kind === "window") root.focusWindow(run.target)
+    else if (run.kind === "open") Quickshell.execDetached(["xdg-open", run.target])
+    else if (run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-agent", run.target])
+    else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
+    else if (run.kind === "copy") root.copyText(run.target)
+    else if (run.kind === "paste") root.copyText(run.target, true)
+    else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
+    else console.warn("commandbar: unknown action kind " + run.kind)
+  }
+
+  // Alt+P on an app row pins or unpins it. The list starts as "apps.pinned"
+  // from the config and, once changed here, lives in the cache.
+  function togglePin(index) {
+    var row = root.rows[index]
+    if (!row || !row.appId) return
+    var next = root.pinnedApps.slice()
+    var at = next.indexOf(row.appId)
+    if (at >= 0) next.splice(at, 1)
+    else next.push(row.appId)
+    root.pinnedOverride = next
+    root.cacheWrite("pinned-apps.json", JSON.stringify(next))
+    root.recompute()
+  }
+
   // The text goes to wl-copy on stdin, never on a command line, where any
   // process could read it from /proc and a long one would hit ARG_MAX.
   property var copyQueue: []
 
-  function copyText(text) {
-    root.copyQueue.push(String(text))
+  // paste: once wl-copy holds the text, Shift+Insert types it into the window
+  // that had focus before the bar, as Omarchy's own clipboard paste does.
+  function copyText(text, paste) {
+    root.copyQueue.push({ text: String(text), paste: !!paste })
     if (!copyProc.running) root.copyNext()
   }
 
@@ -220,14 +276,138 @@ Item {
     copyProc.running = true
   }
 
+  property bool copyPaste: false
+
   Process {
     id: copyProc
     command: ["wl-copy"]
     onStarted: {
-      copyProc.write(root.copyQueue.shift())
+      var next = root.copyQueue.shift()
+      root.copyPaste = next.paste
+      copyProc.write(next.text)
       copyProc.stdinEnabled = false
     }
-    onExited: root.copyNext()
+    onExited: function(exitCode) {
+      if (exitCode === 0 && root.copyPaste)
+        Quickshell.execDetached(["bash", "-c", "sleep 0.15; wtype -M shift -k Insert -m shift"])
+      root.copyPaste = false
+      root.copyNext()
+    }
+  }
+
+  // ---------------------------------------------------------------- pinned apps
+
+  property var pinnedOverride: null   // the cached list, once you've pinned from the bar
+  readonly property var pinnedApps: {
+    if (Array.isArray(root.pinnedOverride)) return root.pinnedOverride
+    var fromConfig = root.config.apps && root.config.apps.pinned
+    return Array.isArray(fromConfig) ? fromConfig.filter(function(x) { return typeof x === "string" }) : []
+  }
+
+  function loadPinned(text) {
+    if (!text) return
+    try {
+      var data = JSON.parse(text)
+      if (Array.isArray(data)) root.pinnedOverride = data.filter(function(x) { return typeof x === "string" }).slice(0, 50)
+    } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------- clipboard history
+
+  // Read only while a "cb " query is on screen, and dropped when the bar
+  // closes, so the history isn't held in this process the rest of the time.
+  property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"   // the shell sets this too
+  readonly property string clipboardPath: root.home + "/.local/state/omarchy/clipboard-history.json"
+  property bool clipboardWanted: false
+  property var clipboard: []
+
+  function requestClipboard() { if (!root.clipboardWanted) root.clipboardWanted = true }
+
+  FileView {
+    id: clipboardFile
+    path: root.clipboardWanted ? root.clipboardPath : ""
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      try {
+        var data = JSON.parse(text())
+        root.clipboard = Array.isArray(data) ? data : []
+      } catch (e) {
+        root.clipboard = []
+      }
+      if (root.opened) root.recompute()
+    }
+    onFileChanged: reload()
+  }
+
+  // ---------------------------------------------------------------- files
+
+  // One fd walk at a time. A newer query stops a walk still running; when it
+  // exits, the newest wanted query starts. Results are kept for one query.
+  property var files: null            // { key, entries }
+  property string filesWantKey: ""
+  property var filesWantArgv: null
+
+  function requestFiles(key, argv) {
+    if (root.filesWantKey === key) return
+    root.filesWantKey = key
+    root.filesWantArgv = argv
+    if (filesProc.running) filesProc.signal(15)
+    else root.startFiles()
+  }
+
+  function startFiles() {
+    if (!root.filesWantArgv) return
+    filesProc.forKey = root.filesWantKey
+    filesProc.command = root.filesWantArgv
+    root.filesWantArgv = null
+    filesProc.running = true
+    filesWatchdog.restart()
+  }
+
+  Process {
+    id: filesProc
+    property string forKey: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (filesProc.forKey !== root.filesWantKey) return
+        root.files = { key: filesProc.forKey, entries: Files.parse(text, root.home) }
+        if (root.opened) root.recompute()
+      }
+    }
+    onExited: { filesWatchdog.stop(); root.startFiles() }
+  }
+
+  // A huge home folder can take a while; what fd found by then is kept.
+  Timer { id: filesWatchdog; interval: 3000; onTriggered: if (filesProc.running) filesProc.signal(15) }
+
+  // ---------------------------------------------------------------- hotkeys
+
+  // omarchy-menu-keybindings keeps its own cache keyed on `hyprctl binds`,
+  // so this is cheap; it runs at most once per open, and only once something
+  // asks for keybindings.
+  property string hotkeysText: ""
+  property real hotkeysAt: 0
+
+  function requestHotkeys() {
+    if (hotkeysProc.running || Date.now() - root.hotkeysAt < 30000) return
+    root.hotkeysAt = Date.now()
+    hotkeysProc.running = true
+  }
+
+  Process {
+    id: hotkeysProc
+    command: ["bash", "-c", "source \"$0\" --print >/dev/null && output_binding_records",
+              root.omarchyPath + "/bin/omarchy-menu-keybindings"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        // A failed run prints nothing: keep the list we had.
+        if (String(text || "").trim()) root.hotkeysText = String(text)
+        if (root.opened) root.recompute()
+      }
+    }
   }
 
   // What Enter does to a row, for the footer: "Open", "Switch", "Copy"…
@@ -676,6 +856,7 @@ Item {
     appsDebounce.restart()
     root.cacheRead("last-query", root.loadLastQuery)
     root.cacheRead("launches.json", root.loadLaunches)
+    root.cacheRead("pinned-apps.json", root.loadPinned)
     root.cacheRead("rates.json", root.loadRates)
     root.refreshAgent()
   }
@@ -785,6 +966,7 @@ Item {
     id: tileRoot
     property string glyph: ""
     property url imageSource: ""
+    property string swatch: ""          // a colour row's colour, drawn as the tile
     property bool selected: false
     property real size: Style.space(30)
     property color foreground: Color.foreground
@@ -793,7 +975,9 @@ Item {
     readonly property bool hasImage: String(imageSource) !== ""
     width: size
     height: size
-    color: hasImage ? "transparent" : Util.alpha(selected ? selectedText : foreground, selected ? 0.16 : 0.07)
+    color: swatch !== "" ? swatch : (hasImage ? "transparent" : Util.alpha(selected ? selectedText : foreground, selected ? 0.16 : 0.07))
+    border.width: swatch !== "" ? 1 : 0
+    border.color: Util.alpha(foreground, 0.25)
 
     Image {
       visible: tileRoot.hasImage
@@ -807,7 +991,7 @@ Item {
     }
 
     Text {
-      visible: !tileRoot.hasImage
+      visible: !tileRoot.hasImage && tileRoot.swatch === ""
       anchors.centerIn: parent
       text: tileRoot.glyph
       color: tileRoot.selected ? tileRoot.selectedText : tileRoot.foreground
@@ -901,7 +1085,7 @@ Item {
               anchors.fill: parent
               verticalAlignment: Text.AlignVCenter
               visible: !input.text
-              text: "Search apps and windows, or type a sum"
+              text: "Apps, ~files, cb clipboard, keys, a sum…"
               color: root.foreground
               opacity: 0.4
               font: input.font
@@ -927,8 +1111,12 @@ Item {
                 var row = root.rows[root.selectedIndex]
                 if (row) root.complete(row)
                 event.accepted = true
+              } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) {
+                root.activateAlt(root.selectedIndex); event.accepted = true
               } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                 root.activate(root.selectedIndex); event.accepted = true
+              } else if (event.key === Qt.Key_P && (event.modifiers & Qt.AltModifier) && root.selectedRow && root.selectedRow.appId) {
+                root.togglePin(root.selectedIndex); event.accepted = true
               } else if ((event.modifiers & Qt.AltModifier) && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
                 var quick = event.key - Qt.Key_1
                 if (quick < Math.min(root.quickKeys, root.rows.length)) { root.selectedIndex = quick; root.activate(quick) }
@@ -1089,6 +1277,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 glyph: rowItem.modelData.icon || ""
                 imageSource: rowItem.modelData.image ? root.appIconSource(rowItem.modelData.image) : ""
+                swatch: rowItem.modelData.swatch || ""
                 selected: rowItem.selected
                 size: rowItem.hero ? Math.round(root.tileSize * 1.4) : root.tileSize
                 radius: root.tileRadius
@@ -1228,6 +1417,30 @@ Item {
             Keycap { visible: root.canComplete(root.selectedRow); label: "Tab"; anchors.verticalCenter: parent.verticalCenter; foreground: root.foreground; fontFamily: root.fontFamily; rounded: root.cornerRadius > 0 }
 
             Item { visible: root.canComplete(root.selectedRow); width: Style.space(8); height: 1 }
+
+            Text {
+              visible: !!root.selectedRow && !!root.selectedRow.appId
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.selectedRow && root.selectedRow.pinned ? "Unpin" : "Pin"
+              color: root.foreground
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Keycap { visible: !!root.selectedRow && !!root.selectedRow.appId; label: "Alt+P"; anchors.verticalCenter: parent.verticalCenter; foreground: root.foreground; fontFamily: root.fontFamily; rounded: root.cornerRadius > 0 }
+            Item { visible: !!root.selectedRow && !!root.selectedRow.appId; width: Style.space(8); height: 1 }
+
+            Text {
+              visible: !!root.selectedRow && !!root.selectedRow.alt
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.selectedRow && root.selectedRow.alt ? root.selectedRow.alt.label.charAt(0).toUpperCase() + root.selectedRow.alt.label.slice(1) : ""
+              color: root.foreground
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+            Keycap { visible: !!root.selectedRow && !!root.selectedRow.alt; label: "Shift+↵"; anchors.verticalCenter: parent.verticalCenter; foreground: root.foreground; fontFamily: root.fontFamily; rounded: root.cornerRadius > 0 }
+            Item { visible: !!root.selectedRow && !!root.selectedRow.alt; width: Style.space(8); height: 1 }
 
             Text {
               id: primary

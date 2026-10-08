@@ -1,6 +1,23 @@
-# Command Bar
+# Command Bar (hypha fork)
 
 Spotlight-style command bar - app launcher, calculator, currency, time zones, date maths, emoji, kill process, ask your AI agent and your own keyword commands
+
+**This is a personal fork** of [Saikomantisu/omarchy-commandbar](https://github.com/Saikomantisu/omarchy-commandbar) 1.3.0, installed as `hypha.commandbar`. Upstream is the `upstream` remote; `git fetch upstream && git log main..upstream/main` shows what's new there. It adds:
+
+- **Clipboard history** (`cb `), read from the history the `hypha.clipboard` plugin keeps, pinned entries first. Enter pastes, Shift+Enter copies.
+- **Files** (`~name`), found with `fd` under your home folder. Enter opens, Shift+Enter opens a terminal there.
+- **Keybindings**: type what you want to do ("full screen") and see its keys; `keys ` lists every binding. Enter runs it.
+- **Web addresses**: `example.com/docs` opens in your browser.
+- **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
+- **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
+
+File search, keybindings, web addresses and colours are adapted from [evindor/keystroke](https://github.com/evindor/keystroke) (MIT); each file says which part.
+
+It also fixes three things found reading upstream:
+
+- A keyword command's `{q}` was substituted with a replacement *string*, so typed text containing `$'` or `` $` `` could pull the rest of the template back in unquoted and run it. A `run` template with `{q}` inside quotes is now refused, with a message, because single-quoting only protects a bare word.
+- Copied text was put on a `bash` command line, where any process can read it. It now goes to `wl-copy` on stdin.
+- A test executed a payload containing `rm -rf ~`, which a quoting regression would have run for real. Test payloads now only create marker files in a temporary folder.
 
 ![Command Bar: Spotlight-style command bar for Omarchy](preview.png)
 
@@ -32,6 +49,11 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 | `brave`, `netflix`, `w `, `w github` | Switch to an open window, found by its app or its title. `w ` lists them all, most recent first |
 | `firefox`, `term`, `vsc`, `brave new window` | Open an installed app, or one of its actions like New Window. Only apps: nothing here changes a setting or a default |
 | `kill`, `kill chrome`, `kill -9 node` | Quit one of your processes, or all processes with that name |
+| `cb `, `cb invoice` | Clipboard history, pinned first. Enter pastes into the app you were using, Shift+Enter only copies |
+| `~readme`, `~docs report` | Files and folders under `~`, letters in order (`~dwnlds` finds Downloads). Enter opens, Shift+Enter opens a terminal in the folder |
+| `full screen`, `super f`, `keys `, `keys screenshot` | Your keybindings, with their keys. Enter runs one, as pressing the keys would |
+| `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
+| `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
 | `g …`, `yt …`, `gh …`, `wiki …`, `lock` | Keyword commands, which you can change in the config |
 
@@ -45,6 +67,8 @@ Keys:
 
 - Up/Down or Ctrl+N/P moves the selection.
 - Enter copies, opens or runs the selected row.
+- Shift+Enter does the row's second action when it has one (copy instead of paste, a terminal in a file's folder). The footer names it.
+- Alt+P pins or unpins the selected app. Pinned apps are what the empty bar lists.
 - Alt+1 to Alt+9 copy, open or run that row straight away. Each of the first nine rows shows its key. The `?` help has no shortcuts.
 - Tab fills in the query for the selected row, for example a keyword and a space.
 - Esc clears the text. Press it again to close the bar.
@@ -53,8 +77,10 @@ After you copy, open or run something, the bar starts empty next time. If you cl
 
 ## Install
 
+This fork lives in `~/.config/omarchy/plugins/hypha.commandbar` as a git repository; enable it with:
+
 ```sh
-omarchy plugin add https://github.com/Saikomantisu/omarchy-commandbar --enable
+omarchy plugin enable hypha.commandbar
 ```
 
 Press Super + Period to open it. You can change the key with `"hotkey"` in the config. If another action already uses the key, the bar leaves it alone and shows a notification.
@@ -62,7 +88,7 @@ Press Super + Period to open it. You can change the key with `"hotkey"` in the c
 To open the bar with text already filled in, pass a query. For example, to open emoji search directly:
 
 ```sh
-omarchy-shell shell toggle io.github.saikomantisu.commandbar '{"query": ":"}'
+omarchy-shell shell toggle hypha.commandbar '{"query": ":"}'
 ```
 
 ### Dependencies
@@ -80,11 +106,18 @@ All of these come with Omarchy:
 - `python3`: reading and writing the cache files safely (`bin/commandbar-cache`)
 - `omarchy-menu-emoji-insert` and Omarchy's `emojis.json`: emoji
 - `omarchy-default-agent`, `omarchy-cmd-missing`, `omarchy-agent-prompt` and `omarchy-agent --pick`: asking your agent (`bin/commandbar-agent`)
+- `fd`: file search
+- `omarchy-menu-keybindings`: the keybinding list and running a binding
+- `omarchy-clipboard-paste-file` and `wtype`: pasting clipboard images and text
+- `hyprpicker`: Pick a colour from the screen
 
 ### Network, files and processes
 
 - The only network request is to `https://open.er-api.com/v6/latest/USD`, made when you convert currency and the saved rates are out of date. The rates update once a day. What you type is not sent anywhere, except the text you search with a web keyword like `g` and the prompt you give your agent with `ai`.
-- It writes only to `~/.cache/omarchy-commandbar/`: the saved rates, your last query, and how often you've opened each app from the bar (used to order equally good matches). It does not change your Hyprland or Omarchy config files.
+- It writes only to `~/.cache/omarchy-commandbar/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches) and your pinned apps. It does not change your Hyprland or Omarchy config files.
+- It reads `~/.local/state/omarchy/clipboard-history.json` only while a `cb ` query is on screen, and forgets it when the bar closes. It never writes that file.
+- `~` searches run `fd` as an argument list with your words regex-escaped, under your home folder, stopping after 400 hits or 3 seconds. Hidden files are left out unless `"files": { "hidden": true }`.
+- Keybindings come from sourcing Omarchy's `omarchy-menu-keybindings`, at most every 30 seconds and only once you type something.
 - The cache files are read and written only through `bin/commandbar-cache`. It refuses symlinks, hard links, files you don't own and files over a size limit (4 KiB for the last query, 64 KiB for app counts, 256 KiB for rates), and saves each file through a private temporary file.
 - It sets its hotkey in the running Hyprland with `hyprctl eval`, and sets it again after Hyprland reloads its config. The hotkey is removed when the plugin is disabled or removed.
 - It lists only your own processes, and quits one only when you press Enter on it.
@@ -93,7 +126,7 @@ All of these come with Omarchy:
 ## Remove
 
 ```sh
-omarchy plugin remove io.github.saikomantisu.commandbar
+omarchy plugin disable hypha.commandbar
 rm -rf ~/.cache/omarchy-commandbar ~/.config/omarchy/extensions/commandbar.json
 ```
 
@@ -108,13 +141,18 @@ Put your settings in `~/.config/omarchy/extensions/commandbar.json`. They overri
   // A Hyprland key combination. "" means no hotkey.
   "hotkey": "SUPER + PERIOD",
   // Features to turn on. When results score equally, earlier ones come first.
-  "providers": ["commands", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "ai"],
+  "providers": ["commands", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
   // Default home currency is USD.
   "currency": { "home": "EUR", "favorites": ["USD", "GBP"] },
   // Default home zone is your system time zone.
   "time": { "home": "Europe/Berlin", "zones": ["UTC", "America/New_York"], "clock24": true },
   // "paste" types the emoji into the app you were using and copies it; "copy" only copies it.
   "emoji": { "onEnter": "paste" },
+  // Apps listed when the bar opens empty. Once you pin with Alt+P, the list
+  // in the cache is used instead of this one.
+  "apps": { "pinned": ["org.kde.kate"] },
+  // true includes dotfiles and dot-folders in ~ searches.
+  "files": { "hidden": false },
   // Asking your agent. See "Asking your agent" below.
   "ai": { "keyword": "ai", "fallback": false, "chats": [{ "title": "ChatGPT", "open": "https://chatgpt.com/?q={q}" }] },
   // This list replaces the default keyword commands.

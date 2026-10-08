@@ -54,10 +54,38 @@ function habit(count) {
   return count > 0 ? Math.min(3, Math.log(1 + count) / Math.LN2 * 0.75) : 0
 }
 
+// Pinned apps (ctx.pinnedApps, ids in your order) are what an empty bar
+// lists, so Alt+1 … Alt+9 launch them straight from the hotkey. Alt+P on an
+// app row pins or unpins it. In search results a pinned app gets a small lift
+// and says so.
+function pinnedRows(ctx) {
+  var byId = {}
+  var apps = ctx.apps || []
+  for (var i = 0; i < apps.length; i++) byId[apps[i].id] = apps[i]
+  var out = []
+  var ids = ctx.pinnedApps || []
+  for (var j = 0; j < ids.length; j++) {
+    var app = byId[ids[j]]
+    if (!app) continue
+    out.push({
+      title: app.name,
+      subtitle: app.generic || app.comment || "Application",
+      image: app.icon,
+      group: "Pinned",
+      appId: app.id,
+      pinned: true,
+      copy: "",
+      run: { kind: "app", target: app.id, label: "open" }
+    })
+  }
+  return out
+}
+
 var provider = {
   id: "apps",
   name: "Apps",
   icon: "󰀻",
+  empty: pinnedRows,
   help: [
     { id: "apps", title: "Open an app", about: "Type part of an app's name, or what it does",
       examples: ["firefox", "term", "brave new window"] }
@@ -80,10 +108,14 @@ var provider = {
         || running[app.id.toLowerCase().split(".").pop()]
     }
 
+    var pinned = {}
+    var pins = ctx.pinnedApps || []
+    for (var p = 0; p < pins.length; p++) pinned[pins[p]] = true
+
     var hits = []
     for (var i = 0; i < apps.length; i++) {
       var r = rank(apps[i], q, qw)
-      if (r > 0) hits.push({ app: apps[i], r: r, h: habit(launches[apps[i].id] || 0) })
+      if (r > 0) hits.push({ app: apps[i], r: r, h: habit(launches[apps[i].id] || 0) + (pinned[apps[i].id] ? 2 : 0) })
     }
 
     // "brave new window": the app's name then one of its actions.
@@ -126,8 +158,10 @@ var provider = {
       // like keyword commands (98), kill rows (96) and time lookups (92).
       out.push({
         title: hit.app.name,
-        subtitle: hit.app.generic || hit.app.comment || "Application",
+        subtitle: (pinned[hit.app.id] ? "Pinned · " : "") + (hit.app.generic || hit.app.comment || "Application"),
         image: hit.app.icon,
+        appId: hit.app.id,
+        pinned: !!pinned[hit.app.id],
         score: 70 + hit.r * 0.2 + hit.h * 0.2 - n * 0.01,
         copy: "",
         run: { kind: "app", target: hit.app.id, label: isRunning(hit.app) ? "open new" : "open" }

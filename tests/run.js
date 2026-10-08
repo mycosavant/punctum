@@ -186,8 +186,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[2].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Clipboard history|Find files|Keybindings|Open a web address|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[7].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -352,5 +352,87 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   check("a symlinked directory is refused", read("last-query") === null)
   check("no temporary files are left behind", fs.readdirSync(home).every(f => !f.endsWith(".tmp")))
   fs.rmSync(home, { recursive: true, force: true }) }
+
+
+// ---------------------------------------------------------------- hypha additions
+function check(name, ok, detail) { console.log((ok ? "ok  " : "FAIL") + "  " + name + (detail && !ok ? " → " + detail : "")); if (!ok) fails++ }
+const run = (query, providers, extra) => Engine.run(query, Object.assign({}, config, { providers }), Object.assign({ now, apps, windows: [], launches: {} }, extra || {}))
+
+{ const history = [
+    { type: "text", text: "first entry", addedAt: 1 },
+    { type: "text", text: "secret pinned\nline two", pinned: true, addedAt: 2 },
+    { type: "image", path: "/s/a.png", mime: "image/png", capturedAt: "10:00" },
+    { type: "text", text: "$(touch /tmp/x) 'quoted'" }
+  ]
+  let asked = 0
+  const rows = run("cb ", ["clipboard"], { clipboard: history, requestClipboard: () => asked++ })
+  check("clipboard: pinned first, then newest", rows.map(r => r.title).join("|") === "secret pinned line two|first entry|Image from 10:00|$(touch /tmp/x) 'quoted'", rows.map(r => r.title).join("|"))
+  check("clipboard: asks for the history only in cb mode", asked === 1 && run("first", ["clipboard"], { clipboard: history, requestClipboard: () => asked++ }).length === 0 && asked === 1)
+  check("clipboard: Enter pastes the exact text, Shift+Enter copies it", rows[0].run.kind === "paste" && rows[0].run.target === "secret pinned\nline two" && rows[0].alt.kind === "copy" && rows[0].alt.target === rows[0].run.target)
+  check("clipboard: an image pastes through Omarchy's file script as argv", rows[2].run.kind === "argv" && /omarchy-clipboard-paste-file$/.test(rows[2].run.target[0]) && rows[2].run.target.slice(1).join(" ") === "image/png /s/a.png" && rows[2].image === "/s/a.png")
+  check("clipboard: search filters", run("cb quoted", ["clipboard"], { clipboard: history }).length === 1)
+  check("clipboard: a relative image path is skipped", run("cb ", ["clipboard"], { clipboard: [{ type: "image", path: "a.png" }] })[0].run === null)
+  check("clipboard: mode chip", (Engine.mode("cb x", config) || {}).label === "Clipboard") }
+
+{ const F = load(P + "providers/files.js")
+  let req = null
+  const first = run("~-rf notes", ["files"], { home: "/h", requestFiles: (k, a) => { req = { k, a } } })
+  const dash = req.a.indexOf("--")
+  check("files: asks fd with an argv, words never read as options",
+    req && req.a[0] === "fd" && dash > 0 && req.a.slice(dash + 1).length === 1 && req.a.includes("--and=\\-[^/]*r[^/]*f") && first[0].title === "Searching…", JSON.stringify(req && req.a))
+  const out = "/h/Documents/notes.md\0/h/notes/\0/h/x/n-o-t-e-s.txt\0/h/other.md\0/h/Documents/no"
+  const entries = F.parse(out, "/h")
+  check("files: NUL output parsed, unterminated tail dropped", entries.length === 4 && entries[1].dir && entries[1].rel === "notes", JSON.stringify(entries))
+  const rows = run("~notes", ["files"], { home: "/h", files: { key: F.key("notes", {}), entries }, requestFiles: () => {} })
+  check("files: rows rank a name that starts with the word first", rows[0].title === "notes" && rows[0].subtitle === "~ · Folder" && rows.length === 3, rows.map(r => r.title).join("|"))
+  check("files: Enter opens with xdg-open, Shift+Enter a terminal in the folder",
+    rows[1].run.target.join(" ") === "xdg-open /h/Documents/notes.md" && rows[1].alt.target.join(" ") === "uwsm-app -- xdg-terminal-exec --dir=/h/Documents", JSON.stringify(rows[1]))
+  const tie = run("~notes", ["files"], { home: "/h", files: { key: F.key("notes", {}), entries: F.parse("/h/a/notes_tests.rs\0/h/a/notes.rs\0", "/h") }, requestFiles: () => {} })
+  check("files: the shorter of two equally good names first", tie.map(r => r.title).join("|") === "notes.rs|notes_tests.rs", tie.map(r => r.title).join("|"))
+  check("files: one letter asks nothing", run("~n", ["files"], { home: "/h", requestFiles: () => { throw "asked" } })[0].title === "Type a file or folder name") }
+
+{ const text = [
+    "SUPER + F                           → Full screen\tlua\thl.dsp.window.fullscreen({ mode = \"fullscreen\" })",
+    "SUPER SHIFT + RETURN                → Browser\texec\tomarchy-launch-browser",
+    "SUPER SHIFT + B                     → Browser\texec\tomarchy-launch-browser",
+    "SUPER + W                           → Close window\t\t",
+    "SUPER + PRINT                       → Screenshot\texec\tomarchy-capture-screenshot"
+  ].join("\n")
+  const rows = run("full screen", ["hotkeys"], { hotkeys: text, omarchyPath: "/o" })
+  check("hotkeys: found by what they do, keys shown", rows.length === 1 && rows[0].title === "Full screen" && rows[0].subtitle === "Super + F", JSON.stringify(rows[0]))
+  check("hotkeys: found by their keys", run("super f", ["hotkeys"], { hotkeys: text })[0].title === "Full screen")
+  const all = run("keys ", ["hotkeys"], { hotkeys: text })
+  check("hotkeys: keys lists every bind once, two combos on one row",
+    all.length === 4 && all[1].subtitle === "Super + Shift + ↵  ·  Super + Shift + B" && all[2].run === null && /keyboard/.test(all[2].subtitle), all.map(r => r.subtitle).join("|"))
+  check("hotkeys: a keyboard-only bind isn't mixed into ordinary results", run("close window", ["hotkeys"], { hotkeys: text }).length === 0)
+  // Run the dispatch for real against a stub script: the argument reaches
+  // dispatch_binding as one literal, and nothing in it executes.
+  const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-hotkey-")
+  fs.mkdirSync(dir + "/bin")
+  fs.writeFileSync(dir + "/bin/omarchy-menu-keybindings", "dispatch_binding() { printf '%s|%s' \"$1\" \"$2\" > \"" + dir + "/got\"; }\n")
+  const evil = "x\"; touch " + dir + "/pwned; echo \"$(touch " + dir + "/pwned2)"
+  const r = run("keys ", ["hotkeys"], { hotkeys: "SUPER + Q → Evil\texec\t" + evil, omarchyPath: dir })[0]
+  execFileSync(r.run.target[0], r.run.target.slice(1))
+  const got = fs.readFileSync(dir + "/got", "utf8"), ran = fs.readdirSync(dir).filter(f => /pwned/.test(f))
+  fs.rmSync(dir, { recursive: true, force: true })
+  check("hotkeys: dispatch passes the bind's argument as one literal", got === "exec|" + evil && ran.length === 0, got + " ran:" + ran) }
+
+{ const u = x => (run(x, ["url"])[0] || {}).run
+  check("url: a domain opens over https", u("example.com/a?b=1").target === "https://example.com/a?b=1")
+  check("url: localhost and IPs default to http", u("localhost:3000").target === "http://localhost:3000" && u("192.168.1.1:8080").target === "http://192.168.1.1:8080")
+  check("url: file names and numbers stay themselves", !u("readme.md") && !u("1.5") && !u("notes.txt") && !u("hello world")) }
+
+{ const c = x => run(x, ["colors"])
+  const rows = c("#ff6644")
+  check("colors: hex shows HEX, RGB and HSL with a swatch", rows.map(r => r.title).join("|") === "#FF6644|rgb(255, 102, 68)|hsl(11, 100%, 63%)" && rows[0].swatch === "#ff6644" && rows[0].hero, rows.map(r => r.title).join("|"))
+  check("colors: rgb() and bare hex with a digit", c("rgb(255, 0, 0)")[0].title === "#FF0000" && c("ff6644").length === 3)
+  check("colors: hex-letter words stay words", c("decade").length === 0 && c("facade").length === 0 && c("add").length === 0) }
+
+{ const pinnedRows = Engine.run("", Object.assign({}, config, { providers: ["apps"] }), { apps, pinnedApps: ["firefox", "gone.app"], launches: {} })
+  check("pins: an empty bar lists pinned apps, skipping uninstalled ones", pinnedRows.length === 1 && pinnedRows[0].title === "Firefox" && pinnedRows[0].appId === "firefox" && pinnedRows[0].section === "Pinned", JSON.stringify(pinnedRows))
+  check("pins: an empty bar with no pins lists nothing", Engine.run("", config, { apps, launches: {} }).length === 0)
+  const hit = run("fire", ["apps"], { pinnedApps: ["firefox"] })[0]
+  check("pins: a pinned app says so in search, and can be unpinned", hit.title === "Firefox" && /^Pinned · /.test(hit.subtitle) && hit.pinned && hit.appId === "firefox") }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

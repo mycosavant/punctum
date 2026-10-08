@@ -9,6 +9,11 @@
 .import "units.js" as Units
 .import "windows.js" as Windows
 .import "ai.js" as Ai
+.import "clipboard.js" as Clipboard
+.import "files.js" as Files
+.import "hotkeys.js" as Hotkeys
+.import "url.js" as Url
+.import "colors.js" as Colors
 
 // Every provider the bar knows about. To add a feature: write providers/<name>.js
 // exporting `var provider = { id, name, icon, match(query, ctx) }`, import it
@@ -23,5 +28,10 @@ var all = [
   Units.provider,
   Windows.provider,
   Apps.provider,
-  Ai.provider
+  Ai.provider,
+  Clipboard.provider,
+  Files.provider,
+  Hotkeys.provider,
+  Url.provider,
+  Colors.provider
 ]
