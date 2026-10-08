@@ -168,7 +168,7 @@ expect("g foo bar", "Search Google: foo bar")
   console.log((ok ? "ok  " : "FAIL") + "  rates requested only for currency queries → " + asked.join(" | ")); if (!ok) fails++ }
 
 // Hotkey: which Lua gets sent to `hyprctl eval`.
-{ const H = load(P + "lib/Hotkey.js"), cmd = "omarchy-shell shell toggle io.github.saikomantisu.commandbar"
+{ const H = load(P + "lib/Hotkey.js"), cmd = "omarchy-shell shell toggle hypha.commandbar"
   const other = { modmask: 64, key: "K", description: "Keybindings", dispatcher: "__lua" }
   const mine = { modmask: 64, key: "PERIOD", description: "Command bar", dispatcher: "__lua" }
   const j = a => JSON.stringify(a)
@@ -211,10 +211,33 @@ expect("g foo bar", "Search Google: foo bar")
   console.log((ok ? "ok  " : "FAIL") + "  help chip → " + [m("?"), m("?units")].join(" | ")); if (!ok) fails++ }
 expect(" ? ", "Open an app")
 const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
-const cmds = Engine.run("x it's; rm -rf ~", { providers: ["commands"], commands: [{ keyword: "x", run: "echo {q}" }] }, {})[0].run
-console.log("      cmd:", cmds.target)
-const out = require("child_process").execFileSync("bash", ["-c", cmds.target]).toString().trim()
-console.log((out === "it's; rm -rf ~" ? "ok  " : "FAIL") + "  shell quoting → " + out); if (out !== "it's; rm -rf ~") fails++
+// Shell quoting, run for real. A broken quote only ever creates a marker file
+// in a fresh temporary folder: never put anything destructive in a payload.
+{ const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-quote-")
+  const mark = n => "touch " + dir + "/" + n
+  const payloads = [
+    "it's; " + mark("semi"),
+    "$(" + mark("subst") + ")",
+    "`" + mark("tick") + "`",
+    "$'\"; " + mark("after") + "; #",          // $' in a replacement string inserts the template after {q}
+    "$`; " + mark("before") + "; #",           // $` the template before it
+    "$&"                                        // $& the matched {q}
+  ]
+  const results = []
+  for (const text of payloads) {
+    const row = Engine.run("x " + text, { providers: ["commands"], commands: [{ keyword: "x", run: "printf %s {q} \"it's\"" }] }, {})[0]
+    const out = execFileSync("bash", ["-c", row.run.target]).toString()
+    results.push(out === text + "it's")
+  }
+  const ran = fs.readdirSync(dir)
+  fs.rmSync(dir, { recursive: true, force: true })
+  const ok = results.every(Boolean) && ran.length === 0
+  console.log((ok ? "ok  " : "FAIL") + "  shell quoting holds for " + payloads.length + " payloads" + (ran.length ? "; ran: " + ran.join(",") : "")); if (!ok) fails++ }
+{ const off = Engine.run("say hi", { providers: ["commands"], commands: [{ keyword: "say", run: "notify-send \"{q}\"" }, { keyword: "s1", run: "echo '{q}'" }] }, {})
+  const off1 = Engine.run("s1 hi", { providers: ["commands"], commands: [{ keyword: "s1", run: "echo '{q}'" }] }, {})
+  const ok = off.length === 1 && !off[0].run && /switched off/.test(off[0].title) && off1.length === 1 && !off1[0].run
+  console.log((ok ? "ok  " : "FAIL") + "  a run command with {q} inside quotes is refused"); if (!ok) fails++ }
 // An emoji with quotes and shell syntax reaches the insert script and wl-copy
 // unchanged, and nothing in it runs. Both tools are stubs that record what they got.
 { const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")

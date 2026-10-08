@@ -7,8 +7,26 @@
 //
 // `open` gets {q} URL-encoded and is handed to xdg-open; `run` gets {q}
 // shell-quoted and runs under bash. Nothing runs until Enter.
+//
+// A `run` template that puts {q} inside quotes ("{q}" or '{q}') is refused:
+// the quoting below only holds where {q} stands as a bare word.
 
 function shellQuote(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }
+
+// True when every {q} in a shell template sits outside quotes, so the
+// single-quoted text that replaces it is one literal word to bash.
+function bareQuery(template) {
+  var quote = ""
+  for (var i = 0; i < template.length; i++) {
+    if (template.substr(i, 3) === "{q}") { if (quote) return false; i += 2; continue }
+    var c = template.charAt(i)
+    if (quote === "'") { if (c === "'") quote = ""; continue }
+    if (c === "\\") { i++; continue }
+    if (quote === "\"") { if (c === "\"") quote = ""; continue }
+    if (c === "'" || c === "\"") quote = c
+  }
+  return true
+}
 
 function takesQuery(cmd) { return /\{q\}/.test(cmd.open || cmd.run || "") }
 
@@ -22,8 +40,13 @@ function describe(target) {
 }
 
 function build(cmd, q) {
-  if (cmd.open) return { kind: "open", target: cmd.open.replace(/\{q\}/g, encodeURIComponent(q)) }
-  if (cmd.run) return { kind: "run", target: cmd.run.replace(/\{q\}/g, shellQuote(q)) }
+  // Replacements are functions: a replacement string would expand $', $` and
+  // $& from the typed text into pieces of the template.
+  if (cmd.open) return { kind: "open", target: cmd.open.replace(/\{q\}/g, function() { return encodeURIComponent(q) }) }
+  if (cmd.run) {
+    if (!bareQuery(cmd.run)) return null
+    return { kind: "run", target: cmd.run.replace(/\{q\}/g, function() { return shellQuote(q) }) }
+  }
   return null
 }
 
@@ -37,7 +60,7 @@ var provider = {
     var examples = []
     for (var i = 0; i < list.length; i++) {
       var cmd = list[i]
-      if (!cmd || !cmd.keyword || !(cmd.open || cmd.run)) continue
+      if (!cmd || !cmd.keyword || !(cmd.open || cmd.run) || !build(cmd, "")) continue
       var kw = String(cmd.keyword)
       var what = describe(build(cmd, "{q}"))
       examples.push({ q: takesQuery(cmd) ? kw + " " : kw, note: (cmd.title || kw) + ". " + what.replace(/%7Bq%7D|'\{q\}'/g, "…") })
@@ -51,7 +74,7 @@ var provider = {
     var out = []
     for (var i = 0; i < list.length; i++) {
       var cmd = list[i]
-      if (!cmd || !cmd.keyword || !(cmd.open || cmd.run)) continue
+      if (!cmd || !cmd.keyword || !(cmd.open || cmd.run) || !build(cmd, "")) continue
       var kw = String(cmd.keyword)
       out.push({
         title: cmd.title || kw,
@@ -80,7 +103,9 @@ var provider = {
       var title = cmd.title || kw
       var icon = cmd.icon || (cmd.open ? "󰖟" : "󰘳")
 
-      if (word === kw) {
+      if (word === kw && !build(cmd, "")) {
+        out.push({ title: title + " is switched off", subtitle: "Its \"run\" puts {q} inside quotes; write it bare, as in notify-send {q}", score: 98, icon: icon, copy: "" })
+      } else if (word === kw) {
         if (takesQuery(cmd)) {
           if (!rest) {
             out.push({ title: title + "…", subtitle: "Type your search after \"" + kw + " \"", score: 95, icon: icon, copy: "" })

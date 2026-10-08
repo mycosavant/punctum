@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.saikomantisu.commandbar",
+  "id": "hypha.commandbar",
   "name": "Command Bar",
-  "version": "1.3.0",
-  "author": "Saikomantisu",
+  "version": "1.3.0-hypha.1",
+  "author": "mycosavant (from Saikomantisu's Command Bar)",
   "license": "MIT",
   "description": "Spotlight-style command bar: app launcher, calculator, currency, time zones, date maths, emoji, kill process, ask your AI agent and your own keyword commands",
   "kinds": [

@@ -129,7 +129,7 @@ Item {
     root.opened = false
     root.saveLastQuery()
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "io.github.saikomantisu.commandbar")
+      root.shell.hide((root.manifest && root.manifest.id) || "hypha.commandbar")
   }
 
   // After an action (open, run, copy) the bar starts empty next time; only a
@@ -202,7 +202,32 @@ Item {
     if (row.complete && !row.copy) { root.complete(row); return }
     if (!row.copy) return
     root.finish()
-    Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(row.copy) + " | wl-copy"])
+    root.copyText(row.copy)
+  }
+
+  // The text goes to wl-copy on stdin, never on a command line, where any
+  // process could read it from /proc and a long one would hit ARG_MAX.
+  property var copyQueue: []
+
+  function copyText(text) {
+    root.copyQueue.push(String(text))
+    if (!copyProc.running) root.copyNext()
+  }
+
+  function copyNext() {
+    if (root.copyQueue.length === 0) return
+    copyProc.stdinEnabled = true
+    copyProc.running = true
+  }
+
+  Process {
+    id: copyProc
+    command: ["wl-copy"]
+    onStarted: {
+      copyProc.write(root.copyQueue.shift())
+      copyProc.stdinEnabled = false
+    }
+    onExited: root.copyNext()
   }
 
   // What Enter does to a row, for the footer: "Open", "Switch", "Copy"…
@@ -243,7 +268,7 @@ Item {
   // runtime binds when its config reloads, so this re-runs after every
   // reload, after config changes, and at startup. lib/Hotkey.js decides what
   // to bind or unbind; a key that something else already uses is left alone.
-  readonly property string toggleCommand: "omarchy-shell shell toggle io.github.saikomantisu.commandbar"
+  readonly property string toggleCommand: "omarchy-shell shell toggle hypha.commandbar"
   property bool configsLoaded: false
   property bool hotkeyQueued: false
   property string boundHotkey: ""     // what we bound, so unloading can unbind it
