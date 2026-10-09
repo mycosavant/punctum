@@ -20,7 +20,7 @@ var MIN_QUERY = 3
 var LIMIT = 40
 var MAX_QUERY = 200
 
-var SCRIPT = 'rg --null --line-number --no-heading --color never --smart-case --fixed-strings --max-count 3 '
+var SCRIPT = 'timeout 3 rg --null --line-number --no-heading --color never --smart-case --fixed-strings --max-count 3 '
   + '--max-columns 240 --max-columns-preview --max-filesize 4M --threads 4 ${2:+--hidden} -- "$1" "$HOME" 2>/dev/null | head -n 300'
 
 function prefix(query) { return String(query || "").match(/^\s*(?:rg|grep)\s([\s\S]*)$/i) }
@@ -83,6 +83,7 @@ var provider = {
       if (!have || have.key.indexOf("contents\n") !== 0) return [{ title: "Searching…", subtitle: "In files", score: 40, copy: "" }]
     }
     var hits = parse(have.text)
+    if (!hits.length && have.key === p.key && have.timedOut) return [{ title: "Stopped after 3 s", subtitle: "In files · try more specific words", score: 40, copy: "" }]
     if (!hits.length) return have.key === p.key ? [{ title: "No line contains \"" + m[1].trim() + "\"", subtitle: "In files · hidden and git-ignored files are skipped", score: 40, copy: "" }] : []
     return hits.slice(0, LIMIT).map(function(h, n) { return row(h, ctx, n) })
   }

@@ -79,8 +79,12 @@ var provider = {
       }
       return out
     }
+    // A trailing !word inside a mode is that mode's (fzf's "leave out" in
+    // "/hosts !backup"), not a bang.
+    if (String(query || "").length > 200) return []
     var s = split(query)
     if (!s) return []
+    if (!s.leading && ctx.inMode && ctx.inMode(query)) return []
     var e = list[s.bang]
     if (e) {
       if (!s.q) return [{ title: e.title + "…", subtitle: e.home ? "Enter opens " + host(e.home) + ", or type a search" : "Type your search after !" + e.bang, score: 97, copy: "",

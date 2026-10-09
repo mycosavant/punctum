@@ -2,8 +2,9 @@
 
 // Scripture on Bible Gateway, in your translations, the first one first.
 //
-//   john 3:16 · 1 jn 1:9 · ps 23 · song 2:4 · rom 8:28-30    a reference, no keyword needed
-//   bible love one another                                  a keyword search
+//   john 3:16 · 1 john 1:9 · psalm 23 · rom 8:28-30    a reference, no keyword needed
+//   bible ps 23 · bible 1 jn 1:9                       short forms after "bible"
+//   bible love one another                             a keyword search
 //
 // "bible": { "versions": ["NASB", "NASB1995", "ESV", "KJV"] } in
 // commandbar.json picks the translations, as Bible Gateway names them. A
@@ -57,8 +58,16 @@ function table() {
 
 // { book, chapter, rest, verses } for "1 jn 1:9-10", or null. rest is what
 // follows the chapter (":9-10"), kept as typed apart from spacing.
-function parse(text) {
-  var m = String(text || "").trim().toLowerCase()
+// strict is for a reference typed with no keyword, where launcher queries
+// collide easily ("mar 3" is a date, "am 5" a time, "ex 1" anything): it
+// wants a space before the chapter, a book name or abbreviation of three
+// letters or more unless a verse follows, and a colon before a verse
+// ("am 5.30" is not Amos 5:30).
+function parse(text, strict) {
+  var raw = String(text || "").trim().toLowerCase()
+  if (raw.length > 80) return null
+  if (strict && !/^((?:[123]|i{1,3}|1st|2nd|3rd|first|second|third)\s*)?[a-z][a-z ]*?\s\d{1,3}(\s*:\s*\d.*)?$/.test(raw)) return null
+  var m = raw
     .match(/^((?:[123]|i{1,3}|1st|2nd|3rd|first|second|third)\s*)?([a-z][a-z ]*?)\.?\s*(\d{1,3})((?:\s*[:.]\s*\d{1,3}(?:\s*[-–,]\s*\d{1,3}(?:[:.]\d{1,3})?)*)?)$/)
   if (!m) return null
   var t = table(), book = null
@@ -72,6 +81,8 @@ function parse(text) {
   // not part "i" of a book "s".
   if (!book) book = t.plain[((m[1] || "") + word).replace(/\s+/g, " ")] || null
   if (!book) return null
+  // A short abbreviation needs a verse; am and pm are times even then.
+  if (strict && word.length < 3 && (!/:/.test(m[4]) || word === "am" || word === "pm")) return null
   var rest = m[4].replace(/\s+/g, "").replace(/–/g, "-").replace(/^\./, ":")
   var label = (book === "Psalms" ? "Psalm" : book) + " " + Number(m[3]) + rest
   return { book: book, chapter: Number(m[3]), rest: rest, verses: rest.length > 0, label: label }
@@ -122,9 +133,10 @@ var provider = {
       if (asRef) return rows(asRef.label, asRef.label, ctx.settings, 98)
       return rows(words, "Search the Bible: " + words, ctx.settings, 98)
     }
-    var ref = parse(text)
+    var ref = parse(text, true)
     if (!ref) return []
-    // "john 3:16" is plainly scripture; "mark 2" might be something else.
-    return rows(ref.label, ref.label, ctx.settings, ref.verses ? 93 : 80)
+    // "john 3:16" is plainly scripture; "mark 2" might be something else, so
+    // it stays under the time, date and app answers.
+    return rows(ref.label, ref.label, ctx.settings, ref.verses ? 93 : 65)
   }
 }

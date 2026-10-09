@@ -529,10 +529,15 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("bible: one row per translation, in order", run("john 3:16", ["bible"]).map(r => r.title.replace(/.*\(/, "")).join(" ") === "NASB) NASB1995) ESV) KJV)")
   check("bible: 1 jn 1:9 is the letter", top("1 jn 1:9") === "1 John 1:9 (NASB)", top("1 jn 1:9"))
   check("bible: 1john 1:9-10 and i john", top("1john 1:9-10") === "1 John 1:9-10 (NASB)" && top("i john 1") === "1 John 1 (NASB)", top("1john 1:9-10") + " / " + top("i john 1"))
-  check("bible: is 53 is Isaiah, not part i of a book s", top("is 53") === "Isaiah 53 (NASB)", top("is 53"))
-  check("bible: ps 23 reads Psalm 23", top("ps 23") === "Psalm 23 (NASB)", top("ps 23"))
+  check("bible: is 53:5 is Isaiah, not part i of a book s", top("is 53:5") === "Isaiah 53:5 (NASB)" && top("bible is 53") === "Isaiah 53 (NASB)", top("is 53:5"))
+  check("bible: psalm 23 and bible ps 23 read Psalm 23", top("psalm 23") === "Psalm 23 (NASB)" && top("bible ps 23") === "Psalm 23 (NASB)", top("psalm 23"))
   check("bible: song of songs 2:4", top("song of songs 2:4") === "Song of Solomon 2:4 (NASB)", top("song of songs 2:4"))
-  check("bible: rom 8.28 takes a dot", top("rom 8.28") === "Romans 8:28 (NASB)", top("rom 8.28"))
+  check("bible: a dot is a verse only after bible", top("rom 8.28") === "(none)" && top("bible rom 8.28") === "Romans 8:28 (NASB)", top("rom 8.28"))
+  // Across every provider: launcher queries that look like abbreviations stay theirs.
+  const whole = (query) => { const r = Engine.run(query, config, { now, apps, windows: [], launches: {} }); return r[0] ? r[0].provider : "(none)" }
+  check("bible: mar 3 is still the date", whole("mar 3") === "time", whole("mar 3"))
+  check("bible: am 5, ex 1, pm 2:30, am 5.30, ps5 give no scripture", ["am 5", "ex 1", "pm 2:30", "am 5.30", "ps5", "is 3"].every(x => !Engine.run(x, config, { now, apps, windows: [] }).some(r => r.provider === "bible")))
+  check("bible: a chapter alone scores under the time and app answers", run("mark 2", ["bible"])[0].score < 70 && run("john 3:16", ["bible"])[0].score > 90)
   check("bible: no 4 John, no 3 Samuel", top("4 john 1") === "(none)" && top("3 sam 1") === "(none)")
   check("bible: a book alone stays an app search", top("job") === "(none)" && top("mark") === "(none)" && top("john") === "(none)")
   check("bible: ordinary words are not scripture", top("hello 3") === "(none)" && top("5 km") === "(none)" && top("3pm") === "(none)")
@@ -577,6 +582,11 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("packages: the name is $1, never in the script", r[0].run.target.slice(-2).join(" ") === "commandbar-pkg kfind" && !/kfind/.test(r[0].run.target[r[0].run.target.length - 3]))
   const inst = pk("pkg kfind-extras")[0]
   check("packages: Enter on a missing package runs pacman -S in a terminal (pacman asks)", inst.run.label === "install" && /sudo pacman -S -- "\$1"/.test(inst.run.target.join(" ")) && !/--noconfirm/.test(inst.run.target.join(" ")))
+  check("packages: install names the repo, so a name in two repos installs the chosen one", inst.run.target.slice(-1)[0] === "extra/kfind-extras")
+  const own = Pk.parse("S\tomarchy\tghostty\t1-1\tx86_64\tterminal\nS\textra\tghostty\t1-1\tx86_64\tterminal\n")
+  const two = run("pkg ghostty", ["packages"], { packages: own })
+  check("packages: a repo that isn't Arch's shows pacman -Si, not a dead archlinux.org link", two.length === 2 && two.some(r => r.alt.kind === "argv" && r.alt.target.slice(-1)[0] === "omarchy/ghostty") && two.some(r => r.alt.kind === "open" && /packages\/extra\//.test(r.alt.target)))
+  check("packages: an empty list says expac may be missing", /expac/.test(run("pkg x", ["packages"], { packages: { list: [], installed: {} } })[0].subtitle))
   check("packages: Shift+Enter opens archlinux.org with its arch", inst.alt.target === "https://archlinux.org/packages/extra/any/kfind-extras/", inst.alt.target)
   check("packages: description words find it", pk("pkg locate faster")[0].title === "plocate")
   check("packages: asks for the list only in pkg mode", asked > 0 && (asked = 0, pk("kfind").length === 0) && asked === 0)
@@ -588,9 +598,11 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const Lo = load(P + "providers/locate.js")
   const p = Lo.plan("report .pdf$ !old", null)
   check("locate: the query is arguments, never in the script", p.argv[2] === Lo.SCRIPT && p.argv[4].indexOf("report .pdf$ !old") === 0)
-  check("locate: plocate gets plain words, fzf's operators stripped, negations left out", p.argv.slice(5).join(" ") === "2 report .pdf report[^/]*p[^/]*o[^/]*r[^/]*t pdf".replace("report[^/]*p[^/]*o[^/]*r[^/]*t", "r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t").replace(" pdf", " p[^/]*d[^/]*f"), p.argv.slice(5).join(" "))
-  check("locate: the default exclusions ride along as !terms", /!\/\.cache\/ /.test(p.argv[4]) && /!\/node_modules\//.test(p.argv[4]))
-  check("locate: an exact term gets no fuzzy pass", Lo.plan("'notes", null).argv.length === 7)
+  check("locate: plocate gets plain words, fzf's operators stripped, negations left out", p.argv[5] === "2" && p.argv.slice(7).join(" ") === "report .pdf r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t p[^/]*d[^/]*f", p.argv.slice(5).join(" "))
+  check("locate: the exclusions go to the filter, one per line", p.argv[6].split("\n").indexOf("/.cache/") >= 0 && p.argv[6].split("\n").indexOf("/node_modules/") >= 0 && !/!\/\.cache/.test(p.argv[4]))
+  check("locate: an exact term gets no fuzzy pass", Lo.plan("'notes", null).argv.length === 8)
+  check("locate: * ? [ ] are escaped for plocate, not for the ranking", Lo.plan("file[1] a*b", null).argv.slice(7, 9).join(" ") === "file\\[1\\] a\\*b")
+  check("locate: ^name becomes an exact match at a segment start", Lo.plan("^down", null).argv[4] === "'/down" && Lo.plan("^/etc host", null).argv[4] === "^/etc host")
   check("locate: one letter is not enough", Lo.plan("a", null) === null && Lo.plan("!foo", null) === null)
   const home = "/home/u"
   const order = Lo.ordered(["/usr/share/icons/x/stat_sys_download_done.xml", "/home/u/Downloads", "/home/u/.rustup/downloads", "/etc/hosts"], "dwnlds", home)
@@ -634,6 +646,24 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   spawnSync("bash", C.plan("$(touch " + dir + "/pwned)", null).argv.slice(1), { encoding: "utf8", env })
   check("contents: a $(…) query runs nothing", !fs.existsSync(dir + "/pwned"))
   fs.rmSync(dir, { recursive: true }) }
+
+// help previews start nothing: a search there would loop for ever
+{ let calls = 0
+  const count = () => { calls++ }
+  for (const query of ["?locate", "?contents", "?packages", "? find", "?clipboard", "?files"])
+    Engine.run(query, config, { now, apps, windows: [], requestSearch: count, requestHomeIndex: count, requestPackages: count, requestFiles: count, requestClipboard: count, requestHotkeys: count, requestRates: count, requestProcesses: count })
+  check("help: browsing topics calls no request hook", calls === 0, calls + " calls")
+  let live = 0
+  Engine.run("/hosts", config, { now, apps, windows: [], requestSearch: () => live++, requestHomeIndex: () => {} })
+  check("help: (calibration) a real / query does call it", live === 1) }
+
+// a trailing !word inside a mode belongs to the mode
+{ const top = (query) => { const r = Engine.run(query, config, { now, apps, windows: [], requestSearch: () => {}, requestHomeIndex: () => {}, requestPackages: () => {} }); return r[0] ? r[0].provider : "(none)" }
+  check("bangs: /hosts !backup stays a file search", top("/hosts !backup") === "locate" && top("/x !w") === "locate", top("/hosts !backup"))
+  check("bangs: rg and pkg keep their trailing !words", top("rg TODO !x") === "contents" && top("pkg foo !bar") === "packages")
+  check("bangs: outside a mode a trailing bang still works", top("john 3:16 !nasb") === "bangs")
+  const t = Date.now(); Engine.run("a ".repeat(20000) + "!x", config, { now, apps, windows: [] })
+  check("bangs and bible: a pasted blob is quick", Date.now() - t < 200, (Date.now() - t) + "ms") }
 
 // syncthing: a keyword that opens the local web UI
 { const r = q("syncthing")

@@ -572,6 +572,7 @@ Item {
     root.searchStreamDone = false
     root.searchExited = false
     searchProc.forKey = root.searchWantKey
+    searchProc.timedOut = false
     searchProc.command = root.searchWantArgv
     root.searchWantArgv = null
     searchProc.running = true
@@ -581,12 +582,13 @@ Item {
   Process {
     id: searchProc
     property string forKey: ""
+    property bool timedOut: false
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         root.searchStreamDone = true
         if (root.opened && searchProc.forKey !== "" && searchProc.forKey === root.searchWantKey) {
-          root.search = { key: searchProc.forKey, text: String(text || "") }
+          root.search = { key: searchProc.forKey, text: String(text || ""), timedOut: searchProc.timedOut }
           root.recompute()
         }
         root.startSearch()
@@ -595,8 +597,10 @@ Item {
     onExited: { searchWatchdog.stop(); root.searchExited = true; root.startSearch() }
   }
 
-  // Whatever a search had written out after 3 s is used.
-  Timer { id: searchWatchdog; interval: 3000; onTriggered: if (searchProc.running) searchProc.signal(15) }
+  // Whatever a search had written out after 3 s is used, marked as cut
+  // short. The scripts bound their own commands with timeout(1) too, since
+  // stopping bash doesn't stop the pipeline under it.
+  Timer { id: searchWatchdog; interval: 3000; onTriggered: if (searchProc.running) { searchProc.timedOut = true; searchProc.signal(15) } }
 
   // The private index of home that "/" searches, rebuilt (about 0.5 s) at
   // most once a minute, on the first "/" query after the bar opens. When it
@@ -613,8 +617,12 @@ Item {
     id: homeIndexProc
     command: ["bash", "-c", Locate.INDEX_SCRIPT]
     onExited: {
+      root.homeIndexAt = Date.now()   // a slow rebuild doesn't start another straight away
       if (!root.opened || root.searchWantKey.indexOf("locate\n") !== 0) return
-      root.searchWantKey = ""   // asks again with the same query
+      // The search usually landed first; dropping it makes the same query ask
+      // again, against the new index.
+      root.searchWantKey = ""
+      root.search = null
       root.recompute()
     }
   }
