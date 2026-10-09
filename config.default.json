@@ -1,10 +1,29 @@
 {
   "hotkey": "SUPER + PERIOD",
-  "providers": ["commands", "notes", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
+  "providers": ["commands", "bangs", "notes", "clipboard", "files", "packages", "bible", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
   "apps": { "pinned": [] },
   "files": { "hidden": false },
   "window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 },
   "glass": { "enabled": true, "opacity": 0.78 },
+  "bible": { "versions": ["NASB", "NASB1995", "ESV", "KJV"] },
+  "bangs": {
+    "fallback": "https://duckduckgo.com/?q={q}",
+    "engines": {
+      "nasb": { "title": "Bible (NASB)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB" },
+      "bible": { "title": "Bible (NASB)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB" },
+      "nasb95": { "title": "Bible (NASB 1995)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB1995" },
+      "esv": { "title": "Bible (ESV)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=ESV" },
+      "kjv": { "title": "Bible (KJV)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=KJV" },
+      "ddg": { "title": "DuckDuckGo", "open": "https://duckduckgo.com/?q={q}", "home": "https://duckduckgo.com/" },
+      "g": { "title": "Google", "open": "https://www.google.com/search?q={q}" },
+      "w": { "title": "Wikipedia", "open": "https://en.wikipedia.org/w/index.php?search={q}" },
+      "yt": { "title": "YouTube", "open": "https://www.youtube.com/results?search_query={q}" },
+      "gh": { "title": "GitHub", "open": "https://github.com/search?q={q}" },
+      "aw": { "title": "Arch Wiki", "open": "https://wiki.archlinux.org/index.php?search={q}" },
+      "ap": { "title": "Arch packages", "open": "https://archlinux.org/packages/?q={q}" },
+      "maps": { "title": "OpenStreetMap", "open": "https://www.openstreetmap.org/search?query={q}" }
+    }
+  },
   "notes": { "inbox": "", "format": "- {date} {time} {text}" },
   "math": { "precision": 10 },
   "currency": { "home": "USD", "favorites": ["EUR", "GBP"] },

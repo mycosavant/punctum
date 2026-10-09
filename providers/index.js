@@ -15,6 +15,9 @@
 .import "url.js" as Url
 .import "colors.js" as Colors
 .import "notes.js" as Notes
+.import "bangs.js" as Bangs
+.import "bible.js" as Bible
+.import "packages.js" as Packages
 
 // Every provider the bar knows about. To add a feature: write providers/<name>.js
 // exporting `var provider = { id, name, icon, match(query, ctx) }`, import it
@@ -35,5 +38,8 @@ var all = [
   Hotkeys.provider,
   Url.provider,
   Colors.provider,
-  Notes.provider
+  Notes.provider,
+  Bangs.provider,
+  Bible.provider,
+  Packages.provider
 ]

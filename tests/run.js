@@ -186,8 +186,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Keybindings|Open a web address|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[8].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[11].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -521,5 +521,66 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("glass: a theme with a heavy scrim gets it lightened under the line", dense.scrim < dense.ignoreAlpha && dense.ignoreAlpha < dense.card, JSON.stringify(dense))
   const off = G.glass(0.5, 1)
   check("glass: opacity 1 means a solid card", off.card === 1 && off.scrim === 0.5) }
+
+// bible: references without a keyword, NASB first, and words after "bible"
+{ const top = (query) => { const r = run(query, ["bible"]); return r[0] ? r[0].title : "(none)" }
+  const url = (query) => { const r = run(query, ["bible"]); return r[0] && r[0].run ? r[0].run.target : "" }
+  check("bible: john 3:16 → NASB first", top("john 3:16") === "John 3:16 (NASB)", top("john 3:16"))
+  check("bible: one row per translation, in order", run("john 3:16", ["bible"]).map(r => r.title.replace(/.*\(/, "")).join(" ") === "NASB) NASB1995) ESV) KJV)")
+  check("bible: 1 jn 1:9 is the letter", top("1 jn 1:9") === "1 John 1:9 (NASB)", top("1 jn 1:9"))
+  check("bible: 1john 1:9-10 and i john", top("1john 1:9-10") === "1 John 1:9-10 (NASB)" && top("i john 1") === "1 John 1 (NASB)", top("1john 1:9-10") + " / " + top("i john 1"))
+  check("bible: is 53 is Isaiah, not part i of a book s", top("is 53") === "Isaiah 53 (NASB)", top("is 53"))
+  check("bible: ps 23 reads Psalm 23", top("ps 23") === "Psalm 23 (NASB)", top("ps 23"))
+  check("bible: song of songs 2:4", top("song of songs 2:4") === "Song of Solomon 2:4 (NASB)", top("song of songs 2:4"))
+  check("bible: rom 8.28 takes a dot", top("rom 8.28") === "Romans 8:28 (NASB)", top("rom 8.28"))
+  check("bible: no 4 John, no 3 Samuel", top("4 john 1") === "(none)" && top("3 sam 1") === "(none)")
+  check("bible: a book alone stays an app search", top("job") === "(none)" && top("mark") === "(none)" && top("john") === "(none)")
+  check("bible: ordinary words are not scripture", top("hello 3") === "(none)" && top("5 km") === "(none)" && top("3pm") === "(none)")
+  check("bible: the link is Bible Gateway quicksearch in NASB", url("john 3:16") === "https://www.biblegateway.com/quicksearch/?quicksearch=John%203%3A16&version=NASB", url("john 3:16"))
+  check("bible: bible and words is a word search", top("bible love one another") === "Search the Bible: love one another (NASB)" && /quicksearch=love%20one%20another&version=NASB$/.test(url("bible love one another")))
+  check("bible: bible and a reference is the passage", top("bible jn 3:16") === "John 3:16 (NASB)")
+  const own = Engine.run("john 3:16", Object.assign({}, config, { providers: ["bible"], bible: { versions: ["ESV", "bad version!", "NKJV"] } }), { now })
+  check("bible: your versions, odd names dropped", own.map(r => r.title).join("|") === "John 3:16 (ESV)|John 3:16 (NKJV)", own.map(r => r.title).join("|"))
+  check("bible: mode chip absent, help topic present", q("?bible").length > 0) }
+
+// bangs: listed bangs go straight to the site, unlisted ones to DuckDuckGo
+{ const b = (query, cfg) => Engine.run(query, Object.assign({}, config, { providers: ["bangs"] }, cfg || {}), { now })
+  const r = b("!nasb john 3:16")
+  check("bangs: !nasb opens Bible Gateway NASB", r[0].title === "Bible (NASB): john 3:16" && r[0].run.target === "https://www.biblegateway.com/quicksearch/?quicksearch=john%203%3A16&version=NASB", JSON.stringify(r[0] && r[0].run))
+  check("bangs: a trailing bang works too", b("john 3:16 !nasb")[0].run.target === r[0].run.target)
+  check("bangs: !bible is NASB", /version=NASB$/.test(b("!bible love")[0].run.target))
+  const un = b("!imdb dune")
+  check("bangs: an unlisted bang goes to DuckDuckGo whole", un[0].run.target === "https://duckduckgo.com/?q=!imdb%20dune", un[0] && un[0].run.target)
+  check("bangs: fallback \"\" keeps unlisted bangs here", b("!imdb dune", { bangs: Object.assign({}, config.bangs, { fallback: "" }) }).length === 0)
+  check("bangs: \"!\" lists them, \"!na\" narrows", b("!").length >= 10 && b("!na").map(x => x.complete.trim()).join(" ") === "!nasb !nasb95")
+  check("bangs: a bang with no search asks for one", b("!nasb")[0].title === "Bible (NASB)…" || b("!nasb ")[0].title === "Bible (NASB)…")
+  check("bangs: $& and quotes stay literal and encoded", b("!g $& 'x'")[0].run.target === "https://www.google.com/search?q=%24%26%20'x'", b("!g $& 'x'")[0].run.target)
+  const merged = Engine.deepMerge(defaults, { bangs: { engines: { g: null, ex: { title: "Example", open: "https://example.com/?s={q}" }, bad: { title: "Bad", open: "javascript:alert({q})" } } } })
+  const m = (query) => Engine.run(query, Object.assign({}, merged, { providers: ["bangs"] }), { now })
+  check("bangs: yours merge over the defaults by name", m("!ex hi")[0].run.target === "https://example.com/?s=hi" && /biblegateway/.test(m("!nasb x")[0].run.target))
+  check("bangs: null drops a default (then DuckDuckGo takes it)", /^https:\/\/duckduckgo\.com\/\?q=!g%20hi$/.test(m("!g hi")[0].run.target), m("!g hi")[0].run.target)
+  check("bangs: a non-http address is never opened", /duckduckgo/.test(m("!bad hi")[0].run.target))
+  check("bangs: 5! is still factorial, not a bang", q("5!")[0].title === "120")
+  check("bangs: mode chip", (Engine.mode("!nasb x", config) || {}).label === "Bang") }
+
+// packages: one read per open, official repos, install through pacman's own prompt
+{ const Pk = load(P + "providers/packages.js")
+  const text = "Q\tkfind\t26.07.0-1\nQ\tbash\t5.3-1\nS\textra\tkfind\t26.08.0-1\tx86_64\tFind Files/Folders\nS\tcore\tbash\t5.3-1\tx86_64\tThe GNU Bourne Again shell\n" +
+               "S\textra\tkfind-extras\t1-1\tany\tMore\nS\textra\t$(touch x)\t1\tany\tevil name\nS\textra\tplocate\t1.1.25-1\tx86_64\tAlternative to locate, faster\n"
+  const data = Pk.parse(text)
+  let asked = 0
+  const pk = (query, d) => run(query, ["packages"], { packages: d === undefined ? data : d, requestPackages: () => asked++ })
+  check("packages: a bad name never makes the list", data.list.length === 4 && !data.list.some(x => /\$/.test(x.name)))
+  const r = pk("pkg kfind")
+  check("packages: exact name first", r[0].title === "kfind" && r[1].title === "kfind-extras", r.map(x => x.title).join(","))
+  check("packages: installed rows show details, and the installed version when it differs", r[0].run.label === "details" && /installed 26\.07\.0-1/.test(r[0].subtitle), r[0].subtitle)
+  check("packages: the name is $1, never in the script", r[0].run.target.slice(-2).join(" ") === "commandbar-pkg kfind" && !/kfind/.test(r[0].run.target[r[0].run.target.length - 3]))
+  const inst = pk("pkg kfind-extras")[0]
+  check("packages: Enter on a missing package runs pacman -S in a terminal (pacman asks)", inst.run.label === "install" && /sudo pacman -S -- "\$1"/.test(inst.run.target.join(" ")) && !/--noconfirm/.test(inst.run.target.join(" ")))
+  check("packages: Shift+Enter opens archlinux.org with its arch", inst.alt.target === "https://archlinux.org/packages/extra/any/kfind-extras/", inst.alt.target)
+  check("packages: description words find it", pk("pkg locate faster")[0].title === "plocate")
+  check("packages: asks for the list only in pkg mode", asked > 0 && (asked = 0, pk("kfind").length === 0) && asked === 0)
+  check("packages: waits for the list", pk("pkg kfind", null)[0].title === "Reading the package list…")
+  check("packages: mode chip", (Engine.mode("pkg x", config) || {}).label === "Packages") }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

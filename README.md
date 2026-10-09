@@ -11,6 +11,9 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
 - **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
 - **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/commandbar-note` writes it: text on stdin, symlinks refused, never creates the folder.
+- **Bible**: type a reference (`john 3:16`, `1 jn 1:9`, `ps 23`) and it opens on Bible Gateway, NASB first; `bible love one another` is a word search. `"bible": { "versions": [...] }` sets the translations.
+- **Bangs**: `!nasb john 3:16`, `!aw hyprland`, or the bang at the end. Yours go under `"bangs": { "engines": { … } }`, merged over the defaults by name (`"g": null` drops one). A bang you haven't listed goes to DuckDuckGo with the whole query, as Zen does with DuckDuckGo as its engine; `"fallback": ""` stops that. `!` lists them.
+- **Packages**: `pkg kfind` searches your pacman repositories (official only, no AUR), read once per open with `expac`. Enter on a package you don't have opens a terminal with `sudo pacman -S`, so pacman asks first; on one you have it shows `pacman -Qi`. Shift+Enter opens its archlinux.org page.
 - **Frosted glass**: the card is the theme's menu colour at `"glass": { "opacity": 0.78 }` with Hyprland blurring what's behind it. Needs `decoration.blur.enabled` in your Hyprland config; `"glass": { "enabled": false }` makes it solid.
 - **Move and resize**: drag the card by its edges or footer, resize from the grip in the bottom-right corner. It stays where you leave it (`~/.cache/omarchy-commandbar/geometry.json`); the command "Reset command bar position" goes back to `"window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 }`.
 
@@ -58,6 +61,9 @@ It also fixes three things found reading upstream:
 | `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
 | `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
+| `john 3:16`, `ps 23`, `bible grace` | Scripture on Bible Gateway, your first translation (NASB) on top |
+| `!nasb john 3:16`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
+| `pkg kfind`, `pkg file search` | Packages from your pacman repositories. Enter installs (pacman asks) or shows details |
 | `g …`, `yt …`, `gh …`, `wiki …`, `lock` | Keyword commands, which you can change in the config |
 
 Type part of a feature's name to find it. `emo` finds Search emoji and `curr` finds Convert currency.
