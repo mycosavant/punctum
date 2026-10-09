@@ -1,8 +1,10 @@
 {
   "hotkey": "SUPER + PERIOD",
-  "providers": ["commands", "bangs", "notes", "clipboard", "files", "packages", "bible", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
+  "providers": ["commands", "bangs", "notes", "clipboard", "files", "locate", "contents", "packages", "bible", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
   "apps": { "pinned": [] },
   "files": { "hidden": false },
+  "locate": { "exclude": ["/.cache/", "/.cargo/registry/", "/.cargo/git/", "/node_modules/", "/.local/share/Trash/", "/.git/"] },
+  "contents": { "hidden": false },
   "window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 },
   "glass": { "enabled": true, "opacity": 0.78 },
   "bible": { "versions": ["NASB", "NASB1995", "ESV", "KJV"] },
@@ -42,6 +44,7 @@
     { "keyword": "yt", "title": "Search YouTube", "open": "https://www.youtube.com/results?search_query={q}" },
     { "keyword": "gh", "title": "Search GitHub", "open": "https://github.com/search?q={q}" },
     { "keyword": "wiki", "title": "Wikipedia", "open": "https://en.wikipedia.org/w/index.php?search={q}" },
-    { "keyword": "lock", "title": "Lock screen", "run": "omarchy-system-lock" }
+    { "keyword": "lock", "title": "Lock screen", "run": "omarchy-system-lock" },
+    { "keyword": "syncthing", "title": "Syncthing", "keywords": "sync web ui", "icon": "󰓦", "open": "http://127.0.0.1:8384/" }
   ]
 }

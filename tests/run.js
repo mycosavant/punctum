@@ -138,7 +138,7 @@ expect("date", "Date calculator"); expect("help", "Show everything"); expect("ex
   const ok = b[0].section === "Windows" && !b[1].section && b[2].section === "Apps" && !b[0].hero
     && sums[0].hero && !sums[0].section
     && fx[0].hero && fx[1].section === "Currency"
-    && lo[0].section === "Commands" && lo[1].section === "Apps" && q("lock")[0].subtitle === "Runs omarchy-system-lock"
+    && lo[0].section === "Commands" && lo.some(r => r.section === "Apps") && q("lock")[0].subtitle === "Runs omarchy-system-lock"
   console.log((ok ? "ok  " : "FAIL") + "  sections " + b.map(r => r.section || "·").join(",") + " | hero on answers only | " + q("lock")[0].subtitle); if (!ok) fails++ }
 { const m = x => (Engine.mode(x, config) || {}).label || ""
   const ok = m(":fire") === "Emoji" && m("kill ") === "Processes" && m("w git") === "Windows" && m("g cats") === "Search Google" && m("lock") === "" && m("2+2") === "" && m("w") === ""
@@ -186,8 +186,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[11].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[13].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -582,5 +582,61 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("packages: asks for the list only in pkg mode", asked > 0 && (asked = 0, pk("kfind").length === 0) && asked === 0)
   check("packages: waits for the list", pk("pkg kfind", null)[0].title === "Reading the package list…")
   check("packages: mode chip", (Engine.mode("pkg x", config) || {}).label === "Packages") }
+
+// everywhere: plocate words as arguments, fzf for the query, desktop order
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const Lo = load(P + "providers/locate.js")
+  const p = Lo.plan("report .pdf$ !old", null)
+  check("locate: the query is arguments, never in the script", p.argv[2] === Lo.SCRIPT && p.argv[4].indexOf("report .pdf$ !old") === 0)
+  check("locate: plocate gets plain words, fzf's operators stripped, negations left out", p.argv.slice(5).join(" ") === "2 report .pdf report[^/]*p[^/]*o[^/]*r[^/]*t pdf".replace("report[^/]*p[^/]*o[^/]*r[^/]*t", "r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t").replace(" pdf", " p[^/]*d[^/]*f"), p.argv.slice(5).join(" "))
+  check("locate: the default exclusions ride along as !terms", /!\/\.cache\/ /.test(p.argv[4]) && /!\/node_modules\//.test(p.argv[4]))
+  check("locate: an exact term gets no fuzzy pass", Lo.plan("'notes", null).argv.length === 7)
+  check("locate: one letter is not enough", Lo.plan("a", null) === null && Lo.plan("!foo", null) === null)
+  const home = "/home/u"
+  const order = Lo.ordered(["/usr/share/icons/x/stat_sys_download_done.xml", "/home/u/Downloads", "/home/u/.rustup/downloads", "/etc/hosts"], "dwnlds", home)
+  check("locate: ~/Downloads first for dwnlds, hidden after", order[0] === "/home/u/Downloads" && order.indexOf("/home/u/.rustup/downloads") > 0, order.join(","))
+  const hosts = Lo.ordered(["/home/u/.config/gh/hosts.yml", "/etc/hosts"], "hosts", home)
+  check("locate: an exact name beats the home lift", hosts[0] === "/etc/hosts", hosts.join(","))
+  check("locate: parse drops duplicates and relative junk", Lo.parse("/a\u0000/a\u0000rel\u0000/b\u0000/cut").join(",") === "/a,/b")
+  const ctxSearch = (key, text) => run("/dwnlds", ["locate"], { home, search: { key, text }, requestSearch: () => {}, requestHomeIndex: () => {} })
+  const k = Lo.plan("dwnlds", config.locate).key
+  const rows = ctxSearch(k, "/home/u/Downloads\u0000/etc/x\u0000")
+  check("locate: rows open the path, Shift+Enter opens a terminal in its folder", rows[0].title === "Downloads" && rows[0].subtitle === "~" && rows[0].run.target.join(" ") === "xdg-open /home/u/Downloads" && rows[0].alt.target.slice(-1)[0] === "--dir=/home/u")
+  check("locate: mode chip", (Engine.mode("/x", config) || {}).label === "Everywhere")
+  // Run for real: a query that would create a marker if it were ever parsed as code.
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-locate-")
+  const evil = Lo.plan("$(touch " + dir + "/pwned) `touch " + dir + "/pwned2`", null)
+  spawnSync(evil.argv[0], evil.argv.slice(1), { encoding: "utf8", timeout: 10000 })
+  check("locate: a $(…) query runs nothing (calibrated: the marker path is writable)", !fs.existsSync(dir + "/pwned") && !fs.existsSync(dir + "/pwned2") && (fs.writeFileSync(dir + "/probe", ""), fs.existsSync(dir + "/probe")))
+  const real = Lo.plan("hosts", null)
+  const out = spawnSync(real.argv[0], real.argv.slice(1), { encoding: "utf8", timeout: 10000 }).stdout
+  check("locate: a real search finds /etc/hosts", Lo.parse(out).indexOf("/etc/hosts") >= 0)
+  fs.rmSync(dir, { recursive: true }) }
+
+// inside files: ripgrep with the words as one argument
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const C = load(P + "providers/contents.js")
+  const p = C.plan("invoice 2024", null)
+  check("contents: words are $1, fixed strings, hidden off by default", p.argv[2] === C.SCRIPT && p.argv[4] === "invoice 2024" && p.argv.length === 5 && /--fixed-strings/.test(C.SCRIPT))
+  check("contents: hidden on adds the flag", C.plan("invoice", { hidden: true }).argv[5] === "1")
+  check("contents: two letters is not enough", C.plan("ab", null) === null)
+  const hits = C.parse("/home/u/a.md\u000012:  the   invoice\n/home/u/b.txt\u00003:x\nnot a hit\n")
+  check("contents: parse keeps path, line and text", hits.length === 2 && hits[0].line === 12 && hits[0].text === "the invoice")
+  const rows = run("rg invoice", ["contents"], { home: "/home/u", search: { key: C.plan("invoice", config.contents).key, text: "/home/u/a.md\u000012:the invoice\n" }, requestSearch: () => {} })
+  check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.target.join(" ") === "omarchy-launch-editor +12 /home/u/a.md" && rows[0].alt.target.join(" ") === "xdg-open /home/u/a.md" && rows[0].subtitle === "~/a.md:12")
+  check("contents: mode chip", (Engine.mode("rg x", config) || {}).label === "In files")
+  // For real, in a scratch home: finds the line, and a $(…) query runs nothing.
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-rg-")
+  fs.writeFileSync(dir + "/note.md", "first\nthe zebra invoice\n")
+  const env = Object.assign({}, process.env, { HOME: dir })
+  const found = C.parse(spawnSync("bash", C.plan("zebra invoice", null).argv.slice(1), { encoding: "utf8", env }).stdout)
+  check("contents: a real search finds the line", found.length === 1 && found[0].line === 2 && found[0].path === dir + "/note.md", JSON.stringify(found))
+  spawnSync("bash", C.plan("$(touch " + dir + "/pwned)", null).argv.slice(1), { encoding: "utf8", env })
+  check("contents: a $(…) query runs nothing", !fs.existsSync(dir + "/pwned"))
+  fs.rmSync(dir, { recursive: true }) }
+
+// syncthing: a keyword that opens the local web UI
+{ const r = q("syncthing")
+  check("syncthing: opens the local web UI", r[0].title === "Syncthing" && r[0].run && r[0].run.target === "http://127.0.0.1:8384/", JSON.stringify(r[0] && r[0].run)) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

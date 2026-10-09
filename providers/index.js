@@ -18,6 +18,8 @@
 .import "bangs.js" as Bangs
 .import "bible.js" as Bible
 .import "packages.js" as Packages
+.import "locate.js" as Locate
+.import "contents.js" as Contents
 
 // Every provider the bar knows about. To add a feature: write providers/<name>.js
 // exporting `var provider = { id, name, icon, match(query, ctx) }`, import it
@@ -41,5 +43,7 @@ var all = [
   Notes.provider,
   Bangs.provider,
   Bible.provider,
-  Packages.provider
+  Packages.provider,
+  Locate.provider,
+  Contents.provider
 ]

@@ -11,6 +11,9 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
 - **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
 - **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/commandbar-note` writes it: text on stdin, symlinks refused, never creates the folder.
+- **Everywhere** (`/name`): every file on the disk as you type, like Everything on Windows. plocate does the lookup (the system index for outside your home folder, rebuilt nightly; a private index of your home folder, rebuilt in about half a second when the bar opens), fzf filters with its query syntax (`'exact`, `^start`, `.pdf$`, `!leave-out`), and the order puts a name that is the word first, with a lift for your home folder. `"locate": { "exclude": [...] }` keeps caches out.
+- **Inside files** (`rg words`): ripgrep under your home folder, the words as a fixed string. Enter opens your editor at the line; Shift+Enter opens the file. `"contents": { "hidden": true }` includes dot-folders.
+- **Syncthing**: the `syncthing` keyword opens the local web UI at 127.0.0.1:8384.
 - **Bible**: type a reference (`john 3:16`, `1 jn 1:9`, `ps 23`) and it opens on Bible Gateway, NASB first; `bible love one another` is a word search. `"bible": { "versions": [...] }` sets the translations.
 - **Bangs**: `!nasb john 3:16`, `!aw hyprland`, or the bang at the end. Yours go under `"bangs": { "engines": { … } }`, merged over the defaults by name (`"g": null` drops one). A bang you haven't listed goes to DuckDuckGo with the whole query, as Zen does with DuckDuckGo as its engine; `"fallback": ""` stops that. `!` lists them.
 - **Packages**: `pkg kfind` searches your pacman repositories (official only, no AUR), read once per open with `expac`. Enter on a package you don't have opens a terminal with `sudo pacman -S`, so pacman asks first; on one you have it shows `pacman -Qi`. Shift+Enter opens its archlinux.org page.
@@ -61,6 +64,8 @@ It also fixes three things found reading upstream:
 | `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
 | `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
+| `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
+| `rg invoice`, `grep TODO` | Lines inside your files (ripgrep). Enter opens the editor at that line |
 | `john 3:16`, `ps 23`, `bible grace` | Scripture on Bible Gateway, your first translation (NASB) on top |
 | `!nasb john 3:16`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
 | `pkg kfind`, `pkg file search` | Packages from your pacman repositories. Enter installs (pacman asks) or shows details |

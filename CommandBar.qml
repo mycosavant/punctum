@@ -11,6 +11,7 @@ import "lib/Hotkey.js" as Hotkey
 import "lib/Geometry.js" as Geometry
 import "providers/files.js" as Files
 import "providers/packages.js" as Packages
+import "providers/locate.js" as Locate
 
 // Spotlight-style command bar. The UI and the data it needs (config, exchange
 // rates, zone offsets) live here; what a query *means* is decided by the
@@ -186,6 +187,10 @@ Item {
     if (filesProc.running) filesProc.signal(15)
     root.packagesWanted = false
     root.packages = null
+    root.search = null
+    root.searchWantKey = ""
+    root.searchWantArgv = null
+    if (searchProc.running) searchProc.signal(15)
     // Rows hold clipboard texts and file paths; a kept query is recomputed
     // from scratch on the next open.
     root.results = []
@@ -229,6 +234,7 @@ Item {
       clipboard: root.clipboard,
       files: root.files,
       packages: root.packages,
+      search: root.search,
       hotkeys: root.hotkeysText,
       pinnedApps: root.pinnedApps,
       home: root.home,
@@ -237,6 +243,8 @@ Item {
       requestRates: root.refreshRates,
       requestFiles: root.requestFiles,
       requestPackages: root.requestPackages,
+      requestSearch: root.requestSearch,
+      requestHomeIndex: root.requestHomeIndex,
       requestHotkeys: root.requestHotkeys,
       requestClipboard: root.requestClipboard
     })
@@ -536,6 +544,78 @@ Item {
         root.packages = Packages.parse(text)
         if (root.opened) root.recompute()
       }
+    }
+  }
+
+  // ---------------------------------------------------------------- search (everywhere, inside files)
+
+  // One search process at a time, shared by "/" (plocate and fzf) and "rg "
+  // (ripgrep), which never run together. A newer query stops the one still
+  // running; when it exits, the newest wanted query starts, so old output is
+  // never filed under a new key. Results are kept for one query.
+  property var search: null           // { key, text }
+  property string searchWantKey: ""
+  property var searchWantArgv: null
+  property bool searchStreamDone: true
+  property bool searchExited: true
+
+  function requestSearch(key, argv) {
+    if (root.searchWantKey === key) return
+    root.searchWantKey = key
+    root.searchWantArgv = argv
+    if (searchProc.running) searchProc.signal(15)
+    else root.startSearch()
+  }
+
+  function startSearch() {
+    if (!root.searchWantArgv || !root.searchStreamDone || !root.searchExited) return
+    root.searchStreamDone = false
+    root.searchExited = false
+    searchProc.forKey = root.searchWantKey
+    searchProc.command = root.searchWantArgv
+    root.searchWantArgv = null
+    searchProc.running = true
+    searchWatchdog.restart()
+  }
+
+  Process {
+    id: searchProc
+    property string forKey: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.searchStreamDone = true
+        if (root.opened && searchProc.forKey !== "" && searchProc.forKey === root.searchWantKey) {
+          root.search = { key: searchProc.forKey, text: String(text || "") }
+          root.recompute()
+        }
+        root.startSearch()
+      }
+    }
+    onExited: { searchWatchdog.stop(); root.searchExited = true; root.startSearch() }
+  }
+
+  // Whatever a search had written out after 3 s is used.
+  Timer { id: searchWatchdog; interval: 3000; onTriggered: if (searchProc.running) searchProc.signal(15) }
+
+  // The private index of home that "/" searches, rebuilt (about 0.5 s) at
+  // most once a minute, on the first "/" query after the bar opens. When it
+  // lands, the query runs again against it.
+  property real homeIndexAt: 0
+
+  function requestHomeIndex() {
+    if (homeIndexProc.running || Date.now() - root.homeIndexAt < 60000) return
+    root.homeIndexAt = Date.now()
+    homeIndexProc.running = true
+  }
+
+  Process {
+    id: homeIndexProc
+    command: ["bash", "-c", Locate.INDEX_SCRIPT]
+    onExited: {
+      if (!root.opened || root.searchWantKey.indexOf("locate\n") !== 0) return
+      root.searchWantKey = ""   // asks again with the same query
+      root.recompute()
     }
   }
 
