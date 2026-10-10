@@ -25,10 +25,18 @@ omarchy-shell (Quickshell, long-running)
         ├── punctum-edit        opens the editor at a line
         ├── punctum-open        opens a URL or file (xdg-open, but text
         │                          with a terminal default goes to the editor)
-        └── punctum-agent       starts the default agent with a prompt
+        ├── punctum-agent       starts the default agent with a prompt
+        ├── punctum-sandbox     builds the bwrap command a script extension runs in
+        └── punctum-native      builds, downloads (checked) or removes punctumd
+                                   and everywhere, from ?extensions
 
-punctumd (Rust, native/punctumd/)  native extensions, kept running beside the
-                                    bar, one JSON line per query (docs/native.md)
+punctumd (Rust, native/punctumd/)  native extensions, and your approved
+                                    WebAssembly ones (docs/wasm.md), kept running
+                                    beside the bar, one JSON line per query
+                                    (docs/native.md)
+everywhere (Rust, native/everywhere/)  Everywhere's command; its launcher in
+                                    extensions/everywhere runs it, or
+                                    everywhere.py without it
 ```
 
 Your extensions live in `~/.config/omarchy/punctum/extensions/<id>/`; one

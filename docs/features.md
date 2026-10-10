@@ -16,14 +16,15 @@ runs.
 ## Everywhere — `/`  (`everywhere`)
 
 Files and folders anywhere on the disk, by name, as you type. Also a command
-of its own (`everywhere`, with an fzf picker). [Everywhere](everywhere.md)
+of its own (`everywhere`, with an fzf picker if you have fzf). [Everywhere](everywhere.md)
 has the full account.
 
 - `/notes`, `/dwnlds`, `/report .pdf$`, `/hosts !backup`, and filters:
   `/report ext:pdf dm:week`, `/dm:today`, `/size:>1G`
 - **Enter** opens with the default app. **Shift+Enter** opens a terminal in its folder.
-- **Runs** the `everywhere` command, a script extension, which runs `plocate`,
-  `fzf` and, for its home index, `updatedb`. All local.
+- **Runs** the `everywhere` command, a script extension, which runs `plocate`
+  and, for its home index, `updatedb` (its Python version, without the Rust
+  build, also `fzf`). All local.
 
 ## Files under home — `~`  (`files`)
 
@@ -175,6 +176,15 @@ Your Hyprland keybindings, found by what they do.
 ## Colours  (`colors`)
 
 - `#ff6644`, `ff6644`, `rgb(40, 120, 200)`: a swatch with HEX, RGB and HSL.
+  With [native extensions](native.md), also `hsl()`, `oklch()` and the other
+  CSS colour functions, an OKLCH row, the forms you list in `formats`, and the
+  colour's contrast on white and on black.
+- `#fff on #333`, `contrast #777 #fff` (native): the WCAG contrast ratio, and
+  whether text and large text pass.
+- `pick` (native): pick a colour from the screen. Enter and Shift+Enter each
+  copy it, open the bar on it, or both (`afterPick`, `afterPickAlt`). "Pick two
+  colours for contrast" takes a text colour, then a background. `pick ` lists
+  what you picked and copies it as CSS, SCSS, JSON, Tailwind or a GIMP palette.
 - **Enter** copies the form on the selected row.
 
 ## Pinned apps  (`apps`)

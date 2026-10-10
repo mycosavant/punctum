@@ -20,31 +20,41 @@ day). The repository is ready locally in `~/git/punctum`; nothing is published.
   network on; the run says so in two `note` lines.
 - Name checks: [punctum-checks.md](punctum-checks.md).
 - Upstream drafts rebased onto Command Bar 1.3.1: [../upstream/](../upstream/README.md).
+- Native extensions (punctumd), Everywhere in Rust, WebAssembly extensions,
+  reviewed 2026-10-10 (security, correctness, the bar, Everywhere, release):
+  every finding fixed or noted below. `native/release-build` is
+  reproducible: two builds from different checkouts give the same bytes.
 
 ## The maintainer's steps, in order
 
 1. **Optional: look at DE 1128046** (*punctum Gesellschaft für Software mbH*,
    classes 9/35/42, 1988) at register.dpma.de. It's the one live mark whose
    owner names software; the checks couldn't read its goods list.
-2. **Publish the repository.** Done 2026-10-10: `github.com/mycosavant/punctum`. Create `github.com/mycosavant/punctum`
-   (public, no template files), then:
-
-   ```sh
-   cd ~/git/punctum
-   git remote add origin git@github.com:mycosavant/punctum.git
-   git push -u origin main
-   ```
-
-   Watch the first Actions run: the container steps (pacman, useradd,
-   bwrap under `--privileged`) are untested.
+2. **Publish the repository.** Done 2026-10-10: `github.com/mycosavant/punctum`.
 3. **Screenshots.** `preview.png` and `screenshots/` are Command Bar 1.3.0's.
    New ones need the display on: the card, `?`, `/` (Everywhere) and
    `?extensions`.
-4. **Tag it** once CI is green: `git tag -a v0.1.0 -m "Punctum 0.1.0" && git push origin v0.1.0`.
-5. **Upstream**: the issue, then PRs 1 and 3, then PR 2, as
+4. **Merge `dev` into `main`**, once CI is green on `dev`. `main` has none of
+   the native code yet, so `punctumd-git` (which builds `main`) fails until
+   then. Decide Everywhere's final name first if it should ship under it:
+   the crate (`native/everywhere`) and the binary name are one line each.
+5. **Tag it** once CI is green on `main`: `git tag -a v0.1.0 -m "Punctum 0.1.0" && git push origin v0.1.0`.
+   `release.yml` builds punctumd and everywhere and attaches them, their
+   `.sha256` files and `built-with.txt` to a **draft** release.
+6. **Check the draft.** Rebuild from the tag with `native/release-build`
+   using the compilers its notes name (rustc 1.99.0 and the runner's gcc;
+   a different gcc gives different bytes) and compare both SHA-256s.
+7. **Publish the draft**, then commit its two `.sha256` lines to
+   `native/checksums.txt` on `main`: that's what `?extensions` → download
+   checks against.
+8. **Packages.** In each `packaging/arch/*/PKGBUILD`, `updpkgsums` (the
+   `-bin` sums must equal `checksums.txt`), then
+   `makepkg --printsrcinfo > .SRCINFO`, and build each in a clean chroot.
+   Publishing them to the AUR is a separate, public step.
+9. **Upstream**: the issue, then PRs 1 and 3, then PR 2, as
    [../upstream/README.md](../upstream/README.md) says. The issue links the
    repository, so after step 2.
-6. **Marketplace.** Not researched: how Omarchy's plugin marketplace takes a
+10. **Marketplace.** Not researched: how Omarchy's plugin marketplace takes a
    submission. Its rules (from Command Bar's CONTRIBUTING) are met as far as
    they were checked; the automated check itself hasn't been run.
 

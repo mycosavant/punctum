@@ -34,9 +34,8 @@ those commands in their manifest (see [the manifest](#the-manifest)); the bar
 runs them and passes the output in. So every program a native extension can
 cause to run is listed in its `extension.json`.
 
-The plan is to move the bundled extensions over one at a time, and
-later to run third-party extensions in punctumd as WebAssembly, where they can
-be sandboxed even though they answer every keystroke.
+Third-party extensions can run in punctumd too, as WebAssembly, sandboxed
+even though they answer every keystroke: [WebAssembly extensions](wasm.md).
 
 ## Why a daemon
 
@@ -85,12 +84,14 @@ which is in git, so a new checksum shows in the diff that
 **From a package.** `packaging/arch/` has `punctumd` (from a tagged source
 release, with `cargo test` in `check()`), `punctumd-bin` (the release binary,
 unstripped so its SHA-256 still equals the release's) and `punctumd-git`
-(latest main). Each installs only `/usr/bin/punctumd`, which the bar finds
-on `PATH`; the plugin itself still comes from `omarchy plugin add`.
+(latest main). Each installs `/usr/bin/punctumd`, which the bar finds on
+`PATH`, and Everywhere's binary as `/usr/lib/punctum/everywhere`, where
+its launcher looks; the plugin itself still comes from `omarchy plugin add`.
 
-**By hand.** `cargo build --release` in a clone, then copy
-`target/release/punctumd` into the plugin's `bin/` and run
-`pkill -x punctumd`.
+**By hand.** `cargo build --release` in a clone *outside* the plugin folder
+(building inside it makes the shell reload over and over), then copy
+`target/release/punctumd` and `target/release/everywhere` into the plugin's
+`bin/` and run `pkill -x punctumd`. `bin/punctum-native build` does the same.
 
 The bar looks for punctumd in this order: the plugin's `bin/punctumd`, then
 its `target/release/punctumd`, then `punctumd` on `PATH`. It looks at
@@ -102,15 +103,20 @@ fallbacks until the next open.
 
 ## Releasing it
 
-1. Bump the version in `manifest.json` and `native/punctumd/Cargo.toml`.
-   `native/release-build` refuses to build if they differ.
+1. Bump the version in `manifest.json`, `native/punctumd/Cargo.toml` and
+   `native/everywhere/Cargo.toml`, then `cargo update --workspace` so
+   `Cargo.lock` agrees (every build is `--locked`). `native/release-build`
+   refuses to build if the versions differ.
 2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` runs
    `native/release-build` and attaches the static (musl) binaries and their
    `.sha256` files to a **draft** release.
 3. Rebuild from the tag yourself with `native/release-build` and compare the
    checksums. The build is reproducible: the toolchain is pinned and paths
-   are remapped, and two checkouts in different folders give the same
-   bytes.
+   (the checkout, cargo's home and the build folder) are remapped, so two
+   checkouts in different folders give the same bytes, with the same C
+   compiler. wasmtime compiles a few C helpers, so the compiler matters: the
+   draft's notes, and `dist/built-with.txt`, name the rustc and gcc that
+   built it.
 4. Publish the draft, add its lines to `native/checksums.txt`, and update
    `pkgver` and the checksums in `packaging/arch/*/PKGBUILD` (`updpkgsums`,
    then `makepkg --printsrcinfo > .SRCINFO`).
@@ -201,8 +207,9 @@ answer still coming, since those used the old state. Requests and replies
 share one pipe, in order, so a query sent after the state is answered with
 it.
 
-The bar uses the extension id and query as the request id, and caches each
-answer until the config changes or its `ttl` runs out. A stale answer stays
+Each request has its own id (`<n>\n<ext>\n<query>`), and only a reply to the
+latest request for a query counts. The bar caches each answer by extension
+and query until the config changes or its `ttl` runs out. A stale answer stays
 on screen until the fresh one arrives, so a clock doesn't flicker. While a
 first answer is on its way,
 `ctx.native(query)` returns null and the extension shows nothing. When the

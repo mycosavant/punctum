@@ -93,7 +93,8 @@ and only what it asks for beyond that.
 [`docs/`](docs/README.md): [features](docs/features.md),
 [Everywhere](docs/everywhere.md) (the file search),
 [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md),
-[writing extensions](docs/writing-extensions.md) and [architecture](docs/architecture.md).
+[writing extensions](docs/writing-extensions.md), [native extensions](docs/native.md),
+[WebAssembly extensions](docs/wasm.md) and [architecture](docs/architecture.md).
 
 ## Install
 
@@ -107,14 +108,15 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
-The calculator, apps, windows, keybindings, clipboard history, packages, reminders, units,
-time zones, colours and web addresses can also run natively, in punctumd, a
-small Rust daemon. It's optional, and the bar works without it; with it,
+The calculator, apps, windows, file search, processes, keybindings, clipboard
+history, packages, reminders, units, time zones, colours and web addresses
+can also run natively, in punctumd, a small Rust daemon, and Everywhere in a
+Rust build of its own. It's optional, and the bar works without it; with it,
 time zones come from your system's tzdata and every IANA zone answers.
 punctumd runs no programs: what the bar runs for an extension is listed in
-its manifest. With Rust installed,
-`cargo build --release` in the plugin folder builds it, and the bar picks it
-up on its own ([docs/native.md](docs/native.md)).
+its manifest. To get it, open `?extensions` and press Enter on *Native
+extensions*: it builds it with cargo, or downloads the release binary and
+checks its SHA-256, in a terminal that asks first ([docs/native.md](docs/native.md)).
 
 Press Super + Period to open it. If another binding already uses that key,
 Punctum leaves it alone and a notification says so; set `"hotkey"` in the
@@ -225,7 +227,7 @@ Under the agent, a "Chat websites" section lists each site, so Alt+2 and Alt+3 o
 
 ## Adding a feature
 
-Every feature is an extension: a folder with an `extension.json` and either a script in any language or a JavaScript provider. Put yours in `~/.config/omarchy/punctum/extensions/<id>/` and run `omarchy-restart-shell`. The smallest one, [`examples/hello`](examples/hello), is a twelve-line Python script:
+Every feature is an extension: a folder with an `extension.json` and either a script in any language or a JavaScript provider. Put yours in `~/.config/omarchy/punctum/extensions/<id>/` and run `omarchy-restart-shell`. The smallest one, [`examples/hello`](examples/hello), is a fifteen-line Python script:
 
 ```jsonc
 // extension.json
@@ -233,7 +235,7 @@ Every feature is an extension: a folder with an `extension.json` and either a sc
   "mode": { "pattern": "^\\s*hi\\s", "label": "Hello" } }
 ```
 
-The bar sends the script `{"text": "Ada", "settings": {...}, ...}` on stdin and shows the rows it prints, `{"items": [{"title": "Hello, Ada!", "copy": "Hello, Ada!"}]}`. Enter does what a row's action says, from a short list the bar carries out itself (open, copy, paste, edit, run a command). [Writing extensions](docs/writing-extensions.md) has the manifest, both kinds, the actions and testing.
+The bar sends the script `{"text": "Ada", "settings": {...}, ...}` on stdin and shows the rows it prints, `{"items": [{"title": "Hello, Ada!", "copy": "Hello, Ada!"}]}`. Enter does what a row's action says, from a short list the bar carries out itself (open, copy, paste, edit, run a command). [Writing extensions](docs/writing-extensions.md) has the manifest, the kinds (script, JavaScript and WebAssembly), the actions and testing.
 
 Test without the shell by running `node tests/run.js`, and `cargo test` for the native extensions.
 

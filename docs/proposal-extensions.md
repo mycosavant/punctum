@@ -25,7 +25,7 @@ Everywhere, the file search, would be useful well beyond this bar.
 
 ## What's in the way
 
-From [Architecture](architecture.md#where-it-strains):
+From [Architecture](architecture.md#limits):
 
 1. **The registry is static.** QML `.import` is resolved when the file loads,
    so every provider is compiled in through `providers/index.js`.

@@ -78,7 +78,7 @@ command bar position".
 
 ### `remind`
 
-No settings. `remind 10m tea`, `alarm 6:45`; see [Features](features.md#reminders-and-alarms--remind--alarm--remindme--remind).
+No settings. `remind 10m tea`, `alarm 6:45`; see [Features](features.md#reminders-and-alarms--remind-alarm-remindme--remind).
 
 ### `bible`
 
@@ -132,6 +132,17 @@ Defaults: `ddg`, `g`, `w` (Wikipedia), `yt`, `gh`, `aw` (Arch Wiki), `ap`
 |---|---|---|
 | `pinned` | `[]` | Desktop ids of pinned apps (`"org.kde.kate"`). Pinning with Alt+P saves its own list in the cache, which then wins |
 
+### `colors` (with [native extensions](native.md))
+
+| Key | Default | Meaning |
+|---|---|---|
+| `formats` | `["hex", "rgb", "hsl", "oklch"]` | The forms a colour shows, in order. Also `hsv`, `hwb`, `lab`, `lch`, `oklab`, `cmyk`, `vec4`, `decimal`, `0x` |
+| `contrast` | `true` | `false` leaves out a colour's contrast on white and on black |
+| `afterPick` | `"copy+show"` | What Enter on the colour picker does after you click: `"copy"`, `"show"` (the bar opens on the colour) or `"copy+show"` |
+| `afterPickAlt` | `"copy"` | The same, for Shift+Enter |
+| `copyFormat` | `"hex"` | The form a pick copies: any of `formats`' names |
+| `exports` | `["css", "scss", "json", "tailwind", "gpl"]` | What `pick ` offers to copy your picked colours as |
+
 ### `math`, `currency`, `time`, `emoji`, `ai`
 
 | Key | Default | Meaning |
@@ -154,7 +165,7 @@ A list of keyword commands. Each has `keyword`, `title`, and either `open` (a
 URL with `{q}`) or `run` (a bash command where `{q}` is the typed text).
 Optional: `keywords` (extra words to find it by), `icon`. The list replaces
 the defaults, so copy the ones you want to keep. See
-[Features](features.md#keyword-commands) and
+[Features](features.md#keyword-commands--commands) and
 [Security and privacy](security-and-privacy.md#typed-text-and-the-shell).
 
 ## Files the bar keeps
