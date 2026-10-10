@@ -20,6 +20,10 @@ There are two kinds:
 
 Start with a script extension unless you need to answer outside a mode.
 
+A few of the bar's own extensions are a third kind, `native`: Rust inside
+punctumd, with a JS fallback. Units is one. Only bundled extensions can be
+native; [Native extensions](native.md) explains why and how they work.
+
 ## The manifest
 
 ```jsonc

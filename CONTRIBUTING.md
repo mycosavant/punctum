@@ -22,12 +22,14 @@ Keep only one copy in that folder. Two copies register the same plugin ID.
 
 After changing the code, run `omarchy restart shell` to load it. The shell reloads plugins on its own when files change, but that isn't always reliable, so restart before you decide something works. `journalctl --user -f | grep -i punctum` shows the bar's warnings and errors.
 
-New features are extensions: a folder in `extensions/` with an `extension.json`. [docs/writing-extensions.md](docs/writing-extensions.md) has the format; `examples/hello` is the smallest one.
+New features are extensions: a folder in `extensions/` with an `extension.json`. [docs/writing-extensions.md](docs/writing-extensions.md) has the format; `examples/hello` is the smallest one. Bundled extensions are moving to Rust in `native/punctumd`; [docs/native.md](docs/native.md) covers building it and porting one.
 
 ## Tests
 
 ```sh
-node tests/run.js
+cargo test                  # native extensions (punctumd)
+cargo build && node tests/run.js
+node tests/units-parity.js  # the Rust and JS units agree
 ```
 
 All tests must pass, and CI runs them on every push and pull request. Add tests for anything you add or fix, and break your change once to see the test fail. They run without the shell, using sample rates, time zones and processes; a few run real `bwrap`, `plocate`, `fd` and `fzf`.

@@ -255,7 +255,8 @@ Item {
       requestSearch: root.requestSearch,
       cached: root.cached,
       requestLoad: root.requestLoad,
-      requestJob: root.requestJob
+      requestJob: root.requestJob,
+      native: root.native
     })
     root.mode = Engine.mode(input.text, root.config)
     if (root.selectedIndex >= root.rows.length) root.selectedIndex = Math.max(0, root.rows.length - 1)
@@ -778,8 +779,10 @@ Item {
   // ~/.config/omarchy/punctum/extensions/), validated by lib/Extensions.js,
   // and loaded: a js extension's provider file through a small QML object
   // made at run time (QML can't import a path chosen at run time any other
-  // way), a script extension wrapped by Ext.scriptProvider. Found again at
-  // startup and whenever your config changes.
+  // way), a script extension wrapped by Ext.scriptProvider, a native one by
+  // Ext.nativeProvider when punctumd serves it and from its JS fallback when
+  // it doesn't. Found again at startup, whenever your config changes, and
+  // when punctumd starts or stops.
   readonly property string userExtensionsDir: root.home + "/.config/omarchy/punctum/extensions"
   property var extensionObjects: []
 
@@ -791,7 +794,10 @@ Item {
     return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
   }
 
+  property string extensionsText: ""   // bin/punctum-extensions' last answer
+
   function installExtensions(text) {
+    root.extensionsText = text
     var found = []
     try { found = JSON.parse(text) } catch (e) { console.warn("punctum: couldn't list extensions: " + e) }
     var refused = []
@@ -805,6 +811,11 @@ Item {
     for (var i = 0; i < got.list.length; i++) {
       var m = got.list[i]
       if (m.type === "script") { entries.push({ provider: Ext.scriptProvider(m), manifest: m }); continue }
+      if (m.type === "native") {
+        m.runtime = root.nativeServed[m.id] ? "punctumd" : "js"
+        if (m.runtime === "punctumd") { entries.push({ provider: Ext.nativeProvider(m), manifest: m }); continue }
+        if (!m.entry) { errors.push({ dir: m.dir, error: "needs punctumd, which isn't running" }); continue }
+      }
       try {
         // m.entry is checked to be a plain file name ending in .js.
         var obj = Qt.createQmlObject('import QtQuick\nimport "' + m.entry + '" as Impl\nQtObject { readonly property var provider: Impl.provider }',
@@ -838,6 +849,84 @@ Item {
 
   onUserConfigChanged: root.discoverExtensions()
 
+  // ---------------------------------------------------------------- punctumd
+
+  // The native extensions (docs/native.md) live in punctumd, a Rust daemon the
+  // bar keeps running beside it and talks to over stdin and stdout, one JSON
+  // object per line. It's found as bin/punctumd in the plugin folder, then a
+  // cargo build's target/release/punctumd, then punctumd on PATH. When it
+  // isn't there or stops, native extensions fall back to their JS providers.
+  // It's started again when it stops, so a rebuilt one is picked up by
+  // `pkill -x punctumd`, without restarting the shell.
+  property var nativeServed: ({})     // id -> true, from its hello
+  property var nativeCache: ({})      // id + "\n" + query -> rows; a reply's id is this key
+  property var nativePending: ({})
+  property int nativeCached: 0
+  property int nativeFailures: 0      // starts in a row without a hello
+
+  // ctx.native: the rows for this query, or null while punctumd works them out.
+  function native(id, query, settings) {
+    if (!root.nativeServed[id] || !nativeProc.running) return null
+    var key = id + "\n" + query
+    if (root.nativeCache.hasOwnProperty(key)) return root.nativeCache[key]
+    if (!root.nativePending[key]) {
+      root.nativePending[key] = true
+      nativeProc.write(JSON.stringify({ id: key, ext: id, query: query, settings: settings === undefined ? {} : settings }) + "\n")
+    }
+    return null
+  }
+
+  function nativeLanded(line) {
+    var r
+    try { r = JSON.parse(line) } catch (e) { console.warn("punctum: punctumd: unreadable reply"); return }
+    if (!r || typeof r !== "object") return
+    if (r.id === "hello") {
+      var served = {}
+      if (r.protocol === 1 && Array.isArray(r.extensions)) r.extensions.forEach(function(id) { if (typeof id === "string") served[id] = true })
+      else console.warn("punctum: punctumd speaks protocol " + r.protocol + ", the bar 1; using JS fallbacks")
+      root.nativeFailures = 0
+      root.nativeServed = served
+      if (root.extensionsText) root.installExtensions(root.extensionsText)
+      return
+    }
+    if (typeof r.id !== "string" || !root.nativePending[r.id]) return
+    delete root.nativePending[r.id]
+    if (r.error) console.warn("punctum: punctumd: " + String(r.error).slice(0, 300))
+    // Answers depend only on the query and settings, so they're kept until
+    // the config changes; a long session's worth is dropped all at once.
+    if (++root.nativeCached > 2000) { root.nativeCache = ({}); root.nativeCached = 1 }
+    root.nativeCache[r.id] = Array.isArray(r.rows) ? r.rows : []
+    if (root.opened) Qt.callLater(root.recompute)
+  }
+
+  Process {
+    id: nativeProc
+    command: ["bash", "-c",
+      'for p in "$1/bin/punctumd" "$1/target/release/punctumd"; do [ -x "$p" ] && exec "$p"; done; command -v punctumd >/dev/null || exit 127; exec punctumd',
+      "punctumd", root.pluginDir]
+    stdinEnabled: true
+    onStarted: nativeProc.write(JSON.stringify({ id: "hello", op: "hello" }) + "\n")
+    onExited: function(exitCode) {
+      var had = Object.keys(root.nativeServed).length > 0
+      root.nativeServed = ({})
+      root.nativePending = ({})
+      if (had && root.extensionsText) root.installExtensions(root.extensionsText)
+      // 127: not installed. Anything else is a crash or a kill, so start it
+      // again, backing off, and give up after five failures in a row.
+      if (exitCode === 127) { console.info("punctum: no punctumd; native extensions use their JS fallbacks"); return }
+      if (++root.nativeFailures > 5) { console.warn("punctum: punctumd keeps stopping (" + exitCode + "); using JS fallbacks"); return }
+      nativeRestart.interval = 500 * Math.pow(2, root.nativeFailures - 1)
+      nativeRestart.restart()
+    }
+    stdout: SplitParser { onRead: function(line) { root.nativeLanded(line) } }
+    stderr: SplitParser { onRead: function(line) { console.warn("punctum: punctumd: " + String(line).slice(0, 300)) } }
+  }
+
+  Timer {
+    id: nativeRestart
+    onTriggered: nativeProc.running = true
+  }
+
   // What Enter does to a row, for the footer: "Open", "Switch", "Copy"…
   function actionLabel(row) {
     if (!row) return ""
@@ -864,6 +953,7 @@ Item {
   }
 
   onConfigChanged: {
+    root.nativeCache = ({})   // an extension's settings may have changed
     if (root.opened) root.recompute()
     root.zonesFetchedAt = 0   // the zone list may have changed
     root.ensureHotkey()
@@ -1300,6 +1390,7 @@ Item {
 
   Component.onCompleted: {
     root.discoverExtensions()
+    nativeProc.running = true
     appsDebounce.restart()
     root.cacheRead("last-query", root.loadLastQuery)
     root.cacheRead("launches.json", root.loadLaunches)

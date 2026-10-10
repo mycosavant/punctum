@@ -7,6 +7,10 @@
 // With a target unit you get that one answer; without one, the usual
 // counterparts (km → mi, °F → °C, …). Durations only convert with an explicit
 // target, so "in 2 weeks" and "5 min" stay with the date provider.
+//
+// This is the JS fallback for native/punctumd/src/units.rs, used when
+// punctumd isn't installed; tests/units-parity.js keeps the two the same, so
+// change both together.
 
 // [dimension, factor to the dimension's base unit, display name, aliases...]
 // Bases: m, kg, l, m², m/s, byte, s. Temperatures are handled separately.

@@ -5,11 +5,18 @@
   "version": "1.0.0",
   "description": "5 km to mi: unit conversion, offline",
   "icon": "󰭍",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 170,
   "helpOrder": 150,
   "hero": true,
+  "help": [
+    { "id": "units", "title": "Units", "about": "Length, weight, temperature, volume, speed, data and time",
+      "examples": ["5 km to mi", "72f", "5 ft 11 in to cm", "2 cups in ml", "1 tb in gib"] }
+  ],
+  "commands": [
+    { "title": "Convert units", "keywords": "unit units convert conversion length distance weight mass temperature volume speed area data", "text": "km, lb, °F, cups, mph, GB and more", "complete": "5 km to mi", "select": true }
+  ],
   "permissions": {}
 }

@@ -16,7 +16,8 @@ omarchy-shell (Quickshell, long-running)
     ├── lib/Geometry.js        card position and size (pure)
     ├── lib/Hotkey.js          binding the hotkey without stealing a taken one (pure)
     ├── extensions/<id>/       one feature each: extension.json + provider.js,
-    │                          or a script (everywhere; the example in examples/)
+    │                          a script (everywhere; the example in examples/),
+    │                          or native, in punctumd (units)
     └── bin/
         ├── punctum-extensions  finds extensions and reads their manifests
         ├── punctum-cache       the only reader and writer of the cache files
@@ -25,6 +26,9 @@ omarchy-shell (Quickshell, long-running)
         ├── punctum-open        opens a URL or file (xdg-open, but text
         │                          with a terminal default goes to the editor)
         └── punctum-agent       starts the default agent with a prompt
+
+punctumd (Rust, native/punctumd/)  native extensions, kept running beside the
+                                    bar, one JSON line per query (docs/native.md)
 ```
 
 Your extensions live in `~/.config/omarchy/punctum/extensions/<id>/`; one
@@ -41,7 +45,8 @@ with a bundled extension's id replaces it.
 3. A JS extension's provider is loaded through a three-line QML object made
    at run time (`Qt.createQmlObject` importing its file), the only way QML
    can import a path chosen at run time. A script extension gets a provider
-   from `Ext.scriptProvider`.
+   from `Ext.scriptProvider`; a native one from `Ext.nativeProvider` when
+   punctumd's hello lists it, and from its JS fallback when not.
 4. `Engine.setProviders` takes them all, in manifest order.
 5. The config is built from `config.default.json` (the bar's own settings),
    your `punctum.json`, and each extension's section: its manifest
@@ -74,6 +79,7 @@ All in `Punctum.qml`, all argument lists:
 | load | `ctx.load(key, argv, { ttl })` | one at a time; once per open and dropped on close (a late result for a closed bar is discarded), or kept and re-read every `ttl` |
 | job | `ctx.requestJob(key, argv, { every, rerun })` | at most every N seconds, one at a time; `rerun` drops the extension's search so it asks again |
 | input | an `argv` action with `input` | stdin, one at a time |
+| native | `ctx.native(query)` | punctumd, every keystroke; answers cached until the config changes, null until one lands |
 
 Keys are prefixed with the extension's id in Engine, so one extension never
 sees another's results. On close the bar stops the search, drops per-open
@@ -104,7 +110,8 @@ script names.
 ## Limits
 
 - A changed provider file needs `omarchy-restart-shell`: Quickshell caches the
-  files it has imported.
+  files it has imported. A rebuilt punctumd doesn't: `pkill -x punctumd` and
+  the bar starts the new one.
 - Script extensions run only in their mode; one that answered every keystroke
   would start a process per key.
 - Script extensions run in a bubblewrap sandbox built from their manifest

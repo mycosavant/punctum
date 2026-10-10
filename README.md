@@ -105,6 +105,11 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
+Units conversion can also run natively, in punctumd, a small Rust daemon.
+It's optional, and the bar works the same without it. With Rust installed,
+`cargo build --release` in the plugin folder builds it, and the bar picks it
+up on its own ([docs/native.md](docs/native.md)).
+
 Press Super + Period to open it. If another binding already uses that key,
 Punctum leaves it alone and a notification says so; set `"hotkey"` in the
 config to choose another.
@@ -224,7 +229,7 @@ Every feature is an extension: a folder with an `extension.json` and either a sc
 
 The bar sends the script `{"text": "Ada", "settings": {...}, ...}` on stdin and shows the rows it prints, `{"items": [{"title": "Hello, Ada!", "copy": "Hello, Ada!"}]}`. Enter does what a row's action says, from a short list the bar carries out itself (open, copy, paste, edit, run a command). [Writing extensions](docs/writing-extensions.md) has the manifest, both kinds, the actions and testing.
 
-Test without the shell by running `node tests/run.js`.
+Test without the shell by running `node tests/run.js`, and `cargo test` for the native extensions.
 
 To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

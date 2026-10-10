@@ -1,0 +1,5 @@
+# The native half of Punctum: punctumd, a small daemon the bar starts and talks
+# to over stdin/stdout. See docs/native.md.
+[workspace]
+members = ["native/punctumd"]
+resolver = "2"

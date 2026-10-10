@@ -16,6 +16,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | [Security and privacy](security-and-privacy.md) | What runs, what is read, what leaves the machine, and how typed text is kept out of shell code |
 | [Writing extensions](writing-extensions.md) | Your own features: the manifest, script extensions in any language, JS extensions, actions, tests |
 | [Architecture](architecture.md) | How a keystroke becomes rows, and where each piece lives |
+| [Native extensions](native.md) | punctumd, the Rust daemon for the bar's own extensions: building, the protocol, porting one |
 | [Extensions and release proposal](proposal-extensions.md) | Making features optional plugins others can write, releasing Everywhere on its own, and what a community release needs |
 | [Agent proposal](proposal-agent.md) | `>_`: from a doorway to the default agent to answers in the bar |
 | [Naming](release/naming.md) | How the name was chosen, and the [checks on it](release/punctum-checks.md) |

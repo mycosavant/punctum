@@ -1174,4 +1174,44 @@ print(json.dumps({
   check("everywhere: dm:yesterday covers the whole day across a clock change", dst === "2026-11-01 00:00 2026-11-02 00:00", dst)
   fs.rmSync(home, { recursive: true, force: true }) }
 
+// native extensions: units through punctumd (cargo build first), then back to its JS fallback
+{ const fs = require("fs"), { spawnSync } = require("child_process")
+  const bin = process.env.PUNCTUMD || P + "target/debug/punctumd"
+  const found = Extensions.discover([{ dir: P + "extensions" }])
+  // The bar's services.native, made synchronous: one punctumd per question.
+  let asked = 0
+  const native = (id, query, settings) => {
+    asked++
+    const r = spawnSync(bin, [], { input: JSON.stringify({ id: "t", ext: id, query, settings }) + "\n", encoding: "utf8" })
+    return JSON.parse(r.stdout).rows
+  }
+  const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
+  if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
+  else {
+    const got = Extensions.install(Engine, Ext, found, { units: true })
+    const units = got.manifests.find(m => m.id === "units")
+    const r = nq("5 km to mi")
+    check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
+    check("native: counterparts keep punctumd's scores and order", nq("3 m").filter(x => x.provider === "units").map(x => x.title + "@" + x.score).join() === "9.8425 ft@86,3.2808 yd@85.9")
+    check("native: it leaves dates and maths alone", nq("2+2")[0].title === "4" && !nq("5 min").some(x => x.provider === "units"))
+    const help = nq("?units")
+    check("native: ?units examples show punctumd's answers", help[0].subtitle === "→ 3.1069 mi" && help.length === 5, help.map(h => h.subtitle).join(" | "))
+    check("native: its commands come from the manifest", nq("convert units").some(x => x.title === "Convert units" && x.complete === "5 km to mi"))
+    check("native: ?extensions says it runs in punctumd", /native, in punctumd/.test(nq("?extensions").find(x => x.title === "Units").subtitle))
+    check("native: with punctumd gone (no service), units is quiet, not broken", !nq("5 km to mi", { native: null }).some(x => x.provider === "units") && nq("2+2")[0].title === "4")
+    check("native: while a reply is coming (null), nothing shows", !Engine.run("5 km to mi", config, { now, native: () => null }).some(x => x.provider === "units"))
+  }
+  // Rows from punctumd get the same checks as a script's, keeping their scores.
+  const m = Ext.validate({ schema: 1, id: "units", type: "native", hero: true }, "/x")
+  const fake = Ext.nativeProvider(m).match("q", { native: () => [
+    { title: "ok", score: 77, copy: "1", run: { kind: "open", target: "relative/path" } },
+    { title: 5 }, null, { title: "nan score", score: NaN }] })
+  check("native: bad rows dropped, bad actions refused, scores kept", fake.length === 2 && fake[0].score === 77 && fake[0].run === null && fake[1].score === 97 - 0.001, JSON.stringify(fake))
+  const mine = Ext.collect([{ dir: "/home/x/ext/n", manifest: JSON.stringify({ schema: 1, id: "n", type: "native" }), user: true }])
+  check("native: only the bar's own extensions may be native", mine.list.length === 0 && /come with Punctum/.test(mine.errors[0].error))
+  check("native: a native entry must be a .js file", /entry must be/.test(Ext.validate({ schema: 1, id: "n", type: "native", entry: "../x.sh" }, "/x").error || ""))
+  const back = Extensions.install(Engine, Ext, found)
+  check("native: without punctumd, units runs its JS fallback and says so", back.manifests.find(m => m.id === "units").runtime === "js" && q("5 km to mi")[0].title === "3.1069 mi"
+    && /running its JS fallback/.test(q("?extensions").find(x => x.title === "Units").subtitle)) }
+
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

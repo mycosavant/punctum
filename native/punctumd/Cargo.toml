@@ -1,0 +1,14 @@
+[package]
+name = "punctumd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Native extensions for Punctum, the command bar for Linux"
+repository = "https://github.com/mycosavant/punctum"
+publish = false
+
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
