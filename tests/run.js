@@ -1187,20 +1187,24 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
   let shell = { apps, launches: { firefox: 12 }, pinned: ["signal"], windows: [] }
   // Loads: what the bar has read for a native extension, by "<ext>\n<key>",
   // sent along as the bar sends them once they land; and what was asked for.
-  const loaded = {}, asked = {}
+  const loaded = {}, asked = {}, searched = {}, searches = []
+  let landed = null   // what the bar's search runner has found, as services.search
   const native = (id, query, settings) => {
     const data = Object.keys(shell).map(key => JSON.stringify({ id: "d", op: "data", key, value: shell[key] }))
     const loads = Object.keys(loaded).filter(k => k.indexOf(id + "\n") === 0).map(k => JSON.stringify({ id: "l", op: "load", ext: id, key: k.split("\n")[1], text: loaded[k] }))
-    const r = spawnSync(bin, [], { input: data.concat(loads, [JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8", maxBuffer: 1 << 26 })
+    const found = searched[id] ? [JSON.stringify(Object.assign({ id: "s", op: "search", ext: id }, searched[id]))] : []
+    const r = spawnSync(bin, [], { input: data.concat(loads, found, [JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8", maxBuffer: 1 << 26 })
     const reply = JSON.parse(r.stdout.trim().split("\n").pop())
-    return { rows: reply.rows, needs: reply.needs }
+    return { rows: reply.rows, needs: reply.needs, search: reply.search }
   }
+  const requestSearch = (key, argvs, opts) => searches.push({ key, argvs })
+  const nativeSearch = (id, f) => { searched[id] = { key: f.key, chunks: f.chunks, done: f.done } }
   const requestLoad = (key, argv, opts) => { asked[key] = { argv, opts } }
   const cached = key => loaded[key] === undefined ? null : loaded[key]
-  const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native, requestLoad, cached, omarchyPath: "/usr/share/omarchy", home: "/home/u" }, extra || {}))
+  const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native, requestLoad, cached, requestSearch, nativeSearch, search: landed, omarchyPath: "/usr/share/omarchy", home: "/home/u" }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true, hotkeys: true, clipboard: true, packages: true, remind: true, math: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true, hotkeys: true, clipboard: true, packages: true, remind: true, math: true, files: true, processes: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1281,6 +1285,25 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     const sum = nq("12*8 + 15%")[0], big = nq("0xff + 1")[0]
     check("native: the calculator answers through punctumd, and fend what it can't read", sum.provider === "math" && sum.title === "110.4" && sum.hero
       && big.provider === "math" && big.title === "0x100" && / · fend$/.test(big.subtitle) && !nq("5 km to mi").some(r => r.provider === "math"), JSON.stringify([sum.title, big && big.title]))
+    // Files: the answer asks for fd's two walks, the bar runs them, and what they find goes back.
+    const searching = nq("~docs report").filter(r => r.provider === "files")
+    const walk = searches[searches.length - 1]
+    check("native: file search asks the bar for fd, a word per --and=, the name's pattern after --", searching[0].title === "Searching…" && walk.key === "files\ndocs report" && walk.argvs.length === 2
+      && walk.argvs[0].join(" ") === "fd --ignore-case --full-path --color never --absolute-path --base-directory /home/u --max-results 400 --threads 2 --print0 --and=docs -- [^/]*report[^/]*/?$"
+      && walk.argvs[1].slice(-3).join(" ") === "--and=d[^/]*o[^/]*c[^/]*s -- [^/]*r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t[^/]*/?$", JSON.stringify(walk))
+    const home = process.env.HOME
+    landed = { key: "files\ndocs report", chunks: [home + "/Documents/report-2026.pdf\0" + home + "/Videos/QUALITY-speedcut-for-computer-use-recordings.md\0", ""], done: true }
+    nq("~docs report")   // hands punctumd what landed
+    const ranked = nq("~docs report").filter(r => r.provider === "files")
+    check("native: what fd found comes back ranked: a report under Documents first", ranked[0].title === "report-2026.pdf" && ranked[0].subtitle === "~/Documents"
+      && ranked[0].alt.target.join(" ") === "uwsm-app -- xdg-terminal-exec --dir=" + home + "/Documents", JSON.stringify(ranked.map(r => r.title)))
+    landed = null
+    // Processes: ps through a load not kept between opens; kill with every pid as its own argument.
+    loaded["processes\nps"] = ["   4242  2000000 12.5 chrome                                   /opt/chrome --type=renderer", "   4243   300000  3.0 chrome                                   /opt/chrome"].join("\n") + "\n"
+    const kill = nq("kill chrome").filter(r => r.provider === "processes")
+    check("native: kill quits every process with the name, each pid its own argument, the list not kept between opens", kill[0].title === "Quit all 2 \"chrome\" processes"
+      && kill[0].run.target.join(" ") === "kill -TERM -- 4242 4243" && kill[0].run.label === "quit" && nq("kill -9 chrome").filter(r => r.provider === "processes")[1].run.target.join(" ") === "kill -KILL -- 4242"
+      && asked["processes\nps"].opts.ttl === 1500 && asked["processes\nps"].opts.keep === false, JSON.stringify(kill[0].run))
     check("native: while a reply is coming (null), nothing shows", !Engine.run("5 km to mi", config, { now, native: () => null }).some(x => x.provider === "units"))
   }
   // Rows from punctumd get the same checks as a script's, keeping their scores.
@@ -1298,6 +1321,11 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
       { title: "nul", run: { kind: "action", name: "go", args: ["a", "b\u0000"] } }, { title: "notlist", run: { kind: "action", name: "go", args: "ab" } }], needs: ["list", "nope", 5] }), load: () => { throw new Error("no home, no load") } })
     check("native: actions are the manifest's, filled with punctumd's strings as whole arguments", rows.map(r => r.run && r.run.target.join("|")).join(",") === ",,,/ext/go|--x|a b|$(c),,"
       && rows[3].run.input === "msg" && rows[3].run.label === "go" && rows[3].alt.target.join() === "true" && rows[3].alt.input === undefined && rows[3].alt.label === "run true", JSON.stringify(rows.map(r => r.run)))
+    { const sm = Ext.validate({ schema: 1, id: "s", type: "native", actions: { k: { command: ["kill", "--", "{1*}"] }, w: { command: ["x", "--and={2*}", "--", "{1}"] } } }, "/x")
+      const fill = (name, args) => (Ext.nativeProvider(sm).match("q", { native: () => [{ title: "t", run: { kind: "action", name, args } }] })[0].run || {}).target
+      check("native: {n*} gives each string from the nth on as its own argument, the text around it repeated", (fill("k", ["1", "2", "3"]) || []).join("|") === "kill|--|1|2|3"
+        && (fill("k", []) || []).join("|") === "kill|--" && (fill("w", ["p", "a", "b"]) || []).join("|") === "x|--and=a|--and=b|--|p" && (fill("w", ["p"]) || []).join("|") === "x|--|p"
+        && /never in a script/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["bash", "-c", "echo {1*}"] } } }, "/x").error || "")) }
     check("native: a manifest may not put {1} in a script, or name a command that isn't a list", /never in a script/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["bash", "-c", "echo {1}"] } } }, "/x").error || "")
       && /no \{1\}/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { a: { command: ["cat", "{1}"] } } }, "/x").error || "")
       && /loads\.A/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { A: { command: ["x"] } } }, "/x").error || "")

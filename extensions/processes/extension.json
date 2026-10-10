@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "kill name: quit your own processes",
   "icon": "󰅙",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 160,
@@ -13,6 +13,66 @@
   "mode": {
     "pattern": "^\\s*kill(\\s|$)",
     "label": "Processes"
+  },
+  "commands": [
+    {
+      "title": "Kill a process",
+      "keywords": "kill quit process processes force end task manager",
+      "text": "Stop an app, or every process it started",
+      "complete": "kill "
+    }
+  ],
+  "help": [
+    {
+      "id": "kill",
+      "title": "Kill a process",
+      "about": "Quit an app, or every process it started",
+      "examples": [
+        {
+          "q": "kill ",
+          "note": "Your processes, busiest first"
+        },
+        {
+          "q": "kill chrome",
+          "note": "Quits every chrome process"
+        },
+        {
+          "q": "kill -9 node",
+          "note": "Force quit, for an app that hangs"
+        }
+      ]
+    }
+  ],
+  "loads": {
+    "ps": {
+      "command": [
+        "bash",
+        "-c",
+        "exec ps -u \"$(id -u)\" --no-headers -o pid=,rss=,pcpu=,comm:40=,args="
+      ],
+      "ttl": 1500,
+      "keep": false
+    }
+  },
+  "actions": {
+    "quit": {
+      "command": [
+        "kill",
+        "-TERM",
+        "--",
+        "{1*}"
+      ],
+      "label": "quit"
+    },
+    "force_quit": {
+      "command": [
+        "kill",
+        "-KILL",
+        "--",
+        "{1*}"
+      ],
+      "label": "force quit"
+    }
   },
   "permissions": {
     "runs": [

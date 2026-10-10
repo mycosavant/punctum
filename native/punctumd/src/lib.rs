@@ -6,9 +6,11 @@ pub mod calc;
 pub mod cities;
 pub mod clipboard;
 pub mod colors;
+pub mod files;
 pub mod format;
 pub mod hotkeys;
 pub mod packages;
+pub mod processes;
 pub mod remind;
 pub mod time;
 pub mod units;
@@ -85,6 +87,8 @@ pub struct State {
     /// WebAssembly extensions the bar sent, by id. One with a built-in's id
     /// answers in its place.
     pub wasm: HashMap<String, wasm::Module>,
+    /// The last search each extension asked for, as far as it's got.
+    pub searches: HashMap<String, Search>,
     generation: u64,
 }
 
@@ -158,6 +162,30 @@ pub struct Context<'a> {
     /// The loads this answer read, or wanted and didn't have: the reply's
     /// "needs", which the bar reads (again, once they're stale) and sends.
     pub needs: RefCell<Vec<String>>,
+    /// What this extension's last search found so far, as the bar sent it.
+    pub search: Option<&'a Search>,
+    /// The search this answer asks the bar to run: the reply's "search".
+    pub wants: RefCell<Option<SearchRequest>>,
+}
+
+/// A search's output so far (`op: "search"`): the commands' output, one
+/// chunk each, as they finish, for the key the extension asked them for.
+#[derive(Debug, Clone, Default)]
+pub struct Search {
+    pub key: String,
+    pub chunks: Vec<String>,
+    /// Every command has run.
+    pub done: bool,
+    pub timed_out: bool,
+    pub failed: bool,
+}
+
+/// Commands to run for a query: names from the manifest's "searches", each
+/// with its strings for {1}…{9} and {n*}.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchRequest {
+    pub key: String,
+    pub runs: Vec<(String, Vec<String>)>,
 }
 
 impl<'a> Context<'a> {
@@ -173,7 +201,25 @@ impl<'a> Context<'a> {
         ext: &'a str,
         loads: &'a Loads,
     ) -> Self {
-        Context { settings, now, local_zone, data, ext, loads, needs: RefCell::new(Vec::new()) }
+        Context {
+            settings,
+            now,
+            local_zone,
+            data,
+            ext,
+            loads,
+            needs: RefCell::new(Vec::new()),
+            search: None,
+            wants: RefCell::new(None),
+        }
+    }
+
+    /// Ask the bar to run these searches for `key` (unless it has already),
+    /// and give what it has found for this extension: for `key`, or for the
+    /// query before, which shows until the new one lands.
+    pub fn search(&self, key: &str, runs: Vec<(String, Vec<String>)>) -> Option<&'a Search> {
+        *self.wants.borrow_mut() = Some(SearchRequest { key: key.to_string(), runs });
+        self.search
     }
 
     /// The output of the program this extension's manifest declares under
@@ -220,6 +266,8 @@ pub fn extensions() -> &'static [&'static dyn Extension] {
         &packages::Packages,
         &remind::Remind,
         &calc::Calc,
+        &files::Files,
+        &processes::Processes,
     ]
 }
 
@@ -236,8 +284,8 @@ pub struct Request {
     pub op: Option<String>,
     /// data: which piece of the shell's state, and its value. load: the
     /// manifest's key for the load, and `text` the program's output (null
-    /// drops it).
-    #[serde(default)]
+    /// drops it). search: the key it ran for (null drops it).
+    #[serde(default, deserialize_with = "null_is_empty")]
     pub key: String,
     #[serde(default)]
     pub value: Value,
@@ -247,6 +295,16 @@ pub struct Request {
     /// module drops the extension.
     #[serde(default)]
     pub module: Option<String>,
+    /// search: what the bar's search runner has found, by command.
+    #[serde(default)]
+    pub chunks: Vec<String>,
+    #[serde(default)]
+    pub done: bool,
+    #[serde(default, rename = "timedOut")]
+    pub timed_out: bool,
+    #[serde(default)]
+    pub failed: bool,
+
     #[serde(default)]
     pub sha256: String,
     #[serde(default)]
@@ -262,6 +320,10 @@ pub struct Request {
     /// For tests: the system time zone to assume.
     #[serde(default)]
     pub local_zone: Option<String>,
+}
+
+fn null_is_empty<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(d)?.unwrap_or_default())
 }
 
 /// The system's time zone, from TZ or /etc/localtime; UTC if it can't tell.
@@ -328,6 +390,28 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                 Err(e) => serde_json::json!({ "id": req.id, "error": e }),
             }
         }
+        "search" => {
+            if !extension_id(&req.ext) {
+                return serde_json::json!({ "id": req.id, "error": "an extension id is lower-case letters, digits, - or _" });
+            }
+            // A null (or empty) key drops it: the bar closed.
+            match Some(req.key).filter(|k| !k.is_empty()) {
+                Some(key) => {
+                    let found = Search {
+                        key,
+                        chunks: req.chunks.into_iter().take(16).collect(),
+                        done: req.done,
+                        timed_out: req.timed_out,
+                        failed: req.failed,
+                    };
+                    state.searches.insert(req.ext, found);
+                }
+                None => {
+                    state.searches.remove(&req.ext);
+                }
+            }
+            serde_json::json!({ "id": req.id, "ok": true })
+        }
         "load" => {
             let builtin = extensions().iter().find(|e| e.id() == req.ext);
             if !load_key(&req.key) || (builtin.is_none() && !state.wasm.contains_key(&req.ext)) {
@@ -371,7 +455,7 @@ pub fn handle(line: &str, state: &mut State) -> Value {
             let Some(ext) = extensions().iter().find(|e| e.id() == req.ext) else {
                 return serde_json::json!({ "id": req.id, "error": format!("no extension \"{}\"", req.ext) });
             };
-            let ctx = Context::with_loads(
+            let mut ctx = Context::with_loads(
                 &req.settings,
                 req.now.and_then(|ms| Timestamp::from_millisecond(ms).ok()).unwrap_or_else(Timestamp::now),
                 req.local_zone.as_deref().and_then(|z| TimeZone::get(z).ok()).unwrap_or_else(system_zone),
@@ -379,6 +463,7 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                 ext.id(),
                 &state.loads,
             );
+            ctx.search = state.searches.get(ext.id());
             // One extension's bug answers its own request with an error; the
             // daemon, and every other extension, carries on. Nothing it
             // touched outlives the request, so no broken state is seen again.
@@ -391,6 +476,14 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                     let needs = ctx.needs.take();
                     if !needs.is_empty() {
                         reply["needs"] = needs.into();
+                    }
+                    if let Some(want) = ctx.wants.take() {
+                        let runs: Vec<Value> = want
+                            .runs
+                            .into_iter()
+                            .map(|(name, args)| serde_json::json!({ "name": name, "args": args }))
+                            .collect();
+                        reply["search"] = serde_json::json!({ "key": want.key, "runs": runs });
                     }
                     reply
                 }

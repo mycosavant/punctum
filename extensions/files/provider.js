@@ -13,6 +13,11 @@
 // are regex-escaped and come after `--` or inside `--and=`, so none of them can
 // be read as an option. Enter opens with the default app; Shift+Enter opens a
 // terminal in the folder.
+//
+// This is the JS fallback for native/punctumd/src/files.rs, used when punctumd
+// isn't installed. The Rust one asks for the same two walks but ranks anew:
+// every word against the name, so "main rs" finds main.rs and "docs report"
+// a report under Docs before a name that merely holds r…e…p…o…r…t.
 
 var MIN_QUERY = 2
 var CANDIDATES = 400

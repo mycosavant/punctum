@@ -10,6 +10,8 @@ as a fallback, so the bar works without punctumd.
 | Windows | `windows.rs` | nucleo-matcher | Finds a window by its title's letters in order (`w gthb` → GitHub, `w rqst` → Pull request), after everything the old rules find |
 | Calculator | `calc.rs` | [libm](https://docs.rs/libm) (the fdlibm JavaScript's `Math` uses), [fend-core](https://docs.rs/fend-core) | The same grammar and answers. What it can't read, fend may answer with a plain number, ranked below: `100!` in full, `0xff + 1`, `255 to hex`, `10 choose 3`, `sin(90°)`, `sqrt(-4)`. A unit or currency answer is left to those extensions, and fend gets 50 ms at most |
 | Everywhere | `native/everywhere`, a command of its own, not in punctumd | nucleo-matcher, [ignore](https://docs.rs/ignore) (ripgrep's walker), jiff | The same search, ranked in-process instead of through Python and fzf: every match ranked rather than fzf's best 400, so a common word can't lose its best names; walks for `dm:` and `size:` on every core. Built, downloaded and removed with punctumd; `extensions/everywhere/everywhere` runs it, or `everywhere.py` without it |
+| Files | `files.rs` | the bar's search runner, through the manifest's `searches` | The same two fd walks, ranked anew: every word against the name (whole name or stem, start, start of a word, anywhere, letters in order), the rest in the folders above, depth counting a tenth a folder. `~main rs` finds main.rs, `~src rs` a .rs file under src, where the JS ranked names that merely hold the letters |
+| Processes | `processes.rs` | — | A port; also finds a name by its letters in order (`kill chrm`), after the rest. The process list is a load not kept between opens |
 | Units | `units.rs` | — | Nothing yet: a port, digit for digit |
 | Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
 | Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words. The `formats` setting adds HSV, HWB, LAB, LCH, OKLAB, CMYK, `vec4`, decimal and `0x` forms. `#fff on #333` gives the WCAG contrast ratio and the levels it passes. A colour shows its contrast on white and black. The screen colour picker does what `afterPick` (Enter) and `afterPickAlt` (Shift+Enter) say: copy it in `copyFormat`, open the bar on it, or both; another picks a text colour and a background for their contrast. `pick ` lists the history and copies it as the `exports` you keep (CSS, SCSS, JSON, Tailwind, GIMP palette) |
@@ -146,6 +148,14 @@ in order, one JSON object per line. It exits when stdin closes.
 → {"id": "packages\npkg kfind", "ext": "packages", "query": "pkg kfind", "settings": {}}
 ← {"id": "packages\npkg kfind", "rows": [{"title": "Reading the package list…", …}], "needs": ["list"]}
 
+// a search: an answer asks for commands from the manifest's "searches" for a key…
+← {"id": "files\n~readme", "rows": [{"title": "Searching…", …}],
+   "search": {"key": "readme", "runs": [{"name": "walk", "args": ["[^/]*readme[^/]*/?$"]}]}}
+// …the bar runs them through its search runner (newest key wins, 3 s each)
+// and sends what they printed, a chunk per command, as they finish; a null
+// key drops it (the bar closed)
+→ {"id": "search", "op": "search", "ext": "files", "key": "readme", "chunks": ["/home/u/README.md\u0000"], "done": true}
+
 // tests fix the clock and the system zone; the bar never sends these
 → {"id": 1, "ext": "time", "query": "time", "now": 1790152230000, "local_zone": "Asia/Colombo"}
 
@@ -225,11 +235,20 @@ The daemon keeps running.
 }
 ```
 
-In both, `{omarchy}` is Omarchy's folder, `{home}` your home and `{dir}` the
-extension's folder. `{1}`…`{9}` are an action's arguments from punctumd. They
-can't appear in a load, nor in the argument after a `-c`, where a string
-would become code; such a manifest is refused. Put them in a script's
-arguments and read them as `$1`, `$2`.
+`"searches"` are like actions, but run for a query rather than on Enter: an
+answer names them with its strings, and their output comes back with
+`op: "search"` (Files' fd walks). A load with a `ttl` is kept between opens
+unless it says `"keep": false` (Processes' `ps`: a command line can hold a
+token).
+
+In all of them, `{omarchy}` is Omarchy's folder, `{home}` your home and
+`{dir}` the extension's folder. `{1}`…`{9}` are punctumd's strings for an
+action or a search, each a whole argument (or inside one, as in
+`--title=Install {1}`). `{2*}` is every string from the second on, each its
+own argument with the text around it repeated: `"--and={2*}"` with `a`, `b`
+gives `--and=a --and=b`. None of them can appear in a load, nor in the
+argument after a `-c`, where a string would become code; such a manifest is
+refused. Put them in a script's arguments and read them as `$1`, `$2`.
 
 Only bundled extensions can be native. The bar refuses `"type": "native"` from
 your extensions folder, because native code is compiled into punctumd and is

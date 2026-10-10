@@ -5,6 +5,11 @@
 //   [{ pid, rss (KiB), cpu (%), name, args }]
 //
 //   kill · kill chrome · kill -9 chrome
+//
+// This is the JS fallback for native/punctumd/src/processes.rs, used when
+// punctumd isn't installed; tests/processes-parity.js keeps the two the same,
+// so change both together. The Rust one also finds a name by its letters in
+// order ("kill chrm"), after everything these rules find.
 
 var LIMIT = 30
 

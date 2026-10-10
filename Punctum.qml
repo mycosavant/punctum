@@ -201,6 +201,7 @@ Item {
     }
     root.loadCache = kept
     // punctumd's answers too: they hold clipboard texts and package lists.
+    root.dropNativeSearches()
     root.nativeCache = ({})
     root.nativePending = ({})
     root.loadQueue = root.loadQueue.filter(function(j) { return j.keep })
@@ -263,7 +264,8 @@ Item {
       cached: root.cached,
       requestLoad: root.requestLoad,
       requestJob: root.requestJob,
-      native: root.native
+      native: root.native,
+      nativeSearch: root.pushNativeSearch
     })
     root.mode = Engine.mode(input.text, root.config)
     if (root.selectedIndex >= root.rows.length) root.selectedIndex = Math.max(0, root.rows.length - 1)
@@ -635,7 +637,8 @@ Item {
       return
     }
     root.loading[key] = true
-    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, native: native, generation: root.loadGeneration })
+    var keep = ttl > 0 && !(opts && opts.keep === false)
+    root.loadQueue.push({ key: key, argv: argv.map(String), keep: keep, native: native, generation: root.loadGeneration })
     if (!loadProc.running) root.loadNext()
   }
 
@@ -1093,6 +1096,31 @@ Item {
     if (root.opened) Qt.callLater(root.recompute)
   }
 
+  // A search a native extension asked for (its manifest's "searches", run by
+  // the bar's search runner) goes to punctumd as it lands: once per chunk,
+  // and when it's done. Only that extension's answers go stale. Dropped when
+  // the bar closes, like the search itself.
+  property var nativeSearchSent: ({})   // ext -> "<key>\n<chunks>\n<done>"
+
+  function pushNativeSearch(ext, found) {
+    if (!nativeProc.running || !root.nativeServed[ext] || !found) return
+    var mark = found.key + "\n" + (found.chunks || []).length + "\n" + !!found.done + "\n" + !!found.failed
+    if (root.nativeSearchSent[ext] === mark) return
+    var sent = Object.assign({}, root.nativeSearchSent)
+    sent[ext] = mark
+    root.nativeSearchSent = sent
+    nativeProc.write(JSON.stringify({ id: "search", op: "search", ext: ext, key: found.key, chunks: found.chunks || [found.text || ""],
+                                      done: found.done !== false, timedOut: !!found.timedOut, failed: !!found.failed }) + "\n")
+    root.staleNative(ext + "\n")
+    if (root.opened) Qt.callLater(root.recompute)
+  }
+
+  function dropNativeSearches() {
+    for (var ext in root.nativeSearchSent)
+      if (nativeProc.running) nativeProc.write(JSON.stringify({ id: "search", op: "search", ext: ext, key: null }) + "\n")
+    root.nativeSearchSent = ({})
+  }
+
   onAppsChanged: root.pushNative("apps", root.apps)
   onLaunchesChanged: root.pushNative("launches", root.launches)
   onPinnedAppsChanged: root.pushNative("pinned", root.pinnedApps)
@@ -1144,6 +1172,7 @@ Item {
       root.nativeServed = ({})
       root.nativeHelloed = false
       root.wasmSent = ({})
+      root.nativeSearchSent = ({})
       root.nativePending = ({})
       root.nativeVersion = ""
       root.refreshNativeStatus()

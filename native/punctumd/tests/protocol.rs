@@ -33,7 +33,9 @@ fn hello_names_the_extensions() {
             "clipboard",
             "packages",
             "remind",
-            "math"
+            "math",
+            "files",
+            "processes"
         ])
     );
 }

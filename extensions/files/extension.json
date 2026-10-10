@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "~name: files and folders under your home folder, found live with fd",
   "icon": "󰈞",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 50,
@@ -20,6 +20,91 @@
   "requires": [
     "fd"
   ],
+  "commands": [
+    {
+      "title": "Find files",
+      "keywords": "files folders find search home documents",
+      "text": "Files and folders under your home folder",
+      "complete": "~"
+    }
+  ],
+  "help": [
+    {
+      "id": "files",
+      "title": "Find files",
+      "about": "~ and part of a name. Letters may skip: ~dwnlds finds Downloads. Shift+Enter opens a terminal there",
+      "examples": [
+        {
+          "q": "~",
+          "note": "Type a name after it"
+        },
+        {
+          "q": "~readme",
+          "hint": "Files named like readme"
+        },
+        {
+          "q": "~docs report",
+          "hint": "\"report\" under a folder like docs"
+        }
+      ]
+    }
+  ],
+  "searches": {
+    "walk": {
+      "command": [
+        "fd",
+        "--ignore-case",
+        "--full-path",
+        "--color",
+        "never",
+        "--absolute-path",
+        "--base-directory",
+        "{home}",
+        "--max-results",
+        "400",
+        "--threads",
+        "2",
+        "--print0",
+        "--and={2*}",
+        "--",
+        "{1}"
+      ]
+    },
+    "walk_hidden": {
+      "command": [
+        "fd",
+        "--ignore-case",
+        "--full-path",
+        "--color",
+        "never",
+        "--absolute-path",
+        "--base-directory",
+        "{home}",
+        "--max-results",
+        "400",
+        "--threads",
+        "2",
+        "--print0",
+        "--hidden",
+        "--exclude",
+        ".git",
+        "--and={2*}",
+        "--",
+        "{1}"
+      ]
+    }
+  },
+  "actions": {
+    "terminal": {
+      "command": [
+        "uwsm-app",
+        "--",
+        "xdg-terminal-exec",
+        "--dir={1}"
+      ],
+      "label": "terminal here"
+    }
+  },
   "permissions": {
     "runs": [
       "fd"
