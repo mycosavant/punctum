@@ -82,6 +82,8 @@ No settings. `remind 10m tea`, `alarm 6:45`; see [Features](features.md#reminder
 
 ### `bible`
 
+Off by default: `"extensions": { "bible": true }` turns it on.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `versions` | `["NASB", "NASB1995", "ESV", "KJV"]` | Translations, first on top, as Bible Gateway names them (letters, digits and `-`, up to 16) |
@@ -90,16 +92,16 @@ No settings. `remind 10m tea`, `alarm 6:45`; see [Features](features.md#reminder
 
 | Key | Default | Meaning |
 |---|---|---|
-| `engines` | 13 bangs (see below) | `name → { title, open, home? }`. Merged by name over the defaults |
+| `engines` | 8 bangs (see below) | `name → { title, open, home? }`. Merged by name over the defaults |
 | `fallback` | `"https://duckduckgo.com/?q={q}"` | Where a bang not in `engines` goes, with the whole query. `""` keeps unlisted bangs in the bar |
 
 An engine:
 
 ```jsonc
-"nasb": {
-  "title": "Bible (NASB)",                                   // shown on the row
-  "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB",
-  "home": "https://www.biblegateway.com/"                   // optional: Enter on a bare !nasb
+"mdn": {
+  "title": "MDN",                                            // shown on the row
+  "open": "https://developer.mozilla.org/en-US/search?q={q}",
+  "home": "https://developer.mozilla.org/"                  // optional: Enter on a bare !mdn
 }
 ```
 
@@ -108,9 +110,8 @@ An engine:
 - `{q}` is URL-encoded.
 - `"g": null` drops a default.
 
-Defaults: `nasb`, `bible` and `nasb95`, `esv`, `kjv` (Bible Gateway), `ddg`,
-`g`, `w` (Wikipedia), `yt`, `gh`, `aw` (Arch Wiki), `ap` (Arch packages),
-`maps` (OpenStreetMap).
+Defaults: `ddg`, `g`, `w` (Wikipedia), `yt`, `gh`, `aw` (Arch Wiki), `ap`
+(Arch packages), `maps` (OpenStreetMap).
 
 ### `notes` (`n `)
 

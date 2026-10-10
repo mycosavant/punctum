@@ -1,11 +1,11 @@
-# Command Bar documentation
+# Punctum documentation
 
-A Spotlight-style command bar for Omarchy, opened with **Super+Period**. Type
+The extensible command bar for Linux, a plugin for Omarchy's shell, opened with **Super+Period**. Type
 and it answers: apps, windows, files anywhere on the disk, lines inside files,
-clipboard history, sums, conversions, packages, scripture, web searches.
+clipboard history, sums, conversions, packages, web searches.
 
-This is the hypha fork of
-[Saikomantisu/omarchy-commandbar](https://github.com/Saikomantisu/omarchy-commandbar).
+It started as
+[Command Bar](https://github.com/Saikomantisu/omarchy-commandbar) by Saikomantisu.
 The top-level [README](../README.md) has the quick table; these pages go deeper.
 
 | Page | What it covers |
@@ -18,7 +18,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | [Architecture](architecture.md) | How a keystroke becomes rows, and where each piece lives |
 | [Extensions and release proposal](proposal-extensions.md) | Making features optional plugins others can write, releasing Everywhere on its own, and what a community release needs |
 | [Agent proposal](proposal-agent.md) | `>_`: from a doorway to the default agent to answers in the bar |
-| [Naming](release/naming.md) | Name candidates for a release, checked for availability |
+| [Naming](release/naming.md) | How the name was chosen, and the [checks on it](release/punctum-checks.md) |
 
 ## In one minute
 
@@ -36,7 +36,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | `cb ` | Clipboard history |
 | `pkg ` | Packages |
 | `remind `, `alarm `, `!remindme ` | Reminders and alarms |
-| `!` | Bangs (`!nasb john 3:16`) |
+| `!` | Bangs (`!w hyprland`) |
 | `>_ `, `> `, `ai ` | Ask your default agent |
 | `n ` | Add a line to your inbox note |
 | `keys ` | Keybindings |
@@ -46,7 +46,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | `?` | Help |
 
 Anything else is matched by every feature at once: `firefox` finds the app,
-`2+2` answers 4, `john 3:16` offers the verse, `mar 3` gives the date.
+`2+2` answers 4, `5 km to mi` converts, `mar 3` gives the date.
 
 ## Extensions
 

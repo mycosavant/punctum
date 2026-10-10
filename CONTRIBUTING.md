@@ -13,14 +13,14 @@ Thanks for helping. Bug reports, fixes and new features are all welcome.
 Clone your fork into Omarchy's plugin folder so the shell loads it:
 
 ```sh
-omarchy plugin remove io.github.saikomantisu.commandbar   # if the released version is installed
-git clone https://github.com/<you>/punctum ~/.config/omarchy/plugins/io.github.saikomantisu.commandbar
-omarchy plugin enable io.github.saikomantisu.commandbar
+omarchy plugin remove io.github.mycosavant.punctum   # if the released version is installed
+git clone https://github.com/<you>/punctum ~/.config/omarchy/plugins/io.github.mycosavant.punctum
+omarchy plugin enable io.github.mycosavant.punctum
 ```
 
 Keep only one copy in that folder. Two copies register the same plugin ID.
 
-After changing the code, run `omarchy restart shell` to load it. The shell reloads plugins on its own when files change, but that isn't always reliable, so restart before you decide something works. `journalctl --user -f | grep -i commandbar` shows the bar's warnings and errors.
+After changing the code, run `omarchy restart shell` to load it. The shell reloads plugins on its own when files change, but that isn't always reliable, so restart before you decide something works. `journalctl --user -f | grep -i punctum` shows the bar's warnings and errors.
 
 New features are extensions: a folder in `extensions/` with an `extension.json`. [docs/writing-extensions.md](docs/writing-extensions.md) has the format; `examples/hello` is the smallest one.
 
@@ -30,11 +30,11 @@ New features are extensions: a folder in `extensions/` with an `extension.json`.
 node tests/run.js
 ```
 
-All tests must pass. Add tests for anything you add or fix. They run without the shell, using sample rates, time zones and processes.
+All tests must pass, and CI runs them on every push and pull request. Add tests for anything you add or fix, and break your change once to see the test fail. They run without the shell, using sample rates, time zones and processes; a few run real `bwrap`, `plocate`, `fd` and `fzf`.
 
 ## Rules
 
-The plugin is published through the Omarchy plugin marketplace, and its automated security check and review require these:
+Punctum is meant for the Omarchy plugin marketplace, whose automated security check and review require these:
 
 - Don't ask for administrator rights, and don't start, stop or change system services. The marketplace's automated check flags these.
 - Don't download something and then run it.

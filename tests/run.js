@@ -435,7 +435,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   fs.rmSync(home, { recursive: true, force: true }) }
 
 
-// ---------------------------------------------------------------- hypha additions
+// ---------------------------------------------------------------- added since Command Bar 1.3.0
 function check(name, ok, detail) { console.log((ok ? "ok  " : "FAIL") + "  " + name + (detail && !ok ? " → " + detail : "")); if (!ok) fails++ }
 // The bar's shared background work, faked: text already loaded under a
 // provider's key, and a search that has landed.
@@ -799,8 +799,10 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // bin/punctum-extensions: finds manifests, refuses what others could have planted
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  // Under XDG_RUNTIME_DIR: /tmp is writable by everyone, which the helper rightly refuses.
-  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/punctum-exts-"), user = root + "/user"
+  // Under XDG_RUNTIME_DIR (or ~/.cache without one): /tmp is writable by
+  // everyone, which the helper rightly refuses.
+  const base = process.env.XDG_RUNTIME_DIR || (fs.mkdirSync(os.homedir() + "/.cache", { recursive: true }), os.homedir() + "/.cache")
+  const root = fs.mkdtempSync(base + "/punctum-exts-"), user = root + "/user"
   fs.chmodSync(root, 0o700)
   fs.mkdirSync(user + "/ok", { recursive: true, mode: 0o700 }); fs.chmodSync(user, 0o700)
   fs.writeFileSync(user + "/ok/extension.json", JSON.stringify({ schema: 1, id: "ok", requires: ["sh", "no-such-command-zz"] }))
@@ -1005,7 +1007,11 @@ print(json.dumps({
   const hidden = run({ reads: ["~/.config/thing"] })
   check("sandbox: with home hidden, only the paths it asks to read are there", hidden.config === true && hidden.secret === false, JSON.stringify(hidden))
   const off = run(false)
-  check("sandbox: false runs it as it is (calibration: the probe sees home, the session, the env and writes for real)", off.secret === true && off.runtime === true && off.env_secret === true && fs.existsSync(home + "/new"), JSON.stringify(off))
+  // CI has no desktop session: then the probe can't see one even unsandboxed,
+  // and the strict "no session" check above calibrates nothing; say so.
+  const hasBus = fs.existsSync((process.env.XDG_RUNTIME_DIR || "/run/user/0") + "/bus")
+  if (!hasBus) console.log("note  sandbox: no session bus on this host, so hiding the session is untested here")
+  check("sandbox: false runs it as it is (calibration: the probe sees home, the session if there is one, the env and writes for real)", off.secret === true && off.runtime === hasBus && off.env_secret === true && fs.existsSync(home + "/new"), JSON.stringify(off))
   check("sandbox: the environment is cleared (a token in it doesn't get in)", strict.env_secret === false && asked.env_secret === false)
   const netOn = run({ network: true })
   check("sandbox: network on reaches loopback and has the resolver; off has neither (calibrated against each other)", netOn.loopback === true && netOn.resolver === true && strict.loopback === false && strict.resolver === false, JSON.stringify([netOn.loopback, netOn.resolver, strict.loopback, strict.resolver]))

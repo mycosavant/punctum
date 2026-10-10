@@ -1,7 +1,7 @@
 .pragma library
 
 // Packages from the repositories in your pacman.conf (Arch's, and Omarchy's
-// own on this machine); the AUR isn't searched.
+// own on an Omarchy install); the AUR isn't searched.
 //
 //   pkg kfind · pkg file search
 //

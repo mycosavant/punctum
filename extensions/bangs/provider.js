@@ -3,9 +3,9 @@
 // Bangs, as in DuckDuckGo: a ! and a short name sends the rest of the query
 // to one site.
 //
-//   !nasb john 3:16 · john 3:16 !nasb · !aw hyprland · !     (lists your bangs)
+//   !w hyprland · hyprland !w · !aw wayland · !     (lists your bangs)
 //
-// Yours are "bangs": { "engines": { "nasb": { "title": "…", "open": "https://…{q}" } } }
+// Yours are "bangs": { "engines": { "mdn": { "title": "…", "open": "https://…{q}" } } }
 // in punctum.json. They merge over the defaults by name, and "g": null
 // drops a default. A bang that isn't listed goes to "fallback" (DuckDuckGo,
 // which knows thousands) with the whole query, bang included, the way Zen
@@ -39,7 +39,7 @@ function fill(template, q) { return template.replace(/\{q\}/g, function() { retu
 
 function host(u) { var m = String(u).match(/^[a-z]+:\/\/(?:www\.)?([^\/?#]+)/i); return m ? m[1] : u }
 
-// { bang, q } from "!nasb john 3:16" or "john 3:16 !nasb", or null.
+// { bang, q } from "!w hyprland" or "hyprland !w", or null.
 function split(query) {
   var m = String(query || "").match(LEADING)
   if (m) return { bang: m[1].toLowerCase(), q: (m[2] || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim(), leading: true }
@@ -55,7 +55,7 @@ var provider = {
   name: "Bangs",
   icon: "󰈸",
   commands: [
-    { title: "Bangs", keywords: "bang bangs search engine duckduckgo !", text: "! and a short name: !nasb john 3:16", complete: "!" }
+    { title: "Bangs", keywords: "bang bangs search engine duckduckgo !", text: "! and a short name: !w hyprland", complete: "!" }
   ],
   help: function(ctx) {
     var list = sorted(engines(ctx.settings))

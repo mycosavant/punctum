@@ -58,8 +58,8 @@ Lines containing your words, in files under your home folder.
 
 ## Clipboard history — `cb `  (`clipboard`)
 
-What you copied, pinned entries first, from the history the
-[hypha.clipboard](../../hypha.clipboard) plugin keeps.
+What you copied, pinned entries first, from the history Omarchy's clipboard
+plugin keeps.
 
 - `cb `, `cb invoice`
 - **Enter** pastes into the window you came from (copy, then Shift+Insert, as
@@ -75,9 +75,11 @@ Packages in the repositories in your pacman.conf (Arch's, plus Omarchy's own on
 an Omarchy install). The AUR is never searched.
 
 - `pkg kfind`, `pkg file search` (words in the description count).
-- A package you don't have: **Enter** opens a terminal running
-  `sudo pacman -S <repo>/<name>`. pacman shows what it will do and asks first;
-  the repository is the one on the row you chose.
+- A package you don't have: **Enter** copies `sudo pacman -S <repo>/<name>`,
+  to paste into a terminal yourself; Punctum never asks for administrator
+  rights on its own. With `"packages": { "install": true }`, Enter opens a
+  terminal running it instead, and pacman shows what it will do and asks
+  first. Either way the repository is the one on the row you chose.
 - A package you have: **Enter** shows `pacman -Qi`.
 - **Shift+Enter** opens its archlinux.org page, or `pacman -Si` in a terminal
   for a repository that isn't Arch's.
@@ -87,7 +89,8 @@ an Omarchy install). The AUR is never searched.
 
 ## Bible  (`bible`)
 
-Scripture on Bible Gateway, your first translation on top.
+Scripture on Bible Gateway, your first translation on top. Off by default:
+`"extensions": { "bible": true }` turns it on.
 
 - With no keyword, a reference: `john 3:16`, `1 john 1:9`, `psalm 23`,
   `rom 8:28-30`, `song of songs 2:4`.
@@ -108,16 +111,16 @@ Scripture on Bible Gateway, your first translation on top.
 
 As in DuckDuckGo: `!` and a short name sends the rest to one site.
 
-- `!nasb john 3:16`, `!aw hyprland`, or at the end: `john 3:16 !nasb`.
-- `!` alone lists your bangs; `!na` narrows them; Tab completes.
+- `!w hyprland`, `!aw wayland`, or at the end: `hyprland !w`.
+- `!` alone lists your bangs; `!a` narrows them; Tab completes.
 - A bang not in your list goes to DuckDuckGo with the whole query, bang
   included, which knows thousands of them. That is what Zen does when
   DuckDuckGo is its search engine: Zen itself has no bangs.
 - Inside a mode, a trailing `!word` belongs to the mode: in `/hosts !backup`
   it means "leave out", not a bang.
 - **Enter** opens. **Shift+Enter** copies the link.
-- Defaults: `nasb`, `bible`, `nasb95`, `esv`, `kjv`, `ddg`, `g`, `w`, `yt`,
-  `gh`, `aw` (Arch Wiki), `ap` (Arch packages), `maps` (OpenStreetMap).
+- Defaults: `ddg`, `g`, `w`, `yt`, `gh`, `aw` (Arch Wiki), `ap` (Arch
+  packages), `maps` (OpenStreetMap).
   See [Configuration](configuration.md#bangs) to add, change or drop them.
 
 ## Reminders and alarms — `remind`, `alarm`, `!remindme`  (`remind`)

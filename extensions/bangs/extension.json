@@ -3,7 +3,7 @@
   "id": "bangs",
   "name": "Bangs",
   "version": "1.0.0",
-  "description": "!nasb john 3:16: send a search straight to one site, DuckDuckGo-style",
+  "description": "!w hyprland: send a search straight to one site, DuckDuckGo-style",
   "icon": "󰈸",
   "type": "js",
   "entry": "provider.js",

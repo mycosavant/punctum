@@ -1,0 +1,31 @@
+# node tests/run.js on Arch, the platform Punctum targets, as a normal user:
+# the sandbox and file-permission tests mean nothing as root. --privileged
+# lets bwrap make its namespaces inside the container (Docker's seccomp
+# profile blocks them otherwise). The container has no desktop session, so
+# the test that a sandbox hides the session bus is reported as untested.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base
+      options: --privileged
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Install what the tests run
+        run: pacman -Syu --noconfirm --needed nodejs python bash bubblewrap plocate fd fzf ripgrep file glib2 xdg-utils procps-ng
+      - name: Run the tests as a normal user
+        run: |
+          useradd -m tester
+          chown -R tester: "$GITHUB_WORKSPACE"
+          uid=$(id -u tester)
+          install -d -m 700 -o tester "/run/user/$uid"
+          su tester -c "cd '$GITHUB_WORKSPACE' && XDG_RUNTIME_DIR=/run/user/$uid node tests/run.js"

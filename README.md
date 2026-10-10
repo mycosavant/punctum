@@ -1,40 +1,18 @@
-# Command Bar (hypha fork)
+# Punctum
 
-Spotlight-style command bar - app launcher, calculator, currency, time zones, date maths, emoji, kill process, ask your AI agent and your own keyword commands
+**The extensible command bar for Linux.** Press Super + Period and type: apps,
+windows, every file on the disk, lines inside files, clipboard history, sums,
+unit and currency conversions, time zones, emoji, bangs, reminders, your own
+keyword commands, and anything you add as an extension, in any language.
 
-**This is a personal fork** of [Saikomantisu/omarchy-commandbar](https://github.com/Saikomantisu/omarchy-commandbar) 1.3.0, installed as `io.github.mycosavant.punctum`. Upstream is the `upstream` remote; `git fetch upstream && git log main..upstream/main` shows what's new there. It adds:
+*Punctum* (PUNK-tum) is Latin for "point": the dot on the key that opens it,
+and the one place you look.
 
-- **Clipboard history** (`cb `), read from the history the `hypha.clipboard` plugin keeps, pinned entries first. Enter pastes, Shift+Enter copies.
-- **Files** (`~name`), found with `fd` under your home folder. Enter opens, Shift+Enter opens a terminal there.
-- **Keybindings**: type what you want to do ("full screen") and see its keys; `keys ` lists every binding. Enter runs it.
-- **Web addresses**: `example.com/docs` opens in your browser.
-- **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
-- **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
-- **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/punctum-note` writes it: text on stdin, symlinks refused, never creates the folder.
-- **Everywhere** (`/name`): every file on the disk as you type, like Everything on Windows. Also a command of its own, `everywhere`, with an fzf picker (`everywhere -i`); in the bar it's a script extension. plocate does the lookup (the system index for outside your home folder, rebuilt nightly; a private index of your home folder, refreshed on the first `/` query after the bar opens, at most once a minute), fzf filters with its query syntax (`'exact`, `^start` of a name, `.pdf$`, `!leave-out`), and the order puts a name that is the word first. `"everywhere": { "exclude": [...] }` keeps caches out. See [docs/everywhere.md](docs/everywhere.md).
-- **Inside files** (`rg words`): ripgrep under your home folder, the words as a fixed string. Enter opens your editor at the line; Shift+Enter opens the file. `"contents": { "hidden": true }` includes dot-folders.
-- **Syncthing**: the `syncthing` keyword opens the local web UI at 127.0.0.1:8384.
-- **Reminders and alarms**: `remind 10m tea`, `remind me to call mom at 3pm`, `!remindme tomorrow 9am dentist`, `alarm 6:45` (a critical notification and a sound). They show with Omarchy's own reminders; `remind` alone lists them and Shift+Enter cancels one.
-- **Extensions**: every feature is an extension you can switch off (`"extensions": { "bible": false }`) and you can write your own, as a script in any language or in JavaScript. `?extensions` lists them with what each runs, reads and contacts.
-- **Bible**: type a reference (`john 3:16`, `1 jn 1:9`, `psalm 23`) and it opens on Bible Gateway, NASB first. With no keyword a reference needs a book name of three letters or more, or a verse after a colon, so `mar 3` stays a date and `am 5` a time; after `bible` any form works (`bible ps 23`); `bible love one another` is a word search. `"bible": { "versions": [...] }` sets the translations.
-- **Bangs**: `!nasb john 3:16`, `!aw hyprland`, or the bang at the end. Yours go under `"bangs": { "engines": { … } }`, merged over the defaults by name (`"g": null` drops one). A bang you haven't listed goes to DuckDuckGo with the whole query, as Zen does with DuckDuckGo as its engine; `"fallback": ""` stops that. `!` lists them.
-- **Packages**: `pkg kfind` searches the repositories in your pacman.conf (Arch's and Omarchy's here; never the AUR), read once per open with `expac`. Enter on a package you don't have opens a terminal with `sudo pacman -S repo/name`, so pacman asks first and installs from the repository on that row; on one you have it shows `pacman -Qi`. Shift+Enter opens its archlinux.org page, or `pacman -Si` for a repository that isn't Arch's.
-- **Frosted glass**: the card is the theme's menu colour at `"glass": { "opacity": 0.78 }` with Hyprland blurring what's behind it. Needs `decoration.blur.enabled` in your Hyprland config; `"glass": { "enabled": false }` makes it solid.
-- **Move and resize**: drag the card by its edges or footer, resize from the grip in the bottom-right corner. It stays where you leave it (`~/.cache/punctum/geometry.json`); the command "Reset command bar position" goes back to `"window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 }`.
+It is a plugin for [Omarchy](https://omarchy.org)'s shell, and it started as
+[Command Bar](https://github.com/Saikomantisu/omarchy-commandbar) by
+Saikomantisu.
 
-File search, keybindings, web addresses and colours are adapted from [evindor/keystroke](https://github.com/evindor/keystroke) (MIT); each file says which part.
-
-It also fixes three things found reading upstream:
-
-- A keyword command's `{q}` was substituted with a replacement *string*, so typed text containing `$'` or `` $` `` could pull the rest of the template back in unquoted and run it. Even fixed, splicing quoted text into a script stayed fragile (heredocs and comments defeat it), so `run` commands now get the typed text as `$1`: `{q}` becomes `"$1"`, which bash expands as a value and never parses as code. Templates where bash would evaluate that value anyway are refused with a message: `{q}` in single quotes, and arithmetic or array subscripts (`$(( ))`, `(( ))`, `[[ ]]`, `let`, `${a[…]}`), where `a[$(cmd)]` runs `cmd`.
-- Copied text was put on a `bash` command line, where any process can read it. It now goes to `wl-copy` on stdin.
-- A test executed a payload containing `rm -rf ~`, which a quoting regression would have run for real. Test payloads now only create marker files in a temporary folder.
-
-## Documentation
-
-Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md), [Everywhere](docs/everywhere.md), [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), [writing extensions](docs/writing-extensions.md), [architecture](docs/architecture.md), and the [extensions proposal](docs/proposal-extensions.md) with what was built and what a community release still needs.
-
-![Command Bar: Spotlight-style command bar for Omarchy](preview.png)
+![Punctum](preview.png)
 
 <p align="center">
   <b>Open an app</b><br>
@@ -73,9 +51,10 @@ Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md)
 | `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
 | `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
 | `rg invoice`, `grep TODO` | Lines inside your files (ripgrep). Enter opens the editor at that line |
-| `john 3:16`, `psalm 23`, `bible ps 23`, `bible grace` | Scripture on Bible Gateway, your first translation (NASB) on top |
-| `!nasb john 3:16`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
-| `pkg kfind`, `pkg file search` | Packages from your pacman repositories. Enter installs (pacman asks) or shows details |
+| `!w hyprland`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
+| `pkg kfind`, `pkg file search` | Packages from your pacman repositories. Enter copies the install command, or shows details for one you have |
+| `n call the dentist` | Adds a dated line to your inbox note, once you name the note in the config |
+| `john 3:16`, `psalm 23` | Scripture on Bible Gateway, once you turn the Bible extension on |
 | `g …`, `yt …`, `gh …`, `wiki …`, `lock` | Keyword commands, which you can change in the config |
 
 Type part of a feature's name to find it. `emo` finds Search emoji and `curr` finds Convert currency.
@@ -96,15 +75,39 @@ Keys:
 
 After you copy, open or run something, the bar starts empty next time. If you close it without doing anything (Esc or clicking outside), it keeps your text, selected, so typing replaces it.
 
+## Extensions
+
+Every feature is an extension, and `?extensions` lists them, on or off, with
+what each one runs, reads, writes and contacts. Enter switches one.
+
+You can add your own, as a script in any language or in JavaScript (see
+[Adding a feature](#adding-a-feature)). A script extension runs in a
+[bubblewrap](https://github.com/containers/bubblewrap) sandbox built from its
+manifest: by default no network, an empty home folder and no desktop session,
+and only what it asks for beyond that.
+
+## Documentation
+
+[`docs/`](docs/README.md): [features](docs/features.md),
+[Everywhere](docs/everywhere.md) (the file search),
+[configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md),
+[writing extensions](docs/writing-extensions.md) and [architecture](docs/architecture.md).
+
 ## Install
 
-This fork lives in `~/.config/omarchy/plugins/io.github.mycosavant.punctum` as a git repository; enable it with:
-
 ```sh
+omarchy plugin add https://github.com/mycosavant/punctum.git
 omarchy plugin enable io.github.mycosavant.punctum
 ```
 
-Press Super + Period to open it. You can change the key with `"hotkey"` in the config. If another action already uses the key, the bar leaves it alone and shows a notification.
+Omarchy clones the repository into `~/.config/omarchy/plugins/io.github.mycosavant.punctum/`
+and adds it switched off, so you can read the code before you enable it.
+`omarchy plugin update io.github.mycosavant.punctum` shows the changes before
+pulling them. Nothing is installed with sudo, and no install script runs.
+
+Press Super + Period to open it. If another binding already uses that key,
+Punctum leaves it alone and a notification says so; set `"hotkey"` in the
+config to choose another.
 
 To open the bar with text already filled in, pass a query. For example, to open emoji search directly:
 
@@ -114,7 +117,8 @@ omarchy-shell shell toggle io.github.mycosavant.punctum '{"query": ":"}'
 
 ### Dependencies
 
-All of these come with Omarchy:
+All of these come with Omarchy. An extension whose command is missing stays
+off, and `?extensions` says which command it needs.
 
 - `curl`: exchange rates
 - `wl-copy` (from `wl-clipboard`): copying results
@@ -127,7 +131,13 @@ All of these come with Omarchy:
 - `python3`: reading and writing the cache files safely (`bin/punctum-cache`)
 - `omarchy-menu-emoji-insert` and Omarchy's `emojis.json`: emoji
 - `omarchy-default-agent`, `omarchy-cmd-missing`, `omarchy-agent-prompt` and `omarchy-agent --pick`: asking your agent (`bin/punctum-agent`)
-- `fd`: file search
+- `fd`: file search under your home folder
+- `plocate`, `updatedb` and `fzf`: Everywhere, the search across the disk
+- `rg` (from `ripgrep`): search inside files
+- `expac`: package search
+- `bwrap` (from `bubblewrap`, which Nautilus brings in): the sandbox for script extensions; without it they stay off
+- `xdg-mime`, `file` and `gio`: opening a file in the right app (`bin/punctum-open`)
+- `systemd-run` and `omarchy-reminder`: reminders and alarms
 - `omarchy-menu-keybindings`: the keybinding list and running a binding
 - `omarchy-clipboard-paste-file` and `wtype`: pasting clipboard images and text
 - `hyprpicker`: Pick a colour from the screen
@@ -147,8 +157,8 @@ All of these come with Omarchy:
 ## Remove
 
 ```sh
-omarchy plugin disable io.github.mycosavant.punctum
-rm -rf ~/.cache/punctum ~/.config/omarchy/extensions/punctum.json
+omarchy plugin remove io.github.mycosavant.punctum
+rm -rf ~/.cache/punctum ~/.cache/everywhere ~/.config/omarchy/extensions/punctum.json ~/.config/omarchy/punctum
 ```
 
 The hotkey is removed with the plugin.
@@ -162,7 +172,7 @@ Put your settings in `~/.config/omarchy/extensions/punctum.json`. They override 
   // A Hyprland key combination. "" means no hotkey.
   "hotkey": "SUPER + PERIOD",
   // Switch extensions off or on by id. ?extensions lists them all.
-  "extensions": { "bible": false, "packages": false },
+  "extensions": { "bible": true, "packages": false },
   // Default home currency is USD.
   "currency": { "home": "EUR", "favorites": ["USD", "GBP"] },
   // Default home zone is your system time zone.
@@ -186,7 +196,7 @@ Put your settings in `~/.config/omarchy/extensions/punctum.json`. They override 
 }
 ```
 
-`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is passed as `$1`, so it can't change the command itself; see the list of refused templates above.
+`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is passed as `$1`, so it can't change the command itself. Templates where bash would evaluate that value anyway are refused with a message: `{q}` in single quotes, and arithmetic or array subscripts (`$(( ))`, `(( ))`, `[[ ]]`, `let`, `${a[…]}`), where `a[$(cmd)]` runs `cmd`.
 
 ## Asking your agent
 
@@ -218,6 +228,10 @@ Test without the shell by running `node tests/run.js`.
 
 To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## License
+## License and credits
 
-MIT
+MIT; see [LICENSE](LICENSE). Punctum started from
+[Command Bar](https://github.com/Saikomantisu/omarchy-commandbar) by
+Saikomantisu (MIT). File search, keybindings, web addresses and colours are
+adapted from [Keystroke](https://github.com/evindor/keystroke) (MIT); each
+file says which part.
