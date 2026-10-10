@@ -1110,7 +1110,12 @@ print(json.dumps({
 // everywhere filters: size:, dm:, ext:, type:, against a scratch home with known sizes and dates
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   const EW = P + "extensions/everywhere/everywhere"
-  const home = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/everywhere-filters-")
+  // The folder's name mustn't hold a searched word's letters in order: the
+  // fuzzy pass matches any path segment, so "everywhere-filters-" made "file"
+  // find every file in it. On a machine with a system index those matches sat
+  // below the result limit, behind real files named *file*; CI has no system
+  // index, so they showed (run 38054871212).
+  const home = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/everywhere-sz-")
   fs.mkdirSync(home + "/Docs")
   fs.writeFileSync(home + "/Docs/bigfile.bin", Buffer.alloc(2 * 1024 * 1024))
   fs.writeFileSync(home + "/Docs/smallfile.txt", "hello")
