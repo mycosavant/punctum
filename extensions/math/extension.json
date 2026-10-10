@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "12*8 + 15%: a calculator",
   "icon": "󰃬",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 120,
@@ -14,5 +14,27 @@
   "defaults": {
     "precision": 10
   },
+  "commands": [
+    {
+      "title": "Calculator",
+      "keywords": "calculate calc math maths sum arithmetic",
+      "text": "Sums, percentages, powers, sqrt, pi",
+      "complete": "12*8 + 15%",
+      "select": true
+    }
+  ],
+  "help": [
+    {
+      "id": "calc",
+      "title": "Calculator",
+      "about": "Sums, percentages, powers, sqrt and pi. With native extensions, fend answers what the calculator can't: 100!, 0xff + 1, 10 choose 3",
+      "examples": [
+        "12*8 + 15%",
+        "sqrt(2) * pi",
+        "15% of 200",
+        "5!"
+      ]
+    }
+  ],
   "permissions": {}
 }

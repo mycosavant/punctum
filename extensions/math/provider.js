@@ -9,6 +9,11 @@
 //   power   := postfix ("^" unary)?              right-associative; -2^2 = -4
 //   postfix := primary ("%" | "!")*
 //   primary := number | constant | func "(" args ")" | "(" expr ")"
+//
+// This is the JS fallback for native/punctumd/src/calc.rs, used when punctumd
+// isn't installed; tests/calc-parity.js keeps the two the same, so change
+// both together (lib/Calc.js too, which the currency extension also uses).
+// The Rust one also asks fend what the parser can't read, for a plain number.
 
 var provider = {
   id: "math",

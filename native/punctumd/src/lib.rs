@@ -2,6 +2,7 @@
 //! stdout, one JSON object per line. See docs/native.md for the protocol.
 
 pub mod apps;
+pub mod calc;
 pub mod cities;
 pub mod clipboard;
 pub mod colors;
@@ -214,6 +215,7 @@ pub fn extensions() -> &'static [&'static dyn Extension] {
         &clipboard::Clipboard,
         &packages::Packages,
         &remind::Remind,
+        &calc::Calc,
     ]
 }
 

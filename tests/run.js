@@ -1197,7 +1197,7 @@ print(json.dumps({
   const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native, requestLoad, cached, omarchyPath: "/usr/share/omarchy", home: "/home/u" }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true, hotkeys: true, clipboard: true, packages: true, remind: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true, hotkeys: true, clipboard: true, packages: true, remind: true, math: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1275,6 +1275,9 @@ print(json.dumps({
       && !nq("pick a colour").some(r => r.provider === "colors" && r.group === "Commands" && !r.run), JSON.stringify(picker.run))
     const ratio = nq("#fff on #333")[0]
     check("native: two colours give their contrast ratio, as the answer", ratio.provider === "colors" && ratio.title === "12.63:1" && ratio.hero && ratio.copy === "12.63")
+    const sum = nq("12*8 + 15%")[0], big = nq("0xff + 1")[0]
+    check("native: the calculator answers through punctumd, and fend what it can't read", sum.provider === "math" && sum.title === "110.4" && sum.hero
+      && big.provider === "math" && big.title === "0x100" && / · fend$/.test(big.subtitle) && !nq("5 km to mi").some(r => r.provider === "math"), JSON.stringify([sum.title, big && big.title]))
     check("native: while a reply is coming (null), nothing shows", !Engine.run("5 km to mi", config, { now, native: () => null }).some(x => x.provider === "units"))
   }
   // Rows from punctumd get the same checks as a script's, keeping their scores.

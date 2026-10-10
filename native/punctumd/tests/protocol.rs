@@ -32,7 +32,8 @@ fn hello_names_the_extensions() {
             "hotkeys",
             "clipboard",
             "packages",
-            "remind"
+            "remind",
+            "math"
         ])
     );
 }
