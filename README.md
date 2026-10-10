@@ -46,7 +46,7 @@ Saikomantisu.
 | `~readme`, `~docs report` | Files and folders under `~`, letters in order (`~dwnlds` finds Downloads). Enter opens, Shift+Enter opens a terminal in the folder |
 | `full screen`, `super f`, `keys `, `keys screenshot` | Your keybindings, with their keys. Enter runs one, as pressing the keys would |
 | `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
-| `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one |
+| `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one. With [native extensions](docs/native.md), also `hsl()`, `oklch()` and the other CSS colour functions, and an OKLCH row |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
 | `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
 | `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
@@ -105,7 +105,7 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
-Units, time zones and web addresses can also run natively, in punctumd, a
+Units, time zones, colours and web addresses can also run natively, in punctumd, a
 small Rust daemon. It's optional, and the bar works without it; with it,
 time zones come from your system's tzdata and every IANA zone answers. With Rust installed,
 `cargo build --release` in the plugin folder builds it, and the bar picks it

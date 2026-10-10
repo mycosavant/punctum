@@ -170,6 +170,7 @@ impl Extension for Url {
                 copy: url.clone(),
                 run: Some(serde_json::json!({ "kind": "open", "target": url, "label": "open" })),
                 alt: Some(serde_json::json!({ "kind": "copy", "target": url, "label": "copy" })),
+                ..Default::default()
             }],
             ttl_ms: None,
         }

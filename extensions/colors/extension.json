@@ -3,13 +3,19 @@
   "id": "colors",
   "name": "Colour",
   "version": "1.0.0",
-  "description": "#ff6644: a colour swatch with HEX, RGB and HSL",
+  "description": "#ff6644, hsl(11 100% 63%): a colour swatch with HEX, RGB, HSL and OKLCH",
   "icon": "󰏘",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 110,
   "helpOrder": 130,
   "hero": true,
+  "help": [
+    {"id": "colors", "title": "Colours", "about": "A hex, rgb(), hsl() or oklch() colour shows a swatch and its other forms", "examples": ["#ff6644", "rgb(40, 120, 200)", "hsl(210 70% 50%)"]}
+  ],
+  "commands": [
+    {"title": "Pick a colour from the screen", "keywords": "color colour picker eyedropper hex", "text": "Click any pixel; its hex is copied", "icon": "󰈊", "run": {"kind": "argv", "target": ["hyprpicker", "-a"], "label": "pick"}}
+  ],
   "permissions": {}
 }

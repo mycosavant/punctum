@@ -8,6 +8,11 @@
 //
 // Six hex digits without # count only when one is a digit, so words like
 // "decade" or "facade" stay words.
+//
+// This is the JS fallback for native/punctumd/src/colors.rs, used when
+// punctumd isn't installed; tests/colors-parity.js keeps the two the same, so
+// change both together. The Rust one also reads every CSS colour function
+// and adds an OKLCH row.
 
 function clamp(n) { return Math.max(0, Math.min(255, n)) }
 

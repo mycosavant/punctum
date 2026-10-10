@@ -8,6 +8,7 @@ as a fallback, so the bar works without punctumd.
 |---|---|---|---|
 | Units | `units.rs` | — | Nothing yet: a port, digit for digit |
 | Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
+| Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words |
 | Web address | `url.rs` | [psl](https://docs.rs/psl) (Public Suffix List), [idna](https://docs.rs/idna), `std::net` | A bare name needs a real top-level domain, so `mr.smith` and `notes.txt/` stay words. Private-network names (`.local`, `.lan`, `.internal`, `home.arpa`, …) still open |
 
 Time zones come from `/usr/share/zoneinfo`, the same data `date` reads, which

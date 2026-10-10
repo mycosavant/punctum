@@ -1187,7 +1187,7 @@ print(json.dumps({
   const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1203,6 +1203,9 @@ print(json.dumps({
       && nq("time").map(x => x.title).slice(0, 4).join() === "14:00 Colombo,08:30 UTC,04:30 New York,09:30 London", nq("time").map(x => x.title).join())
     check("native: time's help and commands come from its manifest", nq("?time").map(x => x.subtitle).join("|") === "→ 14:00 Colombo|→ 17:30 Tokyo|→ 05:30 New York" && nq("?dates")[0].icon === "󰃭" && nq("world clock").some(x => x.title === "World clock"))
     check("native: a zone the bar never probed answers", nq("time in reykjavik")[0].title === "08:30 Reykjavik")
+    const col = nq("#ff6644").filter(r => r.provider === "colors"), hsl = nq("hsl(210 70% 50%)").filter(r => r.provider === "colors")
+    check("native: colours through punctumd keep their swatch, add OKLCH, read hsl()", col.map(r => r.title).join("|") === "#FF6644|rgb(255, 102, 68)|hsl(11, 100%, 63%)|oklch(70% 0.193 34.1)"
+      && col.every(r => r.swatch === "#ff6644") && col[0].hero && hsl[0].title === "#2680D9" && nq("decade").every(r => r.provider !== "colors") && nq("pick a colour").some(r => r.title === "Pick a colour from the screen"), col.map(r => r.title).join("|") + " " + (hsl[0] || {}).title)
     const open = x => (nq(x).find(r => r.provider === "url") || {}).run
     check("native: web addresses open through punctumd, actions checked by the bar", open("example.com/a?b=1").target === "https://example.com/a?b=1" && open("example.com").label === "open"
       && open("localhost:3000").target === "http://localhost:3000" && nq("example.com")[0].alt.kind === "copy" && !open("readme.md") && !open("mr.smith") && open("nas.local").target === "https://nas.local")
@@ -1221,14 +1224,14 @@ print(json.dumps({
   { const T = c => ["term", c]
     const first = st => { Engine.setNativeStatus(Object.assign({ build: T("build"), fetch: T("fetch"), remove: T("remove") }, st)); return Engine.run("?extensions", config, { now })[0] }
     const offCargo = first({ running: false, cargo: true, release: true })
-    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, Time, Units run in JavaScript/.test(offCargo.subtitle)
+    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, [^·]*Units run in JavaScript/.test(offCargo.subtitle)
       && /runs no programs, opens no connections/.test(offCargo.subtitle) && offCargo.run.target.join() === "term,build" && offCargo.actionLabel === "Build" && offCargo.alt.target.join() === "term,fetch", offCargo.subtitle)
     const offRelease = first({ running: false, cargo: false, release: true })
     check("native row: off without cargo, Enter downloads the checked release", offRelease.run.target.join() === "term,fetch" && !offRelease.alt && /checks its SHA-256/.test(offRelease.subtitle))
     const offNone = first({ running: false, cargo: false, release: false })
     check("native row: with neither, Enter copies how to get Rust", offNone.run.kind === "copy" && offNone.run.target === "sudo pacman -S rust")
     const onMine = first({ running: true, version: "0.1.0", installed: true, cargo: true })
-    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, Time, Units run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
+    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, [^·]*Units run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
     const onPkg = first({ running: true, version: "0.1.0", installed: false, packaged: "/usr/bin/punctumd" })
     check("native row: on from a package, it says where and offers nothing to undo", /from \/usr\/bin\/punctumd/.test(onPkg.subtitle) && !onPkg.run && !onPkg.alt)
     Engine.setNativeStatus(null)

@@ -2,6 +2,7 @@
 //! stdout, one JSON object per line. See docs/native.md for the protocol.
 
 pub mod cities;
+pub mod colors;
 pub mod format;
 pub mod time;
 pub mod units;
@@ -13,8 +14,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// A result row, as the bar's script and JS extensions return them. `run`
-/// and `alt` are actions from the bar's short list (open, copy, paste, edit,
-/// argv), checked by the bar as a script's are.
+/// and `alt` are actions from the bar's short list, checked by the bar
+/// (lib/Extensions.js, nativeProvider). The rest are drawn as the JS
+/// extensions' are: `swatch` a colour tile, `image` an icon theme name.
 #[derive(Serialize, Debug, Clone, PartialEq, Default)]
 pub struct Row {
     pub title: String,
@@ -26,6 +28,8 @@ pub struct Row {
     pub run: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alt: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<String>,
 }
 
 /// What an extension answers: its rows, and for how long they hold. An
@@ -67,7 +71,7 @@ pub trait Extension: Sync {
 
 /// Every extension this build serves.
 pub fn extensions() -> &'static [&'static dyn Extension] {
-    &[&units::Units, &time::Time, &url::Url]
+    &[&units::Units, &time::Time, &url::Url, &colors::Colors]
 }
 
 pub const PROTOCOL: u32 = 1;

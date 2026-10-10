@@ -30,9 +30,10 @@ sum=""
 about() {
   cat <<EOF
 
-  Punctum's native extensions (units, time zones and dates, web addresses)
-  run in punctumd, a Rust program whose source is in native/ in this plugin
-  folder ($dir).
+  Punctum's native extensions (the ones ?extensions marks native: units,
+  time zones, colours, web addresses and more as they move) run in punctumd,
+  a Rust program whose source is in native/ in this plugin folder
+  ($dir).
 
   punctumd runs no other programs, opens no network connections, and reads
   only your time-zone data. The bar talks to it over a pipe. Without it, the
