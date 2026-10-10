@@ -1,0 +1,132 @@
+#!/bin/bash
+# Gets punctumd, the Rust half of Punctum's native extensions, onto this
+# machine, or takes it away. ?extensions runs it in a terminal, so every step
+# shows, and it asks before doing anything.
+#
+# Usage: punctum-native status   one line of JSON for the bar
+#        punctum-native build    build from native/ in this folder (needs cargo)
+#        punctum-native fetch    download the release binary for this version,
+#                                checked against native/checksums.txt
+#        punctum-native remove   delete bin/punctumd: back to the JS versions
+#
+# It installs only into this plugin's bin/, never with sudo. A punctumd from a
+# package (on PATH) is left alone. Whichever way it arrives, the bar picks it
+# up by itself: this stops the running one and the bar starts the new one.
+
+set -u
+
+dir=$(cd "$(dirname "$0")/.." && pwd -P)
+bin="$dir/bin/punctumd"
+repo="https://github.com/mycosavant/punctum"
+version=$(sed -n 's/^ *"version": *"\([0-9][0-9.]*\)".*/\1/p' "$dir/manifest.json" | head -1)
+case $(uname -m) in
+  x86_64) asset="punctumd-$version-x86_64-linux-musl" ;;
+  aarch64) asset="punctumd-$version-aarch64-linux-musl" ;;
+  *) asset="" ;;
+esac
+sum=""
+[[ -n $asset && -f "$dir/native/checksums.txt" ]] && sum=$(awk -v a="$asset" '$2 == a && $1 ~ /^[0-9a-f]{64}$/ { print $1; exit }' "$dir/native/checksums.txt")
+
+about() {
+  cat <<EOF
+
+  Punctum's native extensions (units, time zones and dates, web addresses)
+  run in punctumd, a Rust program whose source is in native/ in this plugin
+  folder ($dir).
+
+  punctumd runs no other programs, opens no network connections, and reads
+  only your time-zone data. The bar talks to it over a pipe. Without it, the
+  same extensions run in JavaScript inside the shell, as before.
+
+EOF
+}
+
+ask() {
+  local reply
+  read -r -p "  $1 [y/N] " reply
+  [[ $reply == [yY]* ]]
+}
+
+done_() {
+  echo
+  read -r -p "  ${1:-Done.} Press Enter to close. " _
+  exit "${2:-0}"
+}
+
+# Replace bin/punctumd with $1 in one step, then stop the running one so the
+# bar starts the new one.
+place() {
+  install -d "$dir/bin" &&
+    install -m 755 "$1" "$bin.new" &&
+    mv -f "$bin.new" "$bin" || return 1
+  pkill -x -U "$(id -u)" punctumd 2>/dev/null
+  return 0
+}
+
+case ${1:-} in
+  status)
+    cargo=false; command -v cargo >/dev/null && cargo=true
+    release=false; [[ -n $sum ]] && command -v curl >/dev/null && release=true
+    mine=false; [[ -x $bin ]] && mine=true
+    path=$(command -v punctumd 2>/dev/null || true)
+    [[ $path =~ ^/[A-Za-z0-9._/+-]*$ ]] || path=""
+    printf '{"version":"%s","cargo":%s,"release":%s,"installed":%s,"package":"%s"}\n' "$version" "$cargo" "$release" "$mine" "$path"
+    ;;
+
+  build)
+    about
+    echo "  This builds it from that source with cargo, which first downloads the"
+    echo "  Rust libraries it uses (pinned in Cargo.lock) from crates.io. It takes a"
+    echo "  minute or two, and installs into $dir/bin/."
+    echo
+    command -v cargo >/dev/null || done_ "cargo isn't installed (sudo pacman -S rust)." 1
+    ask "Build it now?" || done_ "Nothing changed."
+    target="${XDG_CACHE_HOME:-$HOME/.cache}/punctum/native-target"
+    # Built outside the plugin folder: the shell reloads the plugin for every
+    # file written under ~/.config/omarchy/plugins/.
+    CARGO_TARGET_DIR="$target" cargo build --release --locked --manifest-path "$dir/Cargo.toml" ||
+      done_ "The build failed; the bar keeps using the JavaScript versions." 1
+    place "$target/release/punctumd" || done_ "Couldn't install it into $dir/bin/." 1
+    done_ "Built and installed. The bar now uses it."
+    ;;
+
+  fetch)
+    about
+    [[ -n $sum ]] || done_ "There's no release binary for version $version on this machine ($(uname -m)) yet." 1
+    url="$repo/releases/download/v$version/$asset"
+    echo "  This downloads $url"
+    echo "  and checks it against the SHA-256 in native/checksums.txt:"
+    echo "    $sum"
+    echo "  That file is in git, so a changed checksum shows in the diff"
+    echo "  'omarchy plugin update' shows you. The binary is built from the tagged"
+    echo "  source by the release workflow, .github/workflows/release.yml."
+    echo
+    ask "Download it now?" || done_ "Nothing changed."
+    tmp=$(mktemp -d) || exit 1
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fL --proto '=https' --tlsv1.2 --max-filesize 50000000 -o "$tmp/$asset" "$url" ||
+      done_ "The download failed; nothing changed." 1
+    got=$(sha256sum "$tmp/$asset" | cut -d' ' -f1)
+    [[ $got == "$sum" ]] || done_ "Its SHA-256 is $got, not the one in checksums.txt. Not installed." 1
+    place "$tmp/$asset" || done_ "Couldn't install it into $dir/bin/." 1
+    done_ "Checked and installed. The bar now uses it."
+    ;;
+
+  remove)
+    if [[ ! -e $bin ]]; then
+      echo "  There's no punctumd in $dir/bin/."
+    elif ask "Remove $bin and go back to the JavaScript versions?"; then
+      rm -f "$bin" && pkill -x -U "$(id -u)" punctumd 2>/dev/null
+      echo "  Removed."
+    fi
+    other=$(command -v punctumd 2>/dev/null || true)
+    [[ -n $other ]] && echo "  The punctumd at $other stays, and the bar uses it; it came from a package or cargo install."
+    [[ -x $dir/target/release/punctumd ]] && echo "  So does the build in $dir/target/release/."
+    done_
+    ;;
+
+  *)
+    sed -n '6,10p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+esac

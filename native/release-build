@@ -1,0 +1,35 @@
+#!/bin/bash
+# Builds punctumd's release binaries exactly as .github/workflows/release.yml
+# does, so anyone can rebuild one from a tag and compare its SHA-256 with
+# native/checksums.txt (and with the release's own .sha256 files).
+#
+# Usage: native/release-build [out-dir]      default: dist/
+#
+# Static (musl), so one binary runs on any Linux distribution. The toolchain
+# is pinned and the build's own paths are remapped, so where you build it
+# doesn't change the bytes.
+
+set -euo pipefail
+
+TOOLCHAIN=1.99.0
+TARGETS=(x86_64-unknown-linux-musl)
+
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+out=$(mkdir -p "${1:-$root/dist}" && cd "${1:-$root/dist}" && pwd -P)
+version=$(sed -n 's/^ *"version": *"\([0-9][0-9.]*\)".*/\1/p' "$root/manifest.json" | head -1)
+crate=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/native/punctumd/Cargo.toml" | head -1)
+[[ $version == "$crate" ]] || { echo "manifest.json says $version, punctumd's Cargo.toml $crate" >&2; exit 1; }
+
+rustup toolchain install "$TOOLCHAIN" --profile minimal --target "${TARGETS[@]}" >&2
+cargo_home=${CARGO_HOME:-$HOME/.cargo}
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+for target in "${TARGETS[@]}"; do
+  asset="punctumd-$version-${target/-unknown/}"
+  RUSTFLAGS="--remap-path-prefix=$root=/punctum --remap-path-prefix=$cargo_home=/cargo -C strip=symbols" \
+    CARGO_TARGET_DIR="$work/target" \
+    cargo "+$TOOLCHAIN" build --release --locked --target "$target" --manifest-path "$root/Cargo.toml" >&2
+  install -m 755 "$work/target/$target/release/punctumd" "$out/$asset"
+  (cd "$out" && sha256sum "$asset" > "$asset.sha256" && cat "$asset.sha256")
+done

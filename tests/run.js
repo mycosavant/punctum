@@ -1217,6 +1217,22 @@ print(json.dumps({
   const mine = Ext.collect([{ dir: "/home/x/ext/n", manifest: JSON.stringify({ schema: 1, id: "n", type: "native" }), user: true }])
   check("native: only the bar's own extensions may be native", mine.list.length === 0 && /come with Punctum/.test(mine.errors[0].error))
   check("native: a native entry must be a .js file", /entry must be/.test(Ext.validate({ schema: 1, id: "n", type: "native", entry: "../x.sh" }, "/x").error || ""))
+  // ?extensions leads with punctumd: on or off, what it is, and the way to switch.
+  { const T = c => ["term", c]
+    const first = st => { Engine.setNativeStatus(Object.assign({ build: T("build"), fetch: T("fetch"), remove: T("remove") }, st)); return Engine.run("?extensions", config, { now })[0] }
+    const offCargo = first({ running: false, cargo: true, release: true })
+    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, Time, Units run in JavaScript/.test(offCargo.subtitle)
+      && /runs no programs, opens no connections/.test(offCargo.subtitle) && offCargo.run.target.join() === "term,build" && offCargo.actionLabel === "Build" && offCargo.alt.target.join() === "term,fetch", offCargo.subtitle)
+    const offRelease = first({ running: false, cargo: false, release: true })
+    check("native row: off without cargo, Enter downloads the checked release", offRelease.run.target.join() === "term,fetch" && !offRelease.alt && /checks its SHA-256/.test(offRelease.subtitle))
+    const offNone = first({ running: false, cargo: false, release: false })
+    check("native row: with neither, Enter copies how to get Rust", offNone.run.kind === "copy" && offNone.run.target === "sudo pacman -S rust")
+    const onMine = first({ running: true, version: "0.1.0", installed: true, cargo: true })
+    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, Time, Units run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
+    const onPkg = first({ running: true, version: "0.1.0", installed: false, packaged: "/usr/bin/punctumd" })
+    check("native row: on from a package, it says where and offers nothing to undo", /from \/usr\/bin\/punctumd/.test(onPkg.subtitle) && !onPkg.run && !onPkg.alt)
+    Engine.setNativeStatus(null)
+    check("native row: not shown before the bar has looked", Engine.run("?extensions", config, { now })[0].title !== "Native extensions") }
   const back = Extensions.install(Engine, Ext, found)
   check("native: without punctumd, units runs its JS fallback and says so", back.manifests.find(m => m.id === "units").runtime === "js" && q("5 km to mi")[0].title === "3.1069 mi"
     && /running its JS fallback/.test(q("?extensions").find(x => x.title === "Units").subtitle)) }

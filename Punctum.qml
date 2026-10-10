@@ -165,6 +165,7 @@ Item {
     root.refreshZones()
     root.refreshWindows()
     root.refreshAgent()   // picked up when it changes, even after the shell started
+    root.startNative()    // one installed since the bar last looked
     root.recompute()   // the kept query may be time-sensitive ("time", "3pm to tokyo")
     // Like Spotlight: the last query comes back selected, so typing replaces it
     // and an arrow key keeps it.
@@ -863,6 +864,54 @@ Item {
   property var nativePending: ({})
   property int nativeCached: 0
   property int nativeFailures: 0      // starts in a row without a hello
+  property string nativeVersion: ""
+
+  // Started at startup, when it stops (see onExited), and on each open while
+  // it isn't running, so one built or installed since is picked up. With none
+  // installed that's one bash that finds nothing, per open.
+  function startNative() {
+    if (nativeProc.running || nativeRestart.running) return
+    root.nativeFailures = 0
+    nativeProc.running = true
+  }
+
+  // What ?extensions says about punctumd, and what it offers: built here,
+  // downloaded and checked, or removed, each in a terminal through
+  // bin/punctum-native, which shows what it does and asks first.
+  function refreshNativeStatus() {
+    if (!nativeStatusProc.running) nativeStatusProc.running = true
+  }
+
+  function nativeTerminal(cmd) {
+    return ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=Punctum native extensions",
+            "-e", root.pluginDir + "/bin/punctum-native", cmd]
+  }
+
+  function publishNativeStatus(text) {
+    var s = {}
+    try { s = JSON.parse(String(text || "").trim() || "{}") || {} } catch (e) { s = {} }
+    Engine.setNativeStatus({
+      running: Object.keys(root.nativeServed).length > 0,
+      version: root.nativeVersion,
+      cargo: s.cargo === true,
+      release: s.release === true,
+      installed: s.installed === true,
+      packaged: typeof s.package === "string" && s.package !== "" && s.package.indexOf(root.pluginDir + "/") !== 0 ? s.package : "",
+      build: root.nativeTerminal("build"),
+      fetch: root.nativeTerminal("fetch"),
+      remove: root.nativeTerminal("remove")
+    })
+    if (root.opened) root.recompute()
+  }
+
+  Process {
+    id: nativeStatusProc
+    command: [root.pluginDir + "/bin/punctum-native", "status"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.publishNativeStatus(text)
+    }
+  }
 
   // ctx.native: the rows for this query, or null while punctumd works them out.
   // An answer that has gone stale (a clock) is shown while the fresh one comes.
@@ -887,7 +936,9 @@ Item {
       if (r.protocol === 1 && Array.isArray(r.extensions)) r.extensions.forEach(function(id) { if (typeof id === "string") served[id] = true })
       else console.warn("punctum: punctumd speaks protocol " + r.protocol + ", the bar 1; using JS fallbacks")
       root.nativeFailures = 0
+      root.nativeVersion = typeof r.version === "string" ? r.version.slice(0, 32) : ""
       root.nativeServed = served
+      root.refreshNativeStatus()
       if (root.extensionsText) root.installExtensions(root.extensionsText)
       return
     }
@@ -914,10 +965,12 @@ Item {
       var had = Object.keys(root.nativeServed).length > 0
       root.nativeServed = ({})
       root.nativePending = ({})
+      root.nativeVersion = ""
+      root.refreshNativeStatus()
       if (had && root.extensionsText) root.installExtensions(root.extensionsText)
       // 127: not installed. Anything else is a crash or a kill, so start it
       // again, backing off, and give up after five failures in a row.
-      if (exitCode === 127) { console.info("punctum: no punctumd; native extensions use their JS fallbacks"); return }
+      if (exitCode === 127) { if (!had) console.info("punctum: no punctumd; native extensions use their JS fallbacks"); return }
       if (++root.nativeFailures > 5) { console.warn("punctum: punctumd keeps stopping (" + exitCode + "); using JS fallbacks"); return }
       nativeRestart.interval = 500 * Math.pow(2, root.nativeFailures - 1)
       nativeRestart.restart()

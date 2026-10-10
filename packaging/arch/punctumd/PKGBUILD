@@ -1,0 +1,44 @@
+# Maintainer: mycosavant <https://github.com/mycosavant>
+#
+# punctumd from a tagged source release. The Punctum plugin itself comes from
+# `omarchy plugin add https://github.com/mycosavant/punctum.git`; it finds
+# this punctumd on PATH. See docs/native.md.
+
+pkgname=punctumd
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Native extensions for Punctum, the extensible command bar for Omarchy'
+arch=('x86_64' 'aarch64')
+url='https://github.com/mycosavant/punctum'
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'tzdata')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP') # updpkgsums once the tag exists
+
+prepare() {
+  cd "punctum-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "punctum-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p punctumd
+}
+
+check() {
+  cd "punctum-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen -p punctumd
+}
+
+package() {
+  cd "punctum-$pkgver"
+  install -Dm755 target/release/punctumd "$pkgdir/usr/bin/punctumd"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 docs/native.md "$pkgdir/usr/share/doc/$pkgname/native.md"
+}

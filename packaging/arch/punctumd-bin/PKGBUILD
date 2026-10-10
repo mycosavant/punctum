@@ -1,0 +1,29 @@
+# Maintainer: mycosavant <https://github.com/mycosavant>
+#
+# punctumd as released: the static binary .github/workflows/release.yml built
+# with native/release-build, checked against the same SHA-256 as
+# native/checksums.txt. Rebuild it from the tag with that script to compare.
+# The Punctum plugin itself comes from `omarchy plugin add`; it finds this
+# punctumd on PATH. See docs/native.md.
+
+pkgname=punctumd-bin
+_name=punctumd
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Native extensions for Punctum, the extensible command bar for Omarchy (release binary)'
+arch=('x86_64')
+url='https://github.com/mycosavant/punctum'
+license=('MIT')
+depends=('tzdata')
+provides=('punctumd')
+conflicts=('punctumd')
+options=('!strip' '!debug')
+source=("LICENSE-$pkgver::https://raw.githubusercontent.com/mycosavant/punctum/v$pkgver/LICENSE")
+source_x86_64=("$_name-$pkgver-x86_64::$url/releases/download/v$pkgver/$_name-$pkgver-x86_64-linux-musl")
+sha256sums=('SKIP')           # updpkgsums once the release exists
+sha256sums_x86_64=('SKIP')    # must equal native/checksums.txt for this version
+
+package() {
+  install -Dm755 "$_name-$pkgver-$CARCH" "$pkgdir/usr/bin/punctumd"
+  install -Dm644 "LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

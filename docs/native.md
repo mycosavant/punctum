@@ -36,33 +36,64 @@ That gets the project:
 - room for a real sandbox for extensions that answer every keystroke, which JS
   extensions inside the shell can't have.
 
-## Building it
+## Getting it
 
-```sh
-cargo build --release
-```
+`omarchy plugin add` only clones the repository and never builds or runs
+anything, so a plain install starts with the JavaScript versions. There are
+three ways to get punctumd from there.
 
-The bar looks for punctumd in this order, at startup and whenever it stops:
+**From the bar.** `?extensions` opens with a *Native extensions* row. It says
+whether they run in Rust or JavaScript, what punctumd is and what it touches.
+Enter starts the switch in a terminal, through `bin/punctum-native`. That
+script shows what it is about to do and asks before doing it:
 
-1. `bin/punctumd` in the plugin folder (not in git; for a copied binary),
-2. `target/release/punctumd`, from the build above,
-3. `punctumd` on `PATH`, from a distribution package or `cargo install --path native/punctumd`.
+| You have | Enter | Shift+Enter |
+|---|---|---|
+| cargo | build it from `native/` in the plugin folder | download the release instead, if there is one |
+| no cargo, a release for this version | download it and check its SHA-256 against `native/checksums.txt` | |
+| neither | copy `sudo pacman -S rust` | |
+| punctumd in the plugin's `bin/` | rebuild (or download again) | remove it: back to JavaScript |
+| punctumd from a package | (nothing to do here) | |
 
-If none is found, native extensions run their JS fallbacks, and
-`?extensions` says so for each one. When punctumd stops, the bar starts it
-again: it waits 0.5 s before the first try and doubles the wait each time.
-After five failures in a row without a hello it stays on the fallbacks.
+The build runs in `~/.cache/punctum/native-target`. The shell reloads the
+plugin for every file written under `~/.config/omarchy/plugins/`, so
+building there would make it reload over and over. Only the finished binary
+is copied into `bin/`. A download is checked against `native/checksums.txt`,
+which is in git, so a new checksum shows in the diff that
+`omarchy plugin update` shows before it pulls. Nothing uses sudo.
 
-Building inside the installed plugin folder works, but the shell sees every
-file cargo writes under `~/.config/omarchy/plugins/` and reloads the plugin
-for each one. It's quieter to build elsewhere (your own clone, say) and copy
-the one binary in: `install -m755 target/release/punctumd
-~/.config/omarchy/plugins/io.github.mycosavant.punctum/bin/`, then
+**From a package.** `packaging/arch/` has `punctumd` (from a tagged source
+release, with `cargo test` in `check()`), `punctumd-bin` (the release binary,
+unstripped so its SHA-256 still equals the release's) and `punctumd-git`
+(latest main). Each installs only `/usr/bin/punctumd`, which the bar finds
+on `PATH`; the plugin itself still comes from `omarchy plugin add`.
+
+**By hand.** `cargo build --release` in a clone, then copy
+`target/release/punctumd` into the plugin's `bin/` and run
 `pkill -x punctumd`.
 
-`omarchy plugin add` only clones the repository and never builds anything, so
-a plain install runs the fallbacks until you build punctumd or install a
-package.
+The bar looks for punctumd in this order: the plugin's `bin/punctumd`, then
+its `target/release/punctumd`, then `punctumd` on `PATH`. It looks at
+startup, whenever punctumd stops, and on each open while none is running, so
+a new one is picked up without restarting the shell. When punctumd stops,
+the bar starts it again: it waits 0.5 s before the first try and doubles the
+wait each time. After five failures in a row without a hello it stays on the
+fallbacks until the next open.
+
+## Releasing it
+
+1. Bump the version in `manifest.json` and `native/punctumd/Cargo.toml`.
+   `native/release-build` refuses to build if they differ.
+2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` runs
+   `native/release-build` and attaches the static (musl) binaries and their
+   `.sha256` files to a **draft** release.
+3. Rebuild from the tag yourself with `native/release-build` and compare the
+   checksums. The build is reproducible: the toolchain is pinned and paths
+   are remapped, and two checkouts in different folders give the same
+   bytes.
+4. Publish the draft, add its lines to `native/checksums.txt`, and update
+   `pkgver` and the checksums in `packaging/arch/*/PKGBUILD` (`updpkgsums`,
+   then `makepkg --printsrcinfo > .SRCINFO`).
 
 ## The protocol
 
@@ -144,21 +175,3 @@ cargo test                      # the Rust extensions and the protocol
 cargo build && node tests/run.js  # the bar, with native extensions through punctumd and through their fallbacks
 for t in tests/*-parity.js; do node "$t"; done   # each native extension agrees with its JS
 ```
-
-## Shipping a binary
-
-Omarchy's plugin installer clones the repository and runs nothing else, and
-the marketplace's publishing rules say nothing about binaries either way.
-There are three ways to get punctumd onto a machine:
-
-- **A package**: AUR (`punctum-bin` or `punctum-git`), and later other
-  distributions, installs `/usr/bin/punctumd`. The bar finds it on `PATH`.
-  This is also how Punctum would ship outside Omarchy.
-- **A release download**, which the bar would fetch and check on request. This
-  is the Windscribe plugin's approach, but it is more code that has to be
-  trusted.
-- **Building from the clone**, with `cargo build --release`, for anyone with
-  Rust installed.
-
-Committing binaries to git is ruled out. Updates would be opaque blobs that
-nobody can review, which defeats `omarchy plugin update` showing a diff.

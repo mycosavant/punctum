@@ -14,6 +14,8 @@ Nothing, unless you ask:
 | You type a currency query (`100 usd to eur`) and the saved rates are stale | One GET, response capped at 256 KB | open.er-api.com |
 | You press Enter on a web row (bang, Bible, keyword command, web address, chat site) | Your browser opens the address | the site named on the row's subtitle |
 | You press Enter on a bang that isn't in your list | The whole query, bang included | DuckDuckGo (`bangs.fallback`; `""` turns it off) |
+| You choose to build punctumd from *Native extensions* in `?extensions`, and say yes in the terminal | cargo downloads the Rust libraries pinned in `Cargo.lock` | crates.io |
+| You choose to download punctumd there instead, and say yes | One HTTPS GET of the release binary, capped at 50 MB, installed only if its SHA-256 matches `native/checksums.txt` | github.com (release assets) |
 
 Searching files, file contents, packages, clipboard history, keybindings and
 apps is local. So is everything typed until Enter.

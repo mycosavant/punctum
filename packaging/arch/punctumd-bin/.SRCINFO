@@ -1,0 +1,18 @@
+pkgbase = punctumd-bin
+	pkgdesc = Native extensions for Punctum, the extensible command bar for Omarchy (release binary)
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/mycosavant/punctum
+	arch = x86_64
+	license = MIT
+	depends = tzdata
+	provides = punctumd
+	conflicts = punctumd
+	options = !strip
+	options = !debug
+	source = LICENSE-0.1.0::https://raw.githubusercontent.com/mycosavant/punctum/v0.1.0/LICENSE
+	sha256sums = SKIP
+	source_x86_64 = punctumd-0.1.0-x86_64::https://github.com/mycosavant/punctum/releases/download/v0.1.0/punctumd-0.1.0-x86_64-linux-musl
+	sha256sums_x86_64 = SKIP
+
+pkgname = punctumd-bin

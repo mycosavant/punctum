@@ -1,0 +1,54 @@
+# Maintainer: mycosavant <https://github.com/mycosavant>
+#
+# punctumd from the latest commit on main. The Punctum plugin itself comes
+# from `omarchy plugin add https://github.com/mycosavant/punctum.git`; it
+# finds this punctumd on PATH. See docs/native.md.
+
+pkgname=punctumd-git
+_name=punctum
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc='Native extensions for Punctum, the extensible command bar for Omarchy (latest commit)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/mycosavant/punctum'
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'tzdata')
+makedepends=('cargo' 'git')
+provides=('punctumd')
+conflicts=('punctumd')
+source=("$_name::git+$url.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_name"
+  local v
+  v=$(sed -n 's/^version = "\(.*\)"/\1/p' native/punctumd/Cargo.toml | head -1)
+  printf '%s.r%s.g%s' "$v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd "$_name"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$_name"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p punctumd
+}
+
+check() {
+  cd "$_name"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen -p punctumd
+}
+
+package() {
+  cd "$_name"
+  install -Dm755 target/release/punctumd "$pkgdir/usr/bin/punctumd"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 docs/native.md "$pkgdir/usr/share/doc/$pkgname/native.md"
+}

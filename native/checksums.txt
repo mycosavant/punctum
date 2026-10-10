@@ -1,0 +1,4 @@
+# SHA-256 of each punctumd release binary, as native/release-build prints
+# them. bin/punctum-native downloads only a binary listed here, for the
+# version in manifest.json, and refuses one that doesn't match. Add a
+# release's lines when you publish it; rebuild from the tag to check them.

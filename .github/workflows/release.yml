@@ -1,0 +1,29 @@
+# On a version tag (v0.1.0), builds punctumd with native/release-build, the
+# same script anyone can run to rebuild it and compare, and attaches the
+# binaries and their .sha256 files to a draft release. Nothing is published
+# until a maintainer reviews the draft, publishes it, and commits the
+# checksums to native/checksums.txt, which is what bin/punctum-native checks
+# a download against.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  punctumd:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Build
+        run: native/release-build dist
+      - name: Attach to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* --draft --verify-tag --title "Punctum $TAG" \
+            --notes "punctumd binaries for $TAG, built by native/release-build. To check one, rebuild it from this tag with that script and compare the SHA-256."
