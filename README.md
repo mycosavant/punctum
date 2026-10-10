@@ -28,6 +28,10 @@ It also fixes three things found reading upstream:
 - Copied text was put on a `bash` command line, where any process can read it. It now goes to `wl-copy` on stdin.
 - A test executed a payload containing `rm -rf ~`, which a quoting regression would have run for real. Test payloads now only create marker files in a temporary folder.
 
+## Documentation
+
+Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md), [Everywhere](docs/everywhere.md), [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), [writing a provider](docs/writing-a-provider.md), [architecture](docs/architecture.md), and a [proposal](docs/proposal-extensions.md) for optional extensions, a standalone Everywhere and a community release.
+
 ![Command Bar: Spotlight-style command bar for Omarchy](preview.png)
 
 <p align="center">
@@ -196,6 +200,8 @@ Omarchy starts every agent with its auto-approve setting (`claude --permission-m
 Under the agent, a "Chat websites" section lists each site, so Alt+2 and Alt+3 open the prompt in ChatGPT or Claude instead. Add others, such as Perplexity (`https://www.perplexity.ai/search?q={q}`), to the list. Opening one sends your prompt to that site, the same as a web keyword.
 
 ## Adding a feature
+
+[Writing a provider](docs/writing-a-provider.md) has the full contract, background searches and testing. In short:
 
 Each feature is a JavaScript file in `providers/`:
 

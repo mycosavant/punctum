@@ -1,0 +1,92 @@
+# Security and privacy
+
+The bar runs inside `omarchy-shell`, as you, with everything you can do. So
+the question for each feature is what it runs, what it reads, what it keeps,
+and what leaves the machine, and how text you type (or text you copied) is
+kept from becoming code.
+
+## What leaves the machine
+
+Nothing, unless you ask:
+
+| When | What | Where |
+|---|---|---|
+| You type a currency query (`100 usd to eur`) and the saved rates are stale | One GET, response capped at 256 KB | open.er-api.com |
+| You press Enter on a web row (bang, Bible, keyword command, web address, chat site) | Your browser opens the address | the site named on the row's subtitle |
+| You press Enter on a bang that isn't in your list | The whole query, bang included | DuckDuckGo (`bangs.fallback`; `""` turns it off) |
+
+Searching files, file contents, packages, clipboard history, keybindings and
+apps is local. So is everything typed until Enter.
+
+## What it reads, and keeps
+
+| Feature | Reads | Keeps |
+|---|---|---|
+| Clipboard (`cb `) | `~/.local/state/omarchy/clipboard-history.json`, once per open, only in `cb ` mode | Nothing: dropped when the bar closes |
+| Everywhere (`/`) | The system plocate index; its own index of home | `~/.cache/omarchy-commandbar/home.db`, every path in your home folder, mode 600 |
+| Files (`~`), Inside files (`rg `) | Your home folder, live | Results until the bar closes |
+| Packages (`pkg `) | pacman's sync databases, through `expac` | The list until the bar closes |
+| Apps, keybindings | Desktop entries; `omarchy-menu-keybindings` | Launch counts, pins (cache) |
+
+Everything the bar keeps is under `~/.cache/omarchy-commandbar/`, in a 700
+folder, each file 600. The results list itself (clipboard texts, file paths)
+is cleared when the bar closes; only the typed text is kept, so it can come
+back next time (`last-query`).
+
+## Typed text and the shell
+
+Every command the bar runs is an **argument list**, never a string for a shell
+to parse, except where noted, and in those cases the typed text is an
+**argument to a fixed script**, never part of it.
+
+| Feature | How the text travels |
+|---|---|
+| Everywhere | `bash -c SCRIPT commandbar-locate <query> <count> <exclusions> <words…>`. The script is a constant; plocate gets the words after `--`, fzf gets the query as one `--filter=` value, and the word count is checked to be digits |
+| Inside files | `bash -c SCRIPT commandbar-rg <words>`; rg gets them as one fixed-string argument after `--` |
+| Files | `fd` as an argument list; words regex-escaped, after `--` or inside `--and=` |
+| Packages | `bash -c SCRIPT commandbar-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
+| Clipboard, copy | Text on `wl-copy`'s stdin, never on a command line (where any process could read it in `/proc`) |
+| Inbox note | Text on `commandbar-note`'s stdin |
+| Edit at line | `commandbar-edit <line> <path>`; the line must be digits, the path absolute |
+| Web rows | `{q}` URL-encoded, the address handed to `xdg-open` as one argument; only `http(s)` templates are accepted for bangs |
+| Keyword `run` commands | See below |
+
+The tests run Everywhere and Inside files **for real** with a query of
+`$(touch <marker>)` and check the marker never appears. Both checks were
+calibrated by adding an `eval` to each script, which made them fail.
+
+### Keyword `run` commands
+
+A `run` template is code you wrote, and `{q}` is where typed text goes. Before
+this fork, `{q}` was substituted into the script, so a query containing `$'`
+or `` $` `` could pull the rest of the template back in unquoted. Now `{q}`
+becomes a reference to `$1` (`"$1"`, or `${1}` inside double quotes) and the
+text is passed as `$1`: bash expands it once as a value and never parses it.
+
+Two kinds of template are refused, with a message, because bash would evaluate
+the value itself there:
+
+- `{q}` inside single quotes (it wouldn't expand at all);
+- arithmetic or array subscripts: `$(( ))`, `(( ))`, `[[ ]]`, `let`,
+  `declare`, `typeset`, `local`, `${a[…]}`. In these, a value such as
+  `a[$(cmd)]` runs `cmd`.
+
+## Privilege
+
+The bar never asks for administrator rights itself. One feature hands you a
+prompt that does: **Enter on a package you don't have** opens a terminal
+running `sudo pacman -S <repo>/<name>`. sudo asks for your password, and
+pacman shows what it will install and asks again. Closing the terminal at
+either prompt installs nothing. Remove `"packages"` from `"providers"` if you'd
+rather the bar never offer it. (The Omarchy plugin marketplace doesn't allow
+this; see the [release proposal](proposal-extensions.md).)
+
+## Limits of these guarantees
+
+- The bar is a plugin of a shell that runs as you. A malicious provider file
+  could do anything you can. Read a provider before adding it.
+- Bounds on searches (3 s, `timeout 3`) protect responsiveness, not secrecy.
+- The plocate system index is built by root and filtered by plocate, which
+  only shows paths you're allowed to list. The bar adds nothing to that.
+- `xdg-open` decides which app opens a file; a file's type can be chosen by
+  whoever made it.
