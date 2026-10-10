@@ -35,7 +35,7 @@ A short example:
 |---|---|---|
 | `hotkey` | `"SUPER + PERIOD"` | The key that opens the bar. If it's taken by another binding, the bar says so instead of binding over it |
 | `extensions` | `{}` | `"id": false` switches an extension off, `true` on (`{ "enabled": false }` works too). Unlisted ones follow their manifest |
-| `providers` | unset | The older form: a list of ids that are on, in order. If present, it decides alone |
+| `providers` | unset | The older form: a list of ids that are on, in order. If present, it decides alone. `locate` in it means `everywhere`, and a `"locate"` section still sets Everywhere's exclusions when there's no `"everywhere"` one |
 
 Your own extensions go in `~/.config/omarchy/commandbar/extensions/<id>/`; see
 [Writing extensions](writing-extensions.md). One with a bundled extension's

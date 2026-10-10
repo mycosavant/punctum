@@ -181,13 +181,27 @@ Item {
   // the rows built from them) goes when it closes.
   function forget() {
     root.search = null
+    // A process's StdioCollector keeps the last output it read (file lines,
+    // the clipboard history) until the next run, so each runner is given a
+    // run of `true`, whose empty output replaces it. A search key of ""
+    // files its output nowhere.
     root.searchWantKey = ""
-    root.searchQueue = []
+    root.searchOpts = ({})
+    root.searchQueue = [["true"]]
     if (searchProc.running) searchProc.signal(15)
-    // Loads read for this open go; ones kept on a timer (keybindings) stay.
+    else root.startSearch()
+    // Loads read for this open go, queued ones too; ones kept on a timer
+    // (keybindings) stay.
     var kept = {}
     for (var k in root.loadCache) if (root.loadCache[k].keep) kept[k] = root.loadCache[k]
     root.loadCache = kept
+    root.loadQueue = root.loadQueue.filter(function(j) { return j.keep })
+    var still = {}
+    for (var q = 0; q < root.loadQueue.length; q++) still[root.loadQueue[q].key] = true
+    if (root.loadCurrent && root.loadCurrent.keep) still[root.loadCurrent.key] = true
+    root.loading = still
+    root.loadQueue.push({ key: "", argv: ["true"], keep: false, flush: true, generation: -1 })
+    if (!loadProc.running) root.loadNext()
     root.loadGeneration++
     Engine.forget()
     // Rows hold clipboard texts and file paths; a kept query is recomputed
@@ -382,12 +396,21 @@ Item {
     root.inputCurrent = root.inputQueue.shift()
     inputProc.command = root.inputCurrent.argv
     inputProc.stdinEnabled = true
+    inputProc.didStart = false
     inputProc.running = true
   }
 
   Process {
     id: inputProc
+    property bool didStart: false
+    onRunningChanged: if (!running && !didStart) Qt.callLater(function() {
+      if (inputProc.running || inputProc.didStart || !root.inputCurrent) return
+      Quickshell.execDetached(["notify-send", "-a", "Command Bar", "Couldn't run " + String(root.inputCurrent.argv[0]).split("/").pop()])
+      root.inputCurrent = null
+      root.inputNext()
+    })
     onStarted: {
+      inputProc.didStart = true
       var job = root.inputCurrent
       if (job) inputProc.write(job.input)
       inputProc.stdinEnabled = false
@@ -495,6 +518,7 @@ Item {
     searchProc.command = root.searchQueue[0].map(String)
     root.searchQueue = root.searchQueue.slice(1)
     searchProc.stdinEnabled = searchProc.input !== null
+    searchProc.didStart = false
     searchProc.running = true
     searchWatchdog.interval = Math.max(500, Math.min(30000, Number(root.searchOpts.timeout) || 3000))
     searchWatchdog.restart()
@@ -505,7 +529,13 @@ Item {
     property string forKey: ""
     property bool timedOut: false
     property var input: null
+    property bool didStart: false
+    // A command that can't start (not executable, not installed) gets no
+    // exited or streamFinished from Quickshell, only running going false.
+    // Without this, every later search would wait for it for ever.
+    onRunningChanged: if (!running && !didStart) Qt.callLater(root.searchFailedToStart)
     onStarted: {
+      searchProc.didStart = true
       if (searchProc.input === null) return
       searchProc.write(searchProc.input)
       searchProc.input = null
@@ -526,6 +556,20 @@ Item {
       }
     }
     onExited: { searchWatchdog.stop(); root.searchExited = true; root.startSearch() }
+  }
+
+  function searchFailedToStart() {
+    if (searchProc.running || searchProc.didStart || root.searchExited) return
+    searchWatchdog.stop()
+    root.searchExited = true
+    root.searchStreamDone = true
+    if (root.opened && searchProc.forKey !== "" && searchProc.forKey === root.searchWantKey) {
+      console.warn("commandbar: couldn't start " + JSON.stringify(searchProc.command))
+      root.search = { key: searchProc.forKey, chunks: [""], text: "", timedOut: false, failed: true, done: true }
+      root.searchQueue = []
+      root.recompute()
+    }
+    root.startSearch()
   }
 
   Timer { id: searchWatchdog; interval: 3000; onTriggered: if (searchProc.running) { searchProc.timedOut = true; searchProc.signal(15) } }
@@ -560,12 +604,16 @@ Item {
     if (root.loadQueue.length === 0) return
     root.loadCurrent = root.loadQueue.shift()
     loadProc.command = root.loadCurrent.argv
+    loadProc.didStart = false
     loadProc.running = true
     loadWatchdog.restart()
   }
 
   Process {
     id: loadProc
+    property bool didStart: false
+    onStarted: loadProc.didStart = true
+    onRunningChanged: if (!running && !didStart) Qt.callLater(root.loadFailedToStart)
     stdout: StdioCollector {
       id: loadOut
       waitForEnd: true
@@ -574,6 +622,13 @@ Item {
       loadWatchdog.stop()
       var job = root.loadCurrent
       root.loadCurrent = null
+      if (job && job.flush) job = null
+      if (job && !job.keep && job.generation !== root.loadGeneration) {
+        // Read for an earlier open: dropped, and the current open asks again.
+        delete root.loading[job.key]
+        job = null
+        if (root.opened) root.recompute()
+      }
       if (job) {
         delete root.loading[job.key]
         var text = String(loadOut.text || "")
@@ -588,6 +643,22 @@ Item {
       }
       root.loadNext()
     }
+  }
+
+  function loadFailedToStart() {
+    if (loadProc.running || loadProc.didStart || !root.loadCurrent) return
+    loadWatchdog.stop()
+    var job = root.loadCurrent
+    root.loadCurrent = null
+    if (!job.flush) {
+      console.warn("commandbar: couldn't start " + JSON.stringify(job.argv))
+      delete root.loading[job.key]
+      var next = Object.assign({}, root.loadCache)
+      next[job.key] = { text: "", at: Date.now(), keep: job.keep, failed: true }
+      root.loadCache = next
+      if (root.opened) root.recompute()
+    }
+    root.loadNext()
   }
 
   Timer { id: loadWatchdog; interval: 5000; onTriggered: if (loadProc.running) loadProc.signal(15) }
@@ -612,11 +683,20 @@ Item {
     if (root.jobQueue.length === 0) return
     root.jobCurrent = root.jobQueue.shift()
     jobProc.command = root.jobCurrent.argv
+    jobProc.didStart = false
     jobProc.running = true
   }
 
   Process {
     id: jobProc
+    property bool didStart: false
+    onStarted: jobProc.didStart = true
+    onRunningChanged: if (!running && !didStart) Qt.callLater(function() {
+      if (jobProc.running || jobProc.didStart || !root.jobCurrent) return
+      console.warn("commandbar: couldn't start job " + JSON.stringify(root.jobCurrent.argv))
+      root.jobCurrent = null
+      root.jobNext()
+    })
     stderr: StdioCollector {
       onStreamFinished: if (text.trim() !== "") console.warn("commandbar: job: " + text.trim().slice(0, 300))
     }
@@ -1129,7 +1209,7 @@ Item {
 
   function appIconSource(icon) {
     var value = String(icon || "")
-    if (value.charAt(0) === "/") return "file://" + value
+    if (value.charAt(0) === "/") return root.fileUrl(value)
     var themed = value ? Quickshell.iconPath(value, true) : ""
     return themed || Quickshell.iconPath("application-x-executable", true)
   }

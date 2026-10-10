@@ -2,6 +2,7 @@
 # Set or cancel a reminder or alarm, compatible with Omarchy's own reminders.
 #
 #   remind-set --at <unix time> [--alarm]     the message on stdin
+#   remind-set --in <seconds> [--alarm]       from now, when Enter was pressed
 #   remind-set --cancel <omarchy-reminder-….timer>
 #
 # A reminder is a transient systemd user timer named the way omarchy-reminder
@@ -10,7 +11,11 @@
 # indicator and `omarchy-reminder show` / `clear` see these too. It fires an
 # Omarchy notification; an alarm's is critical and plays the freedesktop
 # alarm sound three times. Like Omarchy's, a reminder doesn't survive a
-# reboot or logout, and one due while the laptop sleeps fires when it wakes.
+# reboot or logout. Unlike Omarchy's (which counts time awake), one due
+# while the laptop sleeps fires when it wakes: the timer is a wall-clock
+# time, given in UTC so a clock change can't move it.
+#
+# Every refusal is also a notification, since nothing else would show it.
 #
 # The message arrives on stdin (cut at 1000 characters, control characters
 # dropped), never in this script's arguments.
@@ -19,18 +24,24 @@ set -euo pipefail
 dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy-reminders"
 sound=/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga
 refresh() { omarchy-shell -q omarchy.indicators refresh >/dev/null 2>&1 || true; }
+refuse() {
+  echo "$1" >&2
+  omarchy-notification-send -g 󰢌 -u critical "Reminder not set" "$1" || true
+  exit 2
+}
 
 case ${1:-} in
 --cancel)
   unit=${2:-}
-  [[ $unit =~ ^omarchy-reminder-[A-Za-z0-9-]+\.timer$ ]] || { echo "not a reminder: $unit" >&2; exit 2; }
+  [[ $unit =~ ^omarchy-reminder-[A-Za-z0-9-]+\.timer$ ]] || refuse "not a reminder: $unit"
   systemctl --user stop "$unit" 2>/dev/null || true
   rm -f "$dir/${unit%.timer}.message"
   refresh
   omarchy-notification-send -g 󰢌 "Reminder cancelled"
   exit 0
   ;;
---at)
+--at | --in)
+  how=$1
   at=${2:-}
   alarm=0
   [[ ${3:-} == --alarm ]] && alarm=1
@@ -42,14 +53,18 @@ case ${1:-} in
   ;;
 esac
 
-[[ $at =~ ^[0-9]{1,12}$ ]] || { echo "bad time: $at" >&2; exit 2; }
+[[ $at =~ ^[0-9]{1,12}$ ]] || refuse "bad time: $at"
 now=$(date +%s)
+[[ $how == --in ]] && at=$((now + at))
 if ((at < now + 5 || at > now + 366 * 86400)); then
-  echo "the time must be between 5 seconds and a year from now" >&2
-  exit 2
+  refuse "The time must be between 5 seconds and a year from now"
 fi
 
 message=$(head -c 4000 | tr '\n\t' '  ' | tr -d '\000-\037\177' | cut -c1-1000)
+# omarchy-notification-send reads a body like "-u" or "--image=x" as an
+# option and fails, which would make the reminder silent. A word joiner in
+# front keeps it text and doesn't show.
+[[ $message == -* ]] && message=$'\u2060'"$message"
 minutes=$(((at - now + 59) / 60))
 unit="omarchy-reminder-${minutes}m-${now}-${RANDOM}"
 when=$(date -d "@$at" +%-H:%M)
@@ -70,7 +85,7 @@ fi
 
 # The fired command is a fixed script; title, body and paths are its arguments.
 systemd-run --user --quiet --collect \
-  --on-calendar="$(date -d "@$at" '+%Y-%m-%d %H:%M:%S')" --timer-property=AccuracySec=1s \
+  --on-calendar="$(date -u -d "@$at" '+%Y-%m-%d %H:%M:%S') UTC" --timer-property=AccuracySec=1s \
   --unit="$unit" \
   bash -c '
     u=normal; [ "$4" = 1 ] && u=critical

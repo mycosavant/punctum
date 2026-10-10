@@ -11,7 +11,7 @@
   "order": 15,
   "helpOrder": 85,
   "mode": {
-    "pattern": "^\\s*(!remindme|!remind|remind(\\s+me)?|reminder|alarm|wake(\\s+me)?)(\\s|$)",
+    "pattern": "^\\s*(!remindme|!remind|remind(\\s+me)?|reminder|(alarm|wake(\\s+me)?)(?=\\s*$|\\s+(\\d|at\\b|in\\b|for\\b|today|tonight|tomorrow|mon|tue|wed|thu|fri|sat|sun|noon|midnight)))(\\s|$)",
     "label": "Remind"
   },
   "requires": [

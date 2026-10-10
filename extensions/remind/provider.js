@@ -11,17 +11,20 @@
 //   remind                                what's set; Shift+Enter cancels one
 //
 // The time is parsed here; Enter runs remind-set (in this folder) with the
-// time as an argument and the message on stdin. A reminder doesn't survive a
-// reboot or logout, as with Omarchy's own.
+// time (--at a clock time, --in a duration, counted from Enter) as an
+// argument and the message on stdin. A reminder doesn't survive a reboot or
+// logout, as with Omarchy's own.
 
-var MODE = /^\s*(!remindme|!remind|remind(?:\s+me)?|reminder|alarm|wake(?:\s+me)?)(?:\s+|$)/i
+// "alarm" and "wake" need a time after them (or nothing), so "alarm clock"
+// and "wake on lan" stay ordinary searches.
+var MODE = /^\s*(!remindme|!remind|remind(?:\s+me)?|reminder|(?:alarm|wake(?:\s+me)?)(?=\s*$|\s+(?:\d|at\b|in\b|for\b|today|tonight|tomorrow|mon|tue|wed|thu|fri|sat|sun|noon|midnight)))(?:\s+|$)/i
 var UNITS = { s: 1, sec: 1, secs: 1, second: 1, seconds: 1, m: 60, min: 60, mins: 60, minute: 60, minutes: 60,
               h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600, d: 86400, day: 86400, days: 86400 }
 var UNIT = "(?:seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d)"
-var DURATION = new RegExp("(^|\\s)(?:in\\s+|for\\s+|after\\s+)?((?:\\d+(?:\\.\\d+)?\\s*" + UNIT + "(?:\\s*(?:and\\s+)?|(?=\\d)))+)(?=\\s|$)", "i")
+var DURATION = new RegExp("(^|\\s)(in\\s+|for\\s+|after\\s+)?((?:\\d+(?:\\.\\d+)?\\s*" + UNIT + "(?:\\s*(?:and\\s+)?|(?=\\d)))+)(?=\\s|$)", "gi")
 var DAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 }
 var DAY = "(today|tonight|tomorrow|sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?)"
-var CLOCK = new RegExp("(^|\\s)(?:" + DAY + "\\s+)?(at\\s+)?(noon|midnight|(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm|a\\.?m\\.?|p\\.?m\\.?)?)(?:\\s+" + DAY + ")?(?=\\s|$)", "i")
+var CLOCK = new RegExp("(^|\\s)(?:" + DAY + "\\s+)?(at\\s+)?(noon|midnight|(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm|a\\.?m\\.?|p\\.?m\\.?)?)(?:\\s+" + DAY + ")?(?=\\s|$)", "gi")
 var MAX_AHEAD = 366 * 86400 * 1000
 
 function pad(n) { return (n < 10 ? "0" : "") + n }
@@ -80,31 +83,49 @@ function clockTime(m, now) {
   return { at: at }
 }
 
-// { at: Date, message } | { missing: true, message } | { past: true } | null
+// Every time-like phrase in the text, in order: { index, length, at, marked,
+// seconds (durations) }. "Marked" means it says it's a time: "in 10m", a
+// leading "10m", "at 5", "5pm", a day name. A number in the message ("buy 2
+// eggs at 5pm", "a 3d printer at 5pm") is a candidate too, but unmarked.
+function candidates(t, now) {
+  var out = [], m, re
+  re = new RegExp(DURATION.source, "gi")
+  while ((m = re.exec(t))) {
+    var secs = seconds(m[3])
+    if (secs > 0) out.push({ index: m.index, length: m[0].length, seconds: Math.round(secs), at: new Date(now.getTime() + Math.round(secs) * 1000),
+                             marked: !!m[2] || m.index === 0 })
+    if (m[0].length === 0) re.lastIndex++
+  }
+  re = new RegExp(CLOCK.source, "gi")
+  while ((m = re.exec(t))) {
+    var c = clockTime(m, now)
+    if (c) out.push({ index: m.index, length: m[0].length, at: c.at, past: !!c.past, marked: true })
+    re.lastIndex = m.index + Math.max(1, m[1].length + 1)
+  }
+  return out.sort(function(a, b) { return a.index - b.index })
+}
+
+// { at: Date, message, seconds? } | { missing: true, message } | { past: true } | null
+// seconds is set for a duration, so the time is counted from Enter.
 function parse(text, now) {
   var t = " " + String(text || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim() + " "
-  var at = null, span = null, m
-  if ((m = t.match(DURATION))) {
-    var secs = seconds(m[2])
-    if (secs > 0) { at = new Date(now.getTime() + Math.round(secs) * 1000); span = m }
-  }
-  if (!at && (m = t.match(CLOCK))) {
-    var c = clockTime(m, now)
-    if (c && c.past) return { past: true }
-    if (c) { at = c.at; span = m }
-  }
-  // omarchy-reminder's form: a leading bare number is minutes.
-  if (!at && (m = t.match(/^\s(\d{1,4})(?=\s)/)) && parseInt(m[1], 10) > 0) {
-    at = new Date(now.getTime() + parseInt(m[1], 10) * 60000); span = m
-  }
-  var message = t
-  if (span) message = t.slice(0, span.index) + " " + t.slice(span.index + span[0].length)
+  var all = candidates(t, now)
+  var pick = all.filter(function(c) { return c.marked })[0] || all[0] || null
+  var m
+  // omarchy-reminder's form: a leading bare number is minutes, when nothing
+  // else in the text is a time.
+  if (!pick && (m = t.match(/^\s(\d{1,4})(?=\s)/)) && parseInt(m[1], 10) > 0)
+    pick = { index: 0, length: m[0].length, seconds: parseInt(m[1], 10) * 60, at: new Date(now.getTime() + parseInt(m[1], 10) * 60000) }
+  if (pick && pick.past) return { past: true }
+  var message = pick ? t.slice(0, pick.index) + " " + t.slice(pick.index + pick.length) : t
   message = message.replace(/\s+/g, " ").trim()
     .replace(/^(?:me\s+)?(?:to|that|about|for)\s+/i, "").replace(/^me\s+/i, "")
     .replace(/\s+(?:in|at|on|by)$/i, "").trim()
-  if (!at) return t.trim() ? { missing: true, message: message } : null
-  if (at.getTime() - now.getTime() > MAX_AHEAD) return null
-  return { at: at, message: message.slice(0, 1000) }
+  if (!pick) return t.trim() ? { missing: true, message: message } : null
+  if (pick.at.getTime() - now.getTime() > MAX_AHEAD) return null
+  var out = { at: pick.at, message: message.slice(0, 1000) }
+  if (pick.seconds) out.seconds = pick.seconds
+  return out
 }
 
 function until(at, now) {
@@ -164,7 +185,9 @@ var provider = {
     if (p && p.at) {
       var label = alarm ? "Alarm at " + when(p.at, now) : "Remind me at " + when(p.at, now)
       return [{ title: label + (p.message ? ": " + p.message : ""), subtitle: until(p.at, now) + " · Enter sets it" + (alarm ? " · with a sound" : ""), score: 98, copy: "",
-                run: { kind: "argv", target: [helper, "--at", String(Math.round(p.at.getTime() / 1000))].concat(alarm ? ["--alarm"] : []), input: p.message, label: alarm ? "set alarm" : "set reminder" } }]
+                // A duration counts from Enter (--in), a clock time is a time (--at).
+                run: { kind: "argv", target: [helper].concat(p.seconds ? ["--in", String(p.seconds)] : ["--at", String(Math.round(p.at.getTime() / 1000))]).concat(alarm ? ["--alarm"] : []),
+                       input: p.message, label: alarm ? "set alarm" : "set reminder" } }]
     }
     if (p && p.past) return [{ title: "That time has passed today", subtitle: "Try tomorrow, or a later time", score: 98, copy: "" }]
     if (p && p.missing) return [{ title: "When? Add a time", subtitle: "10m · 1h30m · 3pm · tomorrow 9am · friday noon", score: 98, copy: "" }]

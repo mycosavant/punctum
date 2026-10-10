@@ -747,9 +747,12 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // bin/commandbar-extensions: finds manifests, refuses what others could have planted
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const root = fs.mkdtempSync(os.tmpdir() + "/commandbar-exts-"), user = root + "/user"
+  // Under XDG_RUNTIME_DIR: /tmp is writable by everyone, which the helper rightly refuses.
+  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/commandbar-exts-"), user = root + "/user"
+  fs.chmodSync(root, 0o700)
   fs.mkdirSync(user + "/ok", { recursive: true, mode: 0o700 }); fs.chmodSync(user, 0o700)
   fs.writeFileSync(user + "/ok/extension.json", JSON.stringify({ schema: 1, id: "ok", requires: ["sh", "no-such-command-zz"] }))
+  fs.writeFileSync(user + "/ok/provider.js", "", { mode: 0o600 })
   fs.mkdirSync(user + "/linked", { mode: 0o700 }); fs.symlinkSync("/etc/hostname", user + "/linked/extension.json")
   const list = () => JSON.parse(spawnSync("python3", [P + "bin/commandbar-extensions", P + "extensions", user], { encoding: "utf8" }).stdout)
   const got = list().filter(e => e.user)
@@ -760,7 +763,50 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const open = list().filter(e => e.user)
   check("ext helper: a user folder others can write to is refused whole", open.length === 1 && /writable by others/.test(open[0].error), JSON.stringify(open))
   check("ext helper: the bundled ones are all found", list().filter(e => !e.user).length === BUNDLED)
+  fs.chmodSync(user, 0o700)
+  // The files a manifest names: inside the folder, yours alone, executable.
+  const outside = root + "/elsewhere"; fs.mkdirSync(outside, { mode: 0o777 }); fs.chmodSync(outside, 0o777)
+  fs.writeFileSync(outside + "/p.js", "", { mode: 0o666 }); fs.chmodSync(outside + "/p.js", 0o666)
+  fs.mkdirSync(user + "/linkjs", { mode: 0o700 })
+  fs.writeFileSync(user + "/linkjs/extension.json", JSON.stringify({ schema: 1, id: "linkjs", entry: "provider.js" }))
+  fs.symlinkSync(outside + "/p.js", user + "/linkjs/provider.js")
+  fs.mkdirSync(user + "/subdir", { mode: 0o700 })
+  fs.writeFileSync(user + "/subdir/extension.json", JSON.stringify({ schema: 1, id: "subdir", type: "script", command: ["./sub/run"], mode: { pattern: "^x " } }))
+  fs.symlinkSync(outside, user + "/subdir/sub")
+  fs.mkdirSync(user + "/noexec", { mode: 0o700 })
+  fs.writeFileSync(user + "/noexec/extension.json", JSON.stringify({ schema: 1, id: "noexec", type: "script", command: ["./run"], mode: { pattern: "^x " } }))
+  fs.writeFileSync(user + "/noexec/run", "#!/bin/sh\n", { mode: 0o644 })
+  const named = list().filter(e => e.user)
+  const by = n => named.find(e => new RegExp("/" + n + "$").test(e.dir)) || {}
+  check("ext helper: a provider.js that's a symlink out of its folder is refused", /outside its folder/.test(by("linkjs").error || ""), JSON.stringify(by("linkjs")))
+  check("ext helper: a command through a symlinked folder others can write is refused", /outside its folder|writable/.test(by("subdir").error || ""), JSON.stringify(by("subdir")))
+  check("ext helper: a ./command that isn't executable keeps the extension off", (by("noexec").missing || []).some(m => /not executable/.test(m)), JSON.stringify(by("noexec")))
+  fs.chmodSync(user, 0o300)
+  const blind = list()
+  check("ext helper: an unreadable user folder doesn't take the bundled ones with it", blind.filter(e => !e.user).length === BUNDLED && blind.some(e => e.user && e.error), JSON.stringify(blind.filter(e => e.user)))
   fs.chmodSync(user, 0o700); fs.rmSync(root, { recursive: true }) }
+
+// review fixes: reserved ids, the old locate id, labels the bar writes, one search slot per mode
+{ check("ext: the bar's own setting names are refused as ids", ["window", "glass", "hotkey", "extensions", "providers", "locate"].every(id => /taken by the bar/.test(Ext.validate({ schema: 1, id, type: "js" }, "/x").error || "")))
+  const ev = loaded.manifests.find(m => m.id === "everywhere")
+  check("ext: an older providers list's locate means everywhere", Ext.isOn(ev, { providers: ["locate"] }) && Engine.run("/hosts", Object.assign({}, config, { providers: ["locate"] }), { now, requestSearch: () => {}, requestJob: () => {} })[0].provider === "everywhere")
+  check("ext: an older locate section still sets Everywhere's exclusions", Ext.effectiveConfig({}, [ev], { locate: { exclude: ["/x/"] } }).everywhere.exclude.join() === "/x/")
+  const labelled = Ext.parseOutput(JSON.stringify({ items: [{ title: "a", run: { kind: "argv", target: ["/usr/bin/rm", "-rf", "x"], label: "Open" } }, { title: "b", run: { kind: "paste", target: "x\n", label: "Copy" } }] })).items
+  check("ext: a script's footer label is the bar's own", labelled[0].run.label === "run rm" && labelled[1].run.label === "paste", JSON.stringify(labelled.map(i => i.run.label)))
+  // A rival that asks for a search on every query: in Everywhere's mode it mustn't get the slot.
+  let asked = []
+  const saved = Engine.registry.slice()
+  const rival = { id: "rival", name: "Rival", match: (q, ctx) => { if (ctx.requestSearch) ctx.requestSearch("x", ["true"]); return [] } }
+  Engine.setProviders(saved.concat([{ provider: rival, manifest: Ext.validate({ schema: 1, id: "rival", type: "js" }, "/r") }]))
+  const svc = { now, apps, windows: [], requestSearch: (k) => asked.push(k), requestJob: () => {} }
+  Engine.run("/hosts", Object.assign({}, config, { providers: ["everywhere", "rival"] }), svc)
+  const inMode = asked.slice()
+  asked = []
+  Engine.run("plain words", Object.assign({}, config, { providers: ["everywhere", "rival"] }), svc)
+  Engine.setProviders(saved)
+  check("ext: in a mode, only that mode's extension gets the search slot", inMode.length === 1 && /^everywhere\n/.test(inMode[0]) && asked.length === 1 && /^rival\n/.test(asked[0]), JSON.stringify([inMode, asked]))
+  const m = Ext.validate({ schema: 1, id: "brk", type: "script", command: ["./run"], mode: { pattern: "^brk\\s" } }, "/e/brk")
+  check("ext: a script that couldn't start says so", /couldn't start/.test(Ext.scriptProvider(m).match("brk x", { search: { key: "x", text: "", failed: true } })[0].title)) }
 
 // everywhere: the command itself
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
@@ -789,18 +835,24 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // reminders: times parsed here, set through remind-set with the message on stdin
 { const R = load(P + "extensions/remind/provider.js")
+  const helperRowsQ = (q) => Engine.run(q, config, { now, apps, windows: [] })
   const at = (t) => { const p = R.parse(t, now()); return p && p.at ? R.when(p.at, now()) + "|" + p.message : JSON.stringify(p) }
   check("remind: durations, clock times, days and omarchy's bare minutes",
     at("10m take out the laundry") === "14:10|take out the laundry" && at("me to call mom at 3pm") === "15:00|call mom" && at("1h30m stretch") === "15:30|stretch"
     && at("20 tea") === "14:20|tea" && at("tomorrow 9am dentist") === "9:00 tomorrow|dentist" && at("friday noon lunch") === "12:00 Fri 25 Sep|lunch"
     && at("in 2 hours check oven") === "16:00|check oven" && at("tonight 8 movie") === "20:00|movie", [at("10m take out the laundry"), at("friday noon lunch")].join(" / "))
   check("remind: 6:45 is the 24-hour clock (tomorrow), a bare at 7 is the next 7 o'clock", at("6:45") === "6:45 tomorrow|" && at("at 7") === "19:00|" && at("18:30 dinner") === "18:30|dinner")
+  check("remind: a number in the message doesn't take the time", at("buy 2 eggs at 5pm") === "17:00|buy 2 eggs" && at("2 pills at 9pm") === "21:00|2 pills" && at("a 3d printer at 5pm") === "17:00|a 3d printer" && at("reply to 3 emails friday noon") === "12:00 Fri 25 Sep|reply to 3 emails")
+  // "alarm clock" may still suggest the "Set an alarm" command, low down; it mustn't take over the top.
+  check("remind: alarm clock and wake on lan aren't alarms", !helperRowsQ("alarm clock").some(x => x.provider === "remind" && x.score >= 90) && !helperRowsQ("wake on lan").some(x => x.provider === "remind") && helperRowsQ("alarm 6:45")[0].provider === "remind")
   check("remind: a passed time today, no time at all, a year away", at("today 9am") === '{"past":true}' && JSON.parse(at("call mom")).missing && at("400d x") === "null")
   const helperRows = (q, extra) => Engine.run(q, config, Object.assign({ now, apps, windows: [] }, extra || {}))
   const r = helperRows("remind 10m take out the laundry")
   check("remind: Enter runs remind-set with the time, the message on stdin",
     r[0].provider === "remind" && r[0].title === "Remind me at 14:10: take out the laundry" && r[0].run.kind === "argv" && /extensions\/remind\/remind-set$/.test(r[0].run.target[0])
-    && r[0].run.target[1] === "--at" && r[0].run.target[2] === String(Math.round(new Date(2026, 8, 23, 14, 10).getTime() / 1000)) && r[0].run.input === "take out the laundry" && r[0].run.target.length === 3, JSON.stringify(r[0].run))
+    && r[0].run.target[1] === "--in" && r[0].run.target[2] === "600" && r[0].run.input === "take out the laundry" && r[0].run.target.length === 3, JSON.stringify(r[0].run))
+  const clock = helperRows("remind 3pm call mom")[0].run.target
+  check("remind: a clock time is --at, counted as a time", clock[1] === "--at" && clock[2] === String(Math.round(new Date(2026, 8, 23, 15, 0).getTime() / 1000)))
   const a = helperRows("alarm 6:45")
   check("remind: alarm adds --alarm", a[0].title === "Alarm at 6:45 tomorrow" && a[0].run.target[3] === "--alarm")
   const bang = helperRows("!remindme 10m tea")
@@ -830,6 +882,18 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const mf = dir + "/omarchy-reminders/" + unit + ".message"
   check("remind-set: the message file Omarchy reads, mode 600", fs.readFileSync(mf, "utf8").startsWith("tea $(touch") && (fs.statSync(mf).mode & 0o777) === 0o600)
   check("remind-set: times in the past or over a year away are refused", set(["--at", String(Math.floor(Date.now() / 1000) - 5)], "x").status === 2 && set(["--at", String(Math.floor(Date.now() / 1000) + 400 * 86400)], "x").status === 2 && set(["--at", "12;rm"], "x").status === 2)
+  check("remind-set: the timer's time is given in UTC, so a clock change can't move it", runArgs.some(a => /^--on-calendar=\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC$/.test(a)), runArgs.find(a => a.startsWith("--on-calendar")))
+  fs.rmSync(dir + "/systemd-run.log")
+  const before = Math.floor(Date.now() / 1000)
+  check("remind-set: --in counts from now", set(["--in", "600"], "tea").status === 0 && (() => {
+    const cal = fs.readFileSync(dir + "/systemd-run.log", "utf8").split("\0").find(a => a.startsWith("--on-calendar=")).slice(14).replace(" UTC", "Z").replace(" ", "T")
+    const t = Date.parse(cal) / 1000; return t >= before + 599 && t <= before + 605 })())
+  fs.rmSync(dir + "/systemd-run.log")
+  set(["--in", "600"], "-u")
+  check("remind-set: a message that looks like an option stays text", fs.readFileSync(dir + "/systemd-run.log", "utf8").split("\0").includes("\u2060-u"))
+  fs.rmSync(dir + "/omarchy-notification-send.log", { force: true })
+  set(["--in", "1"], "x")
+  check("remind-set: a refusal is a notification too", /Reminder not set/.test(fs.readFileSync(dir + "/omarchy-notification-send.log", "utf8")))
   check("remind-set: an alarm is critical", set(["--at", String(atTime), "--alarm"], "wake").status === 0 && fs.readFileSync(dir + "/systemd-run.log", "utf8").split("\0").includes("1"))
   check("remind-set: --cancel takes only a reminder timer's name", set(["--cancel", "sshd.service"], "").status === 2 && set(["--cancel", "omarchy-reminder-5m-1-2.timer"], "").status === 0
     && fs.readFileSync(dir + "/systemctl.log", "utf8").split("\0").slice(0, 3).join(" ") === "--user stop omarchy-reminder-5m-1-2.timer")

@@ -7,11 +7,19 @@ Prints a JSON list, one entry per extension folder:
     { "dir", "manifest" (the extension.json text), "missing" (required
       commands not on PATH), "user" (from the user dir), "error" (if refused) }
 
-lib/Extensions.js validates the manifests; this only finds and reads them.
-An extension runs as you inside the shell, so from the user dir it refuses
-anything a different user could have put there: the folder, each extension
-folder (or a symlink's target) and its extension.json must be yours and not
-writable by group or others. Manifests over 64 KiB are refused.
+lib/Extensions.js validates the manifests; this finds and reads them, and
+reports a script extension's command as missing when it isn't executable
+or isn't on PATH, so the bar keeps it off instead of failing to start it.
+
+An extension runs as you, so from the user dir it refuses anything another
+account could have put there or could swap later. Every file the bar will
+load or run (extension.json, a js extension's entry, a script's ./command
+and ./refresh command) must resolve inside its extension folder, be yours
+and not writable by group or others, and every folder on its real path,
+up to /, must be yours or root's and not writable by group or others. A
+symlinked extension.json is refused. This is checked when the bar looks;
+a file you change afterwards is yours to change. Manifests over 64 KiB are
+refused.
 """
 import json
 import os
@@ -22,6 +30,49 @@ import sys
 
 MAX_MANIFEST = 64 * 1024
 COMMAND = re.compile(r"^[A-Za-z0-9._+-]+$")
+
+
+def trusted_chain(path):
+    """None if every folder from path's real location up to / is ours or
+    root's and not writable by group or others, else why not."""
+    p = os.path.realpath(path)
+    while True:
+        try:
+            st = os.stat(p)
+        except OSError as e:
+            return "%s: %s" % (p, e.strerror)
+        if st.st_uid not in (0, os.getuid()):
+            return "%s belongs to another user" % p
+        if stat.S_ISDIR(st.st_mode) and st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            return "%s is writable by others" % p
+        parent = os.path.dirname(p)
+        if parent == p:
+            return None
+        p = parent
+
+
+def named_files(data):
+    """The files in an extension folder that the bar loads or runs."""
+    out = []
+    if not isinstance(data, dict):
+        return out
+    if data.get("type", "js") == "js":
+        out.append(data.get("entry") if isinstance(data.get("entry"), str) else "provider.js")
+    else:
+        for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
+            if isinstance(c, list) and c and isinstance(c[0], str) and c[0].startswith("./"):
+                out.append(c[0][2:])
+    return [f for f in out if f]
+
+
+def check_file(d, rel):
+    """None if d/rel is inside d, ours alone, and on a trusted path."""
+    real_dir = os.path.realpath(d)
+    real = os.path.realpath(os.path.join(d, rel))
+    if not real.startswith(real_dir + "/"):
+        return "%s points outside its folder" % rel
+    why = trusted_chain(real) or private(real, rel)
+    return why
 
 
 def private(path, kind):
@@ -52,15 +103,25 @@ def read_manifest(path, strict):
         os.close(fd)
 
 
-def missing_commands(text):
+def missing_commands(text, d):
     try:
         data = json.loads(text)
     except ValueError:
         return []
-    req = data.get("requires") if isinstance(data, dict) else None
-    if not isinstance(req, list):
+    if not isinstance(data, dict):
         return []
-    return [c for c in req if isinstance(c, str) and COMMAND.match(c) and shutil.which(c) is None]
+    req = data.get("requires")
+    out = [c for c in req if isinstance(c, str) and COMMAND.match(c) and shutil.which(c) is None] if isinstance(req, list) else []
+    if data.get("type") == "script":
+        for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
+            if not (isinstance(c, list) and c and isinstance(c[0], str)):
+                continue
+            if c[0].startswith("./"):
+                if not os.access(os.path.join(d, c[0][2:]), os.X_OK):
+                    out.append(c[0] + " (not executable)")
+            elif COMMAND.match(c[0]) and shutil.which(c[0]) is None:
+                out.append(c[0])
+    return out
 
 
 def scan(root, user):
@@ -68,22 +129,35 @@ def scan(root, user):
     if not os.path.isdir(root):
         return out
     if user:
-        why = private(root, root)
+        why = trusted_chain(root) or private(root, root)
         if why:
             return [{"dir": root, "user": True, "error": why}]
-    for name in sorted(os.listdir(root)):
+    try:
+        names = sorted(os.listdir(root))
+    except OSError as e:
+        return [{"dir": root, "user": user, "error": str(e)}]
+    for name in names:
         d = os.path.join(root, name)
         if not os.path.isdir(d) or name.startswith("."):
             continue
         entry = {"dir": os.path.realpath(d), "user": user, "missing": []}
         try:
             if user:
-                why = private(d, "the folder " + name)
+                why = trusted_chain(d) or private(d, "the folder " + name)
                 if why:
                     raise ValueError(why)
             text = read_manifest(os.path.join(d, "extension.json"), user)
+            if user:
+                try:
+                    data = json.loads(text)
+                except ValueError:
+                    data = None
+                for rel in named_files(data):
+                    why = check_file(d, rel)
+                    if why:
+                        raise ValueError(why)
             entry["manifest"] = text
-            entry["missing"] = missing_commands(text)
+            entry["missing"] = missing_commands(text, d)
         except FileNotFoundError:
             continue
         except (OSError, ValueError) as e:

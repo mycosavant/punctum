@@ -30,9 +30,11 @@ apps is local. So is everything typed until Enter.
 | Apps, keybindings | Desktop entries; `omarchy-menu-keybindings` | Launch counts, pins (cache) |
 
 Everything the bar keeps is under `~/.cache/omarchy-commandbar/`, in a 700
-folder, each file 600. The results list itself (clipboard texts, file paths)
-is cleared when the bar closes; only the typed text is kept, so it can come
-back next time (`last-query`).
+folder, each file 600. When the bar closes, the results list, per-open loads
+(clipboard history, the package list) and the last search's output are
+dropped: each process's output buffer is replaced by an empty run, since
+Quickshell keeps the last output a process printed (checked 2026-10-09).
+Only the typed text is kept, so it can come back next time (`last-query`).
 
 ## Typed text and the shell
 
@@ -44,7 +46,7 @@ to parse, except where noted, and in those cases the typed text is an
 |---|---|
 | Everywhere | A JSON request on the `everywhere` command's stdin. It runs plocate with the words after `--` and fzf with the query as one `--filter=` value, all as argument lists |
 | Reminders | `remind-set --at <time>` with the message on stdin; the timer's command is a constant script with the message as an argument. `--cancel` accepts only a name matching `omarchy-reminder-*.timer` |
-| Script extensions | A JSON request on stdin, never the command line. Every row and action they print is validated: only `open` (http, https, mailto, file or an absolute path), `copy`, `paste`, `edit` and `argv` |
+| Script extensions | A JSON request on stdin, never the command line. Every row and action they print is validated: only `open` (http, https, mailto, file or an absolute path), `copy`, `paste`, `edit` and `argv`, labelled by the bar |
 | Inside files | `bash -c SCRIPT commandbar-rg <words>`; rg gets them as one fixed-string argument after `--` |
 | Files | `fd` as an argument list; words regex-escaped, after `--` or inside `--and=` |
 | Packages | `bash -c SCRIPT commandbar-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
@@ -91,15 +93,22 @@ everything you can do; a script extension is a program you're choosing to
 run. So:
 
 - `bin/commandbar-extensions` loads nothing from
-  `~/.config/omarchy/commandbar/extensions/` unless it's yours alone: the
-  folder, each extension folder (or a symlink's target) and its
-  `extension.json` must be owned by you and not writable by group or others,
-  and a symlinked `extension.json` is refused. This stops another account
-  planting code; it does nothing about code you copied in yourself.
+  `~/.config/omarchy/commandbar/extensions/` that another account could have
+  put there or could swap later. Every file the bar loads or runs
+  (`extension.json`, a JS extension's entry, a script's `./` command and
+  refresh command) must resolve inside its extension folder and be yours and
+  not writable by group or others, and every folder on its real path up to
+  `/` must be yours or root's and not writable by others. A symlinked
+  `extension.json` is refused. These are checked when the bar looks (at
+  startup and when your config changes); it does nothing about code you
+  copied in yourself, or change afterwards.
 - `?extensions` shows each one's declared permissions. They're labels the
   author wrote, not enforcement. Read an extension before adding it.
 - A script extension can only *propose* actions from the list above; the bar
-  carries them out, and the footer names what Enter will do.
+  carries them out and writes the footer label itself ("open", "copy",
+  "paste", "run <program>"), whatever the script calls it. `argv` runs any
+  command the script names: the footer shows which program, not what it
+  does.
 
 ## Limits of these guarantees
 

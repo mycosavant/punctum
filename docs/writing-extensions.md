@@ -3,9 +3,11 @@
 Every feature of the bar is an extension: a folder with an `extension.json`
 and either a JavaScript provider or any executable. The bundled ones are in
 [`extensions/`](../extensions); yours go in
-`~/.config/omarchy/commandbar/extensions/<id>/`. Restart the shell
-(`omarchy-restart-shell`) to load a new one; `?extensions` lists what loaded,
-and `journalctl --user -f | grep commandbar` says why one didn't.
+`~/.config/omarchy/commandbar/extensions/<id>/`. A new folder is found at
+startup and whenever your config file changes; a changed provider file needs
+`omarchy-restart-shell`, since Quickshell caches what it has imported.
+`?extensions` lists what loaded, and `journalctl --user -f | grep commandbar`
+says why one didn't.
 
 There are two kinds:
 
@@ -23,7 +25,9 @@ Start with a script extension unless you need to answer outside a mode.
 ```jsonc
 {
   "schema": 1,                       // this format; the bar refuses others
-  "id": "hello",                     // a-z 0-9 - _, up to 32; also its settings key
+  "id": "hello",                     // a-z 0-9 - _, up to 32; also its settings key.
+                                     // window, glass, hotkey, extensions, providers,
+                                     // help, bar and locate are taken
   "name": "Hello",
   "version": "1.0.0",
   "description": "hi <name>: the smallest script extension",
@@ -77,9 +81,13 @@ The bar runs `command` with one JSON request on stdin:
 - A newer keystroke stops the run in progress; a run still going after 3 s is
   stopped and the bar says so. Bound slow commands yourself (`timeout 3`).
 - The query never appears on a command line.
-- `refresh` runs a background job on the first query in the mode after the
-  bar opens, at most every `every` seconds; when it finishes, the current
-  query runs again. Everywhere uses it to refresh its index.
+- `refresh` runs a background job on a query in the mode, at most every
+  `every` seconds; when it finishes, the current query runs again, so the
+  rows may refresh while you look. Everywhere uses it to refresh its index.
+- If the command can't start (not executable, interpreter missing), the
+  extension says so in a row; `bin/commandbar-extensions` also keeps an
+  extension off when its `./` command isn't executable or its command isn't
+  on PATH.
 
 ## Actions
 
@@ -93,9 +101,11 @@ The bar, not the extension, carries out what Enter does, and only these:
 | `edit` | `target`, `line` | your Omarchy default editor at that line |
 | `argv` | `target: [...]`, optional `input` | runs the argument list, no shell; `input` goes to its stdin |
 
-Give every action a `label`; the footer shows it ("open", "set reminder").
-JS extensions can also use the bar's internal kinds (`app`, `window`, `note`,
-`shell` for keyword commands); scripts can't.
+For a script's actions the bar writes the footer label itself ("open",
+"copy", "paste", "edit", "run <program>"), so a row can't say one thing and
+do another; `argv` still runs whatever program it names. A JS extension's
+`label` is shown as given, and JS extensions can also use the bar's internal
+kinds (`app`, `window`, `note`, `shell` for keyword commands).
 
 ## JS extensions
 

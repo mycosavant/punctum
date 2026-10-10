@@ -45,7 +45,8 @@ with a bundled extension's id replaces it.
    your `commandbar.json`, and each extension's section: its manifest
    defaults merged with yours.
 
-This runs again whenever your config changes.
+This runs again whenever your config changes, which picks up a new
+extension folder; a changed provider file needs `omarchy-restart-shell`.
 
 ## A keystroke
 
@@ -67,7 +68,7 @@ All in `CommandBar.qml`, all argument lists:
 
 | Part | Asked by | Behaviour |
 |---|---|---|
-| search | `ctx.requestSearch(key, argvs, { stdin, timeout })` | one at a time for the whole bar; argument lists run in turn, each landing as a chunk; a newer key stops the running one; 3 s watchdog per command, results marked `timedOut` |
+| search | `ctx.requestSearch(key, argvs, { stdin, timeout })` | one at a time for the whole bar, and only for the extension whose mode the query is in; argument lists run in turn, each landing as a chunk; a newer key stops the running one; 3 s watchdog per command, results marked `timedOut`; a command that can't start is marked `failed` |
 | load | `ctx.load(key, argv, { ttl })` | one at a time; once per open and dropped on close (a late result for a closed bar is discarded), or kept and re-read every `ttl` |
 | job | `ctx.requestJob(key, argv, { every, rerun })` | at most every N seconds, one at a time; `rerun` drops the extension's search so it asks again |
 | input | an `argv` action with `input` | stdin, one at a time |
@@ -93,13 +94,15 @@ emojis, the default agent) still has its own small process each.
 An extension that follows the contract only *proposes* actions from a short
 list the bar carries out. For JS extensions that's a convention: they run
 inside the shell, where QML's `Qt` object could build a process, so they're
-trusted code. For script extensions it's a boundary: the bar validates every
-row and action they print, and they never touch the shell.
+trusted code. For script extensions it's a boundary on shape: the bar
+validates every row and action they print and labels the actions itself, and
+they never touch the shell; but an `argv` action runs whatever program the
+script names.
 
 ## Limits
 
-- A new or changed extension needs `omarchy-restart-shell`: Quickshell caches
-  the files it has imported.
+- A changed provider file needs `omarchy-restart-shell`: Quickshell caches the
+  files it has imported.
 - Script extensions run only in their mode; one that answered every keystroke
   would start a process per key.
 - Permissions are labels. A real sandbox for script extensions (`bwrap`,

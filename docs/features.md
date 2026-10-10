@@ -130,15 +130,17 @@ Reminders that show with Omarchy's own: in its bar indicator, and in
 - Times: `10m`, `1h30m`, `2.5h`, `90s`, `3pm`, `7:15pm`, `at 7` (the next
   7 o'clock), `18:30`, `noon`, `midnight`, `tonight 8`, `tomorrow 9am`,
   `friday noon`. A time with a colon is the 24-hour clock: `alarm 6:45` is
-  06:45.
+  06:45. A number in the message doesn't confuse it: `buy 2 eggs at 5pm` is
+  17:00.
 - `alarm 6:45`, `alarm tomorrow 7am`: a critical notification and the alarm
   sound, three times.
 - **Enter** sets it. `remind` on its own lists what's set; **Shift+Enter**
   cancels one.
 - **Runs** `remind-set`, which makes a transient systemd user timer named the
   way Omarchy names its own; the message goes to it on stdin.
-- Like Omarchy's, a reminder doesn't survive a reboot or logout, and one due
-  while the laptop sleeps fires when it wakes.
+- Like Omarchy's, a reminder doesn't survive a reboot or logout. Unlike
+  Omarchy's, which counts time awake, one due while the laptop sleeps fires
+  when it wakes. A duration counts from when you press Enter.
 
 ## Inbox note — `n `  (`notes`)
 
