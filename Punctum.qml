@@ -882,8 +882,9 @@ Item {
   // It's started again when it stops, so a rebuilt one is picked up by
   // `pkill -x punctumd`, without restarting the shell.
   property var nativeServed: ({})     // id -> true, from its hello
-  property var nativeCache: ({})      // id + "\n" + query -> { rows, until }; a reply's id is this key
-  property var nativePending: ({})
+  property var nativeCache: ({})      // id + "\n" + query -> { rows, needs, until, stale }
+  property var nativePending: ({})    // id + "\n" + query -> the id of the request asking it now
+  property int nativeSeq: 0
   property int nativeCached: 0
   property int nativeFailures: 0      // starts in a row without a hello
   property string nativeVersion: ""
@@ -936,29 +937,49 @@ Item {
   }
 
   // ctx.native: punctumd's answer to this query, { rows, needs }, or null
-  // while it works it out. An answer that has gone stale (a clock) is shown
-  // while the fresh one comes.
+  // while it works out the first. An answer that has gone stale (a clock, or
+  // state or a load sent since) is shown while the fresh one comes, so the
+  // list doesn't blank between them.
+  //
+  // Each request has its own id ("<n>\n<ext>\n<query>"), and only a reply to
+  // the latest request for a query counts. The same query asked before and
+  // after a load (cb, then the history arrives) would otherwise take the
+  // first, stale, reply as the answer to the second, and drop the real one.
   function native(id, query, settings) {
     if (!root.nativeServed[id] || !nativeProc.running) return null
     var key = id + "\n" + query
     var have = root.nativeCache.hasOwnProperty(key) ? root.nativeCache[key] : null
-    if (have && (!have.until || have.until > Date.now())) return have
+    if (have && !have.stale && (!have.until || have.until > Date.now())) return have
     if (!root.nativePending[key]) {
-      root.nativePending[key] = true
-      nativeProc.write(JSON.stringify({ id: key, ext: id, query: query, settings: settings === undefined ? {} : settings }) + "\n")
+      var req = (++root.nativeSeq) + "\n" + key
+      root.nativePending[key] = req
+      nativeProc.write(JSON.stringify({ id: req, ext: id, query: query, settings: settings === undefined ? {} : settings }) + "\n")
     }
     return have
   }
 
+  // Every answer (or one extension's, by its "<ext>\n" prefix) is out of
+  // date: kept to show until the fresh one lands, and requests on their way
+  // are forgotten, so their replies are dropped.
+  function staleNative(prefix) {
+    var cache = {}
+    for (var c in root.nativeCache) {
+      var e = root.nativeCache[c]
+      cache[c] = prefix && c.indexOf(prefix) !== 0 ? e : Object.assign({}, e, { stale: true })
+    }
+    root.nativeCache = cache
+    if (!prefix) root.nativePending = ({})
+    else for (var p in root.nativePending) if (p.indexOf(prefix) === 0) delete root.nativePending[p]
+  }
+
   // The shell's state a native extension needs (apps, launches, pins,
   // windows), sent when it changes and after each hello. Answers given
-  // before are dropped, cached or still coming: they used the old state. So
+  // before, cached or still coming, used the old state: they go stale and
   // the query is asked again, or a reply dropped on its way (opening the bar
   // refreshes the windows) would leave the bar empty until the next key.
   function pushNative(key, value) {
     if (!nativeProc.running || !Object.keys(root.nativeServed).length) return
-    root.nativeCache = ({})
-    root.nativePending = ({})
+    root.staleNative("")
     nativeProc.write(JSON.stringify({ id: "data", op: "data", key: key, value: value }) + "\n")
     if (root.opened) Qt.callLater(root.recompute)
   }
@@ -978,11 +999,8 @@ Item {
     if (!nativeProc.running || !Object.keys(root.nativeServed).length) return
     var at = String(key).indexOf("\n")
     if (at < 0) return
-    var ext = key.slice(0, at), prefix = ext + "\n"
-    var cache = {}
-    for (var c in root.nativeCache) if (c.indexOf(prefix) !== 0) cache[c] = root.nativeCache[c]
-    root.nativeCache = cache
-    for (var p in root.nativePending) if (p.indexOf(prefix) === 0) delete root.nativePending[p]
+    var ext = key.slice(0, at)
+    root.staleNative(ext + "\n")
     nativeProc.write(JSON.stringify({ id: "load", op: "load", ext: ext, key: key.slice(at + 1), text: text }) + "\n")
     if (root.opened) Qt.callLater(root.recompute)
   }
@@ -1008,15 +1026,17 @@ Item {
       if (root.extensionsText) root.installExtensions(root.extensionsText)
       return
     }
-    if (typeof r.id !== "string" || !root.nativePending[r.id]) return
-    delete root.nativePending[r.id]
+    if (typeof r.id !== "string") return
+    var key = r.id.slice(r.id.indexOf("\n") + 1)
+    if (root.nativePending[key] !== r.id) return
+    delete root.nativePending[key]
     if (r.error) console.warn("punctum: punctumd: " + String(r.error).slice(0, 300))
     // Answers are kept until the config changes, or for the "ttl" ms an
     // answer that reads the clock gives; a long session's worth is dropped
     // all at once.
     if (++root.nativeCached > 2000) { root.nativeCache = ({}); root.nativeCached = 1 }
     var ttl = Number(r.ttl)
-    root.nativeCache[r.id] = { rows: Array.isArray(r.rows) ? r.rows : [], needs: Array.isArray(r.needs) ? r.needs : [], until: ttl > 0 ? Date.now() + ttl : 0 }
+    root.nativeCache[key] = { rows: Array.isArray(r.rows) ? r.rows : [], needs: Array.isArray(r.needs) ? r.needs : [], until: ttl > 0 ? Date.now() + ttl : 0 }
     if (root.opened) Qt.callLater(root.recompute)
   }
 

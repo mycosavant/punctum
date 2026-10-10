@@ -15,7 +15,6 @@ fn main() {
             continue;
         }
         let reply = punctumd::handle(&line, &mut state);
-        eprintln!("DEBUG {} => {}", line.chars().take(120).collect::<String>(), reply.to_string().chars().take(160).collect::<String>());
         if writeln!(stdout, "{reply}").and_then(|_| stdout.flush()).is_err() {
             break;
         }
