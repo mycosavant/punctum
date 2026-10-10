@@ -1,7 +1,13 @@
 # Naming
 
-Candidates for the bar's own name, checked for availability on 2026-10-09.
-Decision pending: the maintainer is choosing.
+**Decided 2026-10-10: Punctum** (the maintainer's call), with the tagline
+"the extensible command bar for Linux". Spot and Bang were considered the
+same morning: `spot` is taken in the AUR twice (a model-checking library, and
+`spot-client`, a Spotify client called Spot), and Bang would collide with the
+bar's own `!` bangs. Omni was taken. Further checks on the chosen name, including
+trademarks: [punctum-checks.md](punctum-checks.md).
+
+Candidates as checked on 2026-10-09:
 
 ## What was checked
 
