@@ -15,7 +15,10 @@ everywhere --json dwnlds      # JSON, for other launchers
 In Punctum, type `/` and a name. Full account:
 [docs/everywhere.md](../../docs/everywhere.md).
 
-Needs `plocate` (with `plocate-updatedb.timer` on) and `fzf`. The index of
+Needs `plocate` (with `plocate-updatedb.timer` on). `everywhere` runs the
+Rust build ([`native/everywhere`](../../native/everywhere)) when it's built,
+and `everywhere.py` otherwise, which also needs `fzf`; `-i` needs `fzf` either
+way. The index of
 your home folder lives at `$XDG_CACHE_HOME/everywhere/home.db`, mode 600;
 `everywhere --index --max-age 60` rebuilds it only if it's over a minute old,
 which is what the bar runs on the first `/` query after it opens.

@@ -4,14 +4,18 @@ Type `/` and part of a name. Every file and folder on the disk that matches is
 listed as you type, best first. It is the Linux answer to Everything on
 Windows.
 
-Everywhere is also a command of its own,
-[`extensions/everywhere/everywhere`](../extensions/everywhere/everywhere), and
-the bar is just one way in:
+Everywhere is also a command of its own, and the bar is just one way in. It
+is written in Rust ([`native/everywhere`](../native/everywhere)), built and
+installed with punctumd ([Native extensions](native.md#getting-it)); its
+first version, in Python, stays as a fallback
+([`everywhere.py`](../extensions/everywhere/everywhere.py), which needs fzf).
+[`extensions/everywhere/everywhere`](../extensions/everywhere/everywhere) runs
+whichever is there, the Rust one first:
 
 ```sh
 everywhere notes              # ranked paths, best first
 everywhere report .pdf$       # the same query syntax as in the bar
-everywhere -i                 # pick one with fzf (a preview line shows ls -ld), print it
+everywhere -i                 # pick one with fzf, if you have it (a preview line shows ls -ld), print it
 everywhere -i --open          # ... and open it
 everywhere --json dwnlds      # rows for other launchers
 everywhere --index            # refresh the index of your home folder
@@ -42,11 +46,11 @@ stdin and shows the rows it prints.
 | `ext:pdf`, `ext:md,txt` | extension |
 | `type:dir`, `type:file` | folders or files only |
 
-With words, the filters narrow what the name search found (it looks deeper,
-so a filter doesn't empty a common word's results). Without words, `dm:` and
-`size:` walk your home folder with `fd` (plocate needs a name), keeping the
-true newest or biggest as results stream in (up to 3 s, then what it has),
-and `ext:` searches the indexes for the extension. `!negations` apply either
+With words, the filters narrow what the name search found. Without words,
+`dm:` and `size:` walk your home folder, on every core (plocate needs a
+name), keeping the true newest or biggest as the walk goes (up to 3 s, then
+what it has), and `ext:` searches the indexes for the extension. The walk
+skips what `.gitignore` files leave out, as fd does. `!negations` apply either
 way. A filter it can't read is an error,
 not a silent miss. With a size or date filter the rows show each file's size
 and age.
@@ -70,10 +74,10 @@ created today shows up after tonight's rebuild. The system index's copy of your
 home folder is a day old, so its home entries are dropped in favour of the
 private index.
 
-Measured on this laptop, 2026-10-09: a plain lookup takes about 10 ms, a
-letters-in-order lookup about 50 ms, and a whole query, ranked, 90 to 170 ms.
-Very common short words cost more (`lib`: 0.5 s), because more of the disk
-matches before the filters run.
+Measured on this laptop, 2026-10-10, the whole command each time (Rust, then
+the Python version): a name 88–150 ms (137–196), `lib` 455 ms (557), `dm:today`
+74 ms (313), `size:>1G` 69 ms (114). Most of a name query is plocate; very
+common short words cost more, because more of the disk matches.
 
 ## How a query runs
 
@@ -87,9 +91,12 @@ matches before the filters run.
 4. **Filter**: drop the system index's stale home entries and anything
    containing an exclusion (`/.cache/`, `/node_modules/` and so on). Each
    index contributes at most 3000 paths after filtering.
-5. **fzf** applies the full query (`fzf --filter`), so its syntax works:
-   `'exact`, `^start`, `end$`, `!leave-out`. A `^name` becomes `'/name`,
-   since fzf anchors `^` to the whole path and every path starts with `/`.
+5. **Match** the full query in-process with
+   [nucleo-matcher](https://docs.rs/nucleo-matcher), which reads fzf's
+   syntax: `'exact`, `^start`, `end$`, `!leave-out`. A `^name` becomes
+   `'/name`, since `^` anchors to the whole path and every path starts with
+   `/`. Every match is ranked; the Python version let fzf cut them to 400
+   first, which could drop a better name for a common word.
 6. **Order**, best first:
    - a name that *is* the word, then one that starts with it, contains it,
      or has its letters in order;
@@ -97,10 +104,10 @@ matches before the filters run.
      (-0.6), so `~/.config/x/hosts` sits under `/etc/hosts` while
      `~/Downloads` still beats a system file named like it;
    - shallower, then shorter;
-   - fzf's own order breaks ties.
+   - the matcher's score breaks ties.
 
-   fzf's ranking alone put an Android icon file above `~/Downloads` for
-   `dwnlds`; this order is the desktop's.
+   A fuzzy matcher's ranking alone put an Android icon file above
+   `~/Downloads` for `dwnlds`; this order is the desktop's.
 
 Each step is bounded (3 s), and the bar stops a search after 3 s and says so
 ("Stopped after 3 s") rather than claiming nothing matched.

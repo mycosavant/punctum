@@ -50,7 +50,7 @@ Saikomantisu.
 | `pick`, `contrast picker`, `pick ` | Pick a colour from the screen. With native extensions, Enter and Shift+Enter each copy it (in the form you choose), open the bar on its forms and contrast, or both; the contrast picker takes a text colour and a background. `pick ` lists what you picked and copies it as CSS, SCSS, JSON, Tailwind or a GIMP palette |
 | `#fff on #333`, `contrast #777 #fff` | With native extensions, the WCAG contrast ratio of two colours and whether text and large text pass. A single colour shows its contrast on white and black |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
-| `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
+| `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked in Rust, or through fzf without the Rust build). Your home folder is current; elsewhere as of last night |
 | `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
 | `rg invoice`, `grep TODO` | Lines inside your files (ripgrep). Enter opens the editor at that line |
 | `!w hyprland`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
@@ -143,7 +143,7 @@ off, and `?extensions` says which command it needs.
 - `omarchy-menu-emoji-insert` and Omarchy's `emojis.json`: emoji
 - `omarchy-default-agent`, `omarchy-cmd-missing`, `omarchy-agent-prompt` and `omarchy-agent --pick`: asking your agent (`bin/punctum-agent`)
 - `fd`: file search under your home folder
-- `plocate`, `updatedb` and `fzf`: Everywhere, the search across the disk
+- `plocate` and `updatedb`: Everywhere, the search across the disk (and `fzf` for its Python version, without the Rust build, or for `everywhere -i`)
 - `rg` (from `ripgrep`): search inside files
 - `expac`: package search
 - `bwrap` (from `bubblewrap`, which Nautilus brings in): the sandbox for script extensions; without it they stay off

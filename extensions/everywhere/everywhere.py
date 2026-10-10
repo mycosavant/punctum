@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+"""everywhere: find files anywhere on the disk by name, as you type.
+
+    everywhere notes                 ranked paths, best first
+    everywhere report .pdf$          fzf syntax: 'exact ^start end$ !leave-out
+    everywhere -i                    pick one interactively (fzf), print it
+    everywhere -i --open             ... and open it
+    everywhere --index               refresh the index of your home folder
+    everywhere --json dwnlds         JSON for programs
+    everywhere report ext:pdf dm:week size:>1M
+                                     filters, as in Everything
+    everywhere dm:today              what changed today in your home folder
+    everywhere size:>1G              your biggest files
+
+Names come from two plocate indexes: the system's (/var/lib/plocate, rebuilt
+nightly by plocate-updatedb.timer) for everything outside your home folder,
+and a private index of your home folder ($XDG_CACHE_HOME/everywhere/home.db,
+mode 600), which --index rebuilds in about half a second. A query runs
+plocate twice, with the words as typed and then with their letters in order,
+filters out the system index's stale copy of home and anything matching an
+exclusion, lets fzf apply the query syntax, and ranks what's left the way a
+desktop search should: a name that is the word first, then one that starts
+with it, contains it, or has its letters in order; a small lift for home and
+a small drop for hidden paths; then shallower and shorter.
+
+--punctum speaks the Punctum's script-extension protocol: a JSON
+request on stdin ({"text": ..., "settings": {"exclude": [...]}}) and
+{"items": [...]} on stdout.
+
+Every subprocess is an argument list, never a shell string; the query reaches
+plocate after "--" and fzf as one --filter= value.
+"""
+import argparse
+import heapq
+import json
+import re
+import os
+import shlex
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+
+SYSTEM_DB = "/var/lib/plocate/plocate.db"
+DEFAULT_EXCLUDE = ["/.cache/", "/.cargo/registry/", "/.cargo/git/", "/node_modules/", "/.local/share/Trash/", "/.git/"]
+PER_PASS = 3000      # paths kept from each index per pass, after filtering
+FZF_KEEP = 400       # paths kept after fzf, before ranking
+TIMEOUT = 3          # seconds, for each subprocess
+MIN_QUERY = 2
+MAX_QUERY = 160
+
+KIND = {}
+for kind, exts in {
+    "image": "png jpg jpeg webp gif svg avif bmp tiff heic",
+    "pdf": "pdf",
+    "archive": "zip tar gz xz zst 7z bz2 rar",
+    "audio": "mp3 flac ogg wav m4a opus",
+    "video": "mp4 mkv webm mov avi",
+    "text": "md txt json toml yaml yml conf csv ini log",
+}.items():
+    for e in exts.split():
+        KIND[e] = kind
+ICONS = {"folder": "󰉋", "image": "󰋩", "pdf": "󰈦", "archive": "󰀼", "audio": "󰈣", "video": "󰈫", "text": "󰈙", "file": "󰈔"}
+
+
+def cache_dir():
+    return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "everywhere")
+
+
+def home_db():
+    return os.path.join(cache_dir(), "home.db")
+
+
+# ---------------------------------------------------------------- filters
+
+UNITS = {"": 1, "b": 1, "k": 1024, "kb": 1024, "m": 1024 ** 2, "mb": 1024 ** 2, "g": 1024 ** 3, "gb": 1024 ** 3, "t": 1024 ** 4, "tb": 1024 ** 4}
+
+
+def size_value(text):
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([kmgt]?b?)", text.lower())
+    return None if not m else float(m.group(1)) * UNITS[m.group(2)]
+
+
+def parse_size(spec):
+    """size:>10M, size:<=500k, size:1M-10M, size:10M (at least) -> (min, max) bytes."""
+    m = re.fullmatch(r"(\d[\d.]*\s*[a-z]*)-(\d[\d.]*\s*[a-z]*)", spec.lower())
+    if m:
+        lo, hi = size_value(m.group(1)), size_value(m.group(2))
+        return None if lo is None or hi is None or lo > hi else (lo, hi)
+    m = re.fullmatch(r"(>=|<=|>|<)?(.+)", spec)
+    v = size_value(m.group(2)) if m else None
+    if v is None:
+        return None
+    op = m.group(1) or ">="
+    if op == "<" and v < 1:
+        return None   # nothing is smaller than nothing
+    return {">": (v + 1, None), ">=": (v, None), "<": (None, v - 1), "<=": (None, v)}[op]
+
+
+def parse_since(spec, now):
+    """dm:today|yesterday|week|month|year|3d|12h|2w|2026-10-01 -> (since, until) epoch seconds."""
+    t = time.localtime(now)
+    midnight = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))
+    # Yesterday's midnight from the calendar, not midnight - 86400: a day with
+    # a clock change is 23 or 25 hours long.
+    yesterday = time.mktime((t.tm_year, t.tm_mon, t.tm_mday - 1, 0, 0, 0, 0, 0, -1))
+    spec = spec.lower()
+    named = {"today": (midnight, None), "yesterday": (yesterday, midnight),
+             "week": (now - 7 * 86400, None), "month": (now - 31 * 86400, None), "year": (now - 366 * 86400, None)}
+    if spec in named:
+        return named[spec]
+    m = re.fullmatch(r"(\d+)([hdwmy])", spec)
+    if m:
+        n = int(m.group(1)) * {"h": 3600, "d": 86400, "w": 7 * 86400, "m": 31 * 86400, "y": 366 * 86400}[m.group(2)]
+        return (now - n, None)
+    m = re.fullmatch(r"(\d{4})-(\d\d)-(\d\d)", spec)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            start = time.mktime((y, mo, d, 0, 0, 0, 0, 0, -1))
+        except (OverflowError, ValueError):
+            return None
+        back = time.localtime(start)
+        if (back.tm_year, back.tm_mon, back.tm_mday) != (y, mo, d):
+            return None   # 2026-02-30 would quietly become 2026-03-02
+        return (start, None)
+    return None
+
+
+def split_filters(ts, now=None):
+    """(the remaining terms, filters) with filters {size, since, ext, type} and
+    "bad" listing filters that didn't parse."""
+    now = now or time.time()
+    rest, f = [], {"bad": []}
+    for t in ts:
+        m = re.fullmatch(r"(size|dm|date|modified|ext|type):(.+)", t, re.I)
+        if not m:
+            rest.append(t)
+            continue
+        key, val = m.group(1).lower(), m.group(2)
+        if key == "size":
+            v = parse_size(val)
+        elif key in ("dm", "date", "modified"):
+            key, v = "since", parse_since(val, now)
+        elif key == "ext":
+            items = val.split(",")
+            v = [e.lower().lstrip(".") for e in items] if all(re.fullmatch(r"\.?[A-Za-z0-9_+-]{1,16}", e) for e in items) else None
+        else:
+            v = {"file": "file", "f": "file", "dir": "dir", "d": "dir", "folder": "dir"}.get(val.lower())
+        if v is None:
+            f["bad"].append(t)
+        else:
+            f[key] = v
+    return rest, f
+
+
+def passes(path, f):
+    """Whether one path meets the size, date, extension and type filters."""
+    if f.get("ext") and not any(path.lower().endswith("." + e) for e in f["ext"]):
+        return False
+    if not any(k in f for k in ("size", "since", "type")):
+        return True
+    try:
+        st = os.stat(path)
+    except OSError:
+        return False
+    is_dir = stat.S_ISDIR(st.st_mode)
+    if f.get("type") == "dir" and not is_dir or f.get("type") == "file" and is_dir:
+        return False
+    if "size" in f:
+        lo, hi = f["size"]
+        if is_dir or (lo is not None and st.st_size < lo) or (hi is not None and st.st_size > hi):
+            return False
+    if "since" in f:
+        lo, hi = f["since"]
+        if st.st_mtime < lo or (hi is not None and st.st_mtime >= hi):
+            return False
+    return True
+
+
+# ---------------------------------------------------------------- the query
+
+def terms(text):
+    return [t for t in str(text or "").split() if t and t != "|"]
+
+
+def literals(ts):
+    """Plain words plocate can look for: fzf's operators stripped, negations left to fzf."""
+    out = []
+    for t in ts:
+        if t.startswith("!"):
+            continue
+        t = t.lstrip("'^").rstrip("$")
+        if t:
+            out.append(t)
+    return out
+
+
+def glob_safe(t):
+    """plocate reads an unescaped * ? or [ as a glob over the whole path."""
+    return "".join("\\" + c if c in "\\*?[]" else c for c in t)
+
+
+def fuzzies(ts):
+    """Letters in order inside one path segment, as basic regexes (letters and digits only)."""
+    out = []
+    for t in ts:
+        if t.startswith(("!", "'")):
+            continue
+        letters = "".join(c for c in t.lower() if c.isascii() and c.isalnum())
+        if len(letters) >= 3:
+            out.append("[^/]*".join(letters))
+    return out
+
+
+def fzf_query(ts):
+    """fzf anchors ^ to the whole path, and every path starts with /, so ^down
+    becomes an exact match at a segment start."""
+    return " ".join("'/" + t[1:] if t.startswith("^") and len(t) > 1 and t[1] != "/" else t for t in ts)
+
+
+def usable(text):
+    """Something to search for: words, or an ext: or dm: filter."""
+    if len(text) > MAX_QUERY or any(ord(c) < 32 for c in text):
+        return False
+    ts, f = split_filters(terms(text))
+    lit = literals(ts)
+    if lit:
+        return len("".join(lit)) >= MIN_QUERY and len(ts) <= 10
+    return bool(f.get("ext") or f.get("since") or f.get("size"))
+
+
+# ---------------------------------------------------------------- running it
+
+def plocate(db, patterns, regex, keep, deadline):
+    """Paths from one index matching every pattern, filtered by keep(), at most PER_PASS."""
+    argv = ["plocate", "-0", "-i", "-d", db] + (["--regexp"] if regex else []) + ["--"] + patterns
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return []
+    out, buf = [], b""
+    try:
+        while len(out) < PER_PASS and time.monotonic() < deadline:
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                break
+            buf += chunk
+            *done, buf = buf.split(b"\0")
+            for raw in done:
+                p = raw.decode("utf-8", "surrogateescape")
+                if keep(p):
+                    out.append(p)
+                    if len(out) >= PER_PASS:
+                        break
+    finally:
+        proc.kill()
+        proc.wait()
+    return out
+
+
+def excluded(path, ex):
+    """An exclusion like "/.git/" also matches the folder itself, "/x/.git"."""
+    lp = path.lower() + "/"
+    return any(e in lp for e in ex)
+
+
+def candidates(text, excludes, home):
+    ts = terms(text)
+    lit = literals(ts)
+    fz = fuzzies(ts)
+    if len(fz) != len(lit):
+        fz = []   # a fuzzy pass only helps when every word gets one
+    ex = [e.lower() for e in excludes if e]
+    own = home_db()
+    have_own = os.access(own, os.R_OK)
+    prefix = home.rstrip("/") + "/"
+
+    def keep_system(p):
+        if have_own and p.startswith(prefix):
+            return False   # the system index's copy of home is a day old
+        return not excluded(p, ex)
+
+    def keep_home(p):
+        return not excluded(p, ex)
+
+    deadline = time.monotonic() + TIMEOUT
+    found = []
+    for patterns, regex in ((list(map(glob_safe, lit)), False), (fz, True)):
+        if not patterns:
+            continue
+        found += plocate(SYSTEM_DB, patterns, regex, keep_system, deadline)
+        if have_own:
+            found += plocate(own, patterns, regex, keep_home, deadline)
+    return found
+
+
+def fzf_filter(paths, ts, keep=FZF_KEEP):
+    if not paths:
+        return []
+    try:
+        r = subprocess.run(["fzf", "--read0", "--print0", "--scheme=path", "--filter=" + fzf_query(ts)],
+                           input="\0".join(paths).encode("utf-8", "surrogateescape"),
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out, seen = [], set()
+    for raw in r.stdout.split(b"\0"):
+        p = raw.decode("utf-8", "surrogateescape")
+        if p.startswith("/") and p not in seen:
+            seen.add(p)
+            out.append(p)
+            if len(out) >= keep:
+                break
+    return out
+
+
+def fzf_keep_order(paths, ts):
+    """paths that fzf's query (only !negations here) lets through, in their order."""
+    allowed = set(fzf_filter(paths, ts, keep=len(paths) + 1))
+    return [p for p in paths if p in allowed]
+
+
+def subsequence(text, word):
+    i = 0
+    for c in text:
+        if i < len(word) and c == word[i]:
+            i += 1
+    return i == len(word)
+
+
+def rank(path, lits, home):
+    name = path.rsplit("/", 1)[-1].lower()
+    best = 0
+    for w in lits:
+        w = w.lower()
+        r = 4 if name == w else 3 if name.startswith(w) else 2 if w in name else 1 if subsequence(name, w) else 0
+        best = max(best, r)
+    in_home = bool(home) and path.startswith(home.rstrip("/") + "/")
+    hidden = "/." in (path[len(home):] if in_home else path)
+    # A hidden path loses more than home gains, so ~/.config/x/hosts sits under
+    # /etc/hosts while ~/Downloads still beats /usr/share/.../downloads.
+    return best + (0.5 if in_home else 0) - (0.6 if hidden else 0) - (path.count("/") + 1) * 0.01 - len(name) * 0.0001
+
+
+def ordered(paths, text, home):
+    lits = literals(terms(text))
+    return [p for _, _, p in sorted(((-rank(p, lits, home), i, p) for i, p in enumerate(paths)))]
+
+
+def walk(f, excludes, home, limit, key):
+    """The newest (or biggest) files under home matching the filters, by
+    walking it with fd: plocate needs a name to look for, fd can walk by date
+    and size. fd's output is streamed and the best `limit` kept as it comes,
+    so the order is the true one, not that of whatever fd found first; at the
+    deadline what was kept is returned."""
+    # --hidden: ~/.config counts. .gitignore is still respected, which keeps
+    # build trees out. Single-folder exclusions (/.cache/) go to fd as -E so
+    # it doesn't walk into them; the rest are checked here.
+    argv = ["fd", "--hidden", "--absolute-path", "--base-directory", home, "--print0", "--color", "never"]
+    for e in excludes:
+        name = e.strip("/")
+        if name and "/" not in name and re.fullmatch(r"[A-Za-z0-9._ -]+", name):
+            argv += ["-E", name]
+    if f.get("since"):
+        argv += ["--changed-within", "%ds" % max(1, int(time.time() - f["since"][0]))]
+    if f.get("size"):
+        lo, hi = f["size"]
+        if lo is not None:
+            argv += ["--size", "+%db" % int(lo)]
+        if hi is not None:
+            argv += ["--size", "-%db" % int(hi)]
+    if f.get("type") == "dir":
+        argv += ["--type", "d"]
+    elif f.get("type") == "file" or "size" in f:
+        argv += ["--type", "f"]
+    ex = [e.lower() for e in excludes if e]
+    best = []   # a heap of (key, path), the smallest key first
+    deadline = time.monotonic() + TIMEOUT
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return []
+    buf = b""
+    try:
+        while time.monotonic() < deadline:
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                break
+            buf += chunk
+            *done, buf = buf.split(b"\0")
+            for raw in done:
+                p = raw.decode("utf-8", "surrogateescape").rstrip("/")
+                if not p or excluded(p, ex) or not passes(p, f):
+                    continue
+                k = key(p)
+                if len(best) < limit:
+                    heapq.heappush(best, (k, p))
+                elif k > best[0][0]:
+                    heapq.heapreplace(best, (k, p))
+    finally:
+        proc.kill()
+        proc.wait()
+    return [p for _, p in sorted(best, reverse=True)]
+
+
+def size_of(path):
+    try:
+        return os.stat(path).st_size
+    except OSError:
+        return 0
+
+
+def mtime(path):
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return 0
+
+
+def search(text, excludes, home, limit):
+    ts, f = split_filters(terms(text))
+    if not literals(ts):
+        if f.get("since") or (f.get("size") and not f.get("ext")):
+            # Newest first for a date, biggest first for a size alone.
+            hits = walk(f, excludes, home, limit * 4 if ts else limit, mtime if f.get("since") else size_of)
+            # !negations still apply with no words to search for.
+            return (fzf_keep_order(hits, ts) if ts else hits)[:limit]
+        # Only ext:, maybe size:/type:: each extension is the name to look for.
+        hits, seen = [], set()
+        for e in f.get("ext") or []:
+            for p in candidates("." + e + "$", excludes, home):
+                if p not in seen and passes(p, f):
+                    seen.add(p)
+                    hits.append(p)
+        if ts:
+            hits = fzf_keep_order(hits, ts)
+        return ordered(hits, " ".join("." + e for e in f.get("ext") or []), home)[:limit]
+    rest = " ".join(ts)
+    keep = FZF_KEEP * 8 if len(f) > 1 else FZF_KEEP
+    # fzf keeps its best few hundred; home and system paths go through it
+    # separately so a common word ("git") can't fill the cut with system
+    # files before the home lift is applied.
+    cands = candidates(rest, excludes, home)
+    prefix = home.rstrip("/") + "/"
+    mine = [p for p in cands if p.startswith(prefix)]
+    found = fzf_filter(mine, ts, keep=keep) + fzf_filter([p for p in cands if not p.startswith(prefix)], ts, keep=keep)
+    return ordered([p for p in found if passes(p, f)], rest, home)[:limit]
+
+
+# ---------------------------------------------------------------- the home index
+
+def index(max_age):
+    db = home_db()
+    try:
+        if max_age is not None and time.time() - os.stat(db).st_mtime < max_age:
+            return 0
+    except FileNotFoundError:
+        pass
+    d = cache_dir()
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    os.chmod(d, 0o700)
+    # A file of its own, so a refresh from the bar and one from a terminal at
+    # the same moment can't write into each other.
+    fd, tmp = tempfile.mkstemp(prefix="home.db.", dir=d)
+    os.close(fd)
+    old = os.umask(0o077)
+    try:
+        r = subprocess.run(["updatedb", "-l", "0", "-U", os.path.expanduser("~"), "-o", tmp],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120)
+        if r.returncode != 0:
+            sys.stderr.write(r.stderr.decode("utf-8", "replace"))
+            return 1
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, db)
+        return 0
+    finally:
+        os.umask(old)
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+# ---------------------------------------------------------------- outputs
+
+def kind_of(path, is_dir):
+    if is_dir:
+        return "folder"
+    name = path.rsplit("/", 1)[-1]
+    dot = name.rfind(".")
+    return KIND.get(name[dot + 1:].lower(), "file") if dot > 0 else "file"
+
+
+def short(path, home):
+    h = home.rstrip("/")
+    return "~" + path[len(h):] if path == h or path.startswith(h + "/") else path
+
+
+def human_size(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return ("%d %s" if unit == "B" else "%.1f %s") % (n, unit)
+        n /= 1024.0
+
+
+def human_age(t):
+    d = max(0, time.time() - t)
+    for size, unit in ((86400 * 365, "y"), (86400, "d"), (3600, "h"), (60, "min")):
+        if d >= size:
+            return "%d %s ago" % (d // size, unit)
+    return "just now"
+
+
+def item(path, home, details=False):
+    try:
+        st = os.stat(path)
+        mode = st.st_mode
+    except OSError:
+        st, mode = None, 0
+    is_dir = stat.S_ISDIR(mode)
+    slash = path.rfind("/")
+    name = path[slash + 1:] or "/"
+    folder = path[:slash] or "/"
+    k = kind_of(path, is_dir)
+    return {
+        "title": name,
+        "subtitle": short(folder, home) + (" · Folder" if is_dir else "")
+                    + ((" · " + ("" if is_dir else human_size(st.st_size) + " · ") + human_age(st.st_mtime)) if details and st else ""),
+        "icon": ICONS[k],
+        # Only a regular file is handed to the image loader: a FIFO named
+        # x.png would block the thread that reads it.
+        "image": path if k == "image" and stat.S_ISREG(mode) else "",
+        "run": {"kind": "open", "target": path, "label": "open folder" if is_dir else "open"},
+        "alt": {"kind": "argv", "target": ["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + (path if is_dir else folder)], "label": "terminal here"},
+    }
+
+
+def punctum(home):
+    try:
+        req = json.loads(sys.stdin.read(1024 * 1024) or "{}")
+    except ValueError:
+        req = {}
+    text = str(req.get("text") or "").strip()
+    settings = req.get("settings") if isinstance(req.get("settings"), dict) else {}
+    excludes = settings.get("exclude") if isinstance(settings.get("exclude"), list) else DEFAULT_EXCLUDE
+    excludes = [str(e) for e in excludes if isinstance(e, str) and e and not any(c.isspace() for c in e)]
+    ts, f = split_filters(terms(text))
+    if f["bad"]:
+        print(json.dumps({"items": [], "message": "Didn't understand %s · size:>10M dm:today ext:pdf type:dir" % ", ".join(f["bad"])}))
+        return 0
+    if not usable(text):
+        print(json.dumps({"items": [], "message": "Type a file or folder name · 'exact ^start end$ !leave-out · size: dm: ext: type:"}))
+        return 0
+    paths = search(text, excludes, home, 40)
+    msg = "" if paths else "Nothing named like \"%s\" · files from today outside your home folder show up tomorrow" % text
+    details = any(k in f for k in ("size", "since"))
+    print(json.dumps({"items": [item(p, home, details) for p in paths], "message": msg}))
+    return 0
+
+
+def interactive(args, home):
+    if not shutil.which("fzf"):
+        print("everywhere -i needs fzf", file=sys.stderr)
+        return 1
+    me = os.path.realpath(sys.argv[0])
+    reload = shlex.join([sys.executable, me, "--print0", "--limit", str(args.limit)]) + " -- {q} || true"
+    r = subprocess.run(["fzf", "--disabled", "--read0", "--prompt", "everywhere> ", "--query", " ".join(args.query),
+                        "--bind", "start:reload:" + reload, "--bind", "change:reload:" + reload,
+                        "--preview", "ls -ld -- {}", "--preview-window", "down,1"],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+    chosen = r.stdout.decode("utf-8", "surrogateescape").rstrip("\n")
+    if not chosen:
+        return 130 if r.returncode == 130 else 1
+    if args.open:
+        subprocess.Popen(["xdg-open", chosen], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    else:
+        print(chosen)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="everywhere", description="Find files anywhere on the disk by name.")
+    ap.add_argument("query", nargs="*", help="words; fzf syntax: 'exact ^start end$ !leave-out")
+    ap.add_argument("-i", "--interactive", action="store_true", help="pick one with fzf")
+    ap.add_argument("--open", action="store_true", help="with -i: open the chosen path")
+    ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--print0", action="store_true", help="NUL-separated output")
+    ap.add_argument("--json", action="store_true", help="JSON output")
+    ap.add_argument("--exclude", action="append", help="leave out paths containing this (repeatable)")
+    ap.add_argument("--no-default-excludes", action="store_true")
+    ap.add_argument("--index", action="store_true", help="rebuild the index of your home folder")
+    ap.add_argument("--max-age", type=float, help="with --index: only if older than this many seconds")
+    ap.add_argument("--punctum", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--rank", action="store_true", help=argparse.SUPPRESS)
+    args = ap.parse_args()
+    home = os.path.expanduser("~")
+
+    if args.index:
+        return index(args.max_age)
+    if args.punctum:
+        return punctum(home)
+    if args.interactive:
+        return interactive(args, home)
+    text = " ".join(args.query)
+    if args.rank:   # for the tests: NUL-separated paths on stdin, ranked for the query
+        paths = [p for p in sys.stdin.buffer.read().decode("utf-8", "surrogateescape").split("\0") if p]
+        sys.stdout.write("\n".join(ordered(paths, text, home)) + "\n")
+        return 0
+    _, f = split_filters(terms(text))
+    if f["bad"]:
+        print("everywhere: didn't understand %s (size:>10M dm:today ext:pdf type:dir)" % ", ".join(f["bad"]), file=sys.stderr)
+        return 2
+    if not usable(text):
+        print("everywhere: type at least %d letters, or ext:, dm: or size:" % MIN_QUERY, file=sys.stderr)
+        return 2
+    excludes = ([] if args.no_default_excludes else DEFAULT_EXCLUDE) + (args.exclude or [])
+    paths = search(text, excludes, home, max(1, args.limit))
+    if args.json:
+        print(json.dumps([item(p, home, True) for p in paths]))
+    elif args.print0:
+        sys.stdout.write("".join(p + "\0" for p in paths))
+    else:
+        sys.stdout.write("".join(p + "\n" for p in paths))
+    return 0 if paths else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        sys.exit(0)
+    except KeyboardInterrupt:
+        sys.exit(130)

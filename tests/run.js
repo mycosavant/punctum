@@ -891,29 +891,33 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const failed = Ext.scriptProvider(m).match("brk x", { home: "/h", sandboxHelper: SANDBOX, search: { key: "x", text: "", failed: true, error: "bwrap: execvp ./run: No such file or directory" } })[0]
   check("ext: a script that couldn't run says so, with its error line", /couldn't run/.test(failed.title) && /execvp/.test(failed.subtitle), JSON.stringify(failed)) }
 
-// everywhere: the command itself
-{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const EW = P + "extensions/everywhere/everywhere"
+// Everywhere's two builds, tested alike: everywhere.py, and the Rust one
+// (cargo build) when it's built.
+var EW_IMPLS = [["py", P + "extensions/everywhere/everywhere.py"]].concat(
+  require("fs").existsSync(P + "target/debug/everywhere") ? [["rust", P + "target/debug/everywhere"]] : [])
+if (EW_IMPLS.length === 1) console.log("--    everywhere: the Rust build untested, no target/debug/everywhere (cargo build)")
+// everywhere: the command itself, the Python and the Rust one alike
+for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   const rank = (q, paths, home) => spawnSync(EW, ["--rank", "--", q], { input: paths.join("\0"), encoding: "utf8", env: Object.assign({}, process.env, { HOME: home || "/home/u" }) }).stdout.trim().split("\n")
   const order = rank("dwnlds", ["/usr/share/icons/x/stat_sys_download_done.xml", "/home/u/Downloads", "/home/u/.rustup/downloads", "/etc/hosts"])
-  check("everywhere: ~/Downloads first for dwnlds, hidden after", order[0] === "/home/u/Downloads" && order.indexOf("/home/u/.rustup/downloads") > 0, order.join(","))
-  check("everywhere: an exact name beats the home lift; a hidden home file loses to a visible system one",
+  check(IMPL + " everywhere: ~/Downloads first for dwnlds, hidden after", order[0] === "/home/u/Downloads" && order.indexOf("/home/u/.rustup/downloads") > 0, order.join(","))
+  check(IMPL + " everywhere: an exact name beats the home lift; a hidden home file loses to a visible system one",
     rank("hosts", ["/home/u/.config/gh/hosts.yml", "/etc/hosts"])[0] === "/etc/hosts" && rank("hosts", ["/home/u/.config/pinta/x/hosts", "/etc/hosts"])[0] === "/etc/hosts")
   // For real, with a scratch home and its own index: the home index, globs escaped, ^start, and no shell anywhere.
   const home = fs.mkdtempSync(os.tmpdir() + "/everywhere-home-")
   fs.mkdirSync(home + "/Docs"); fs.writeFileSync(home + "/Docs/file[1].txt", ""); fs.writeFileSync(home + "/Docs/what?.md", ""); fs.writeFileSync(home + "/Docs/downbeat.txt", "")
   const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
   const ew = (...a) => spawnSync(EW, a, { env, encoding: "utf8", timeout: 20000 })
-  check("everywhere: --index builds a private index", ew("--index").status === 0 && (fs.statSync(home + "/.cache/everywhere/home.db").mode & 0o777) === 0o600 && (fs.statSync(home + "/.cache/everywhere").mode & 0o777) === 0o700)
-  check("everywhere: * ? [ ] in a name are found literally (exact terms skip the fuzzy pass)", ew("'file[1]").stdout.split("\n")[0] === home + "/Docs/file[1].txt" && ew("'what?").stdout.split("\n")[0] === home + "/Docs/what?.md")
-  check("everywhere: ^name matches a name's start", ew("^downbeat").stdout.split("\n")[0] === home + "/Docs/downbeat.txt")
+  check(IMPL + " everywhere: --index builds a private index", ew("--index").status === 0 && (fs.statSync(home + "/.cache/everywhere/home.db").mode & 0o777) === 0o600 && (fs.statSync(home + "/.cache/everywhere").mode & 0o777) === 0o700)
+  check(IMPL + " everywhere: * ? [ ] in a name are found literally (exact terms skip the fuzzy pass)", ew("'file[1]").stdout.split("\n")[0] === home + "/Docs/file[1].txt" && ew("'what?").stdout.split("\n")[0] === home + "/Docs/what?.md")
+  check(IMPL + " everywhere: ^name matches a name's start", ew("^downbeat").stdout.split("\n")[0] === home + "/Docs/downbeat.txt")
   ew("$(touch " + home + "/pwned)"); ew("--", "`touch " + home + "/pwned2`")
-  check("everywhere: a $(…) query runs nothing", !fs.existsSync(home + "/pwned") && !fs.existsSync(home + "/pwned2"))
+  check(IMPL + " everywhere: a $(…) query runs nothing", !fs.existsSync(home + "/pwned") && !fs.existsSync(home + "/pwned2"))
   const cb = spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: [] } }), encoding: "utf8" })
   const items = JSON.parse(cb.stdout).items
-  check("everywhere: --punctum returns rows the bar accepts", items[0].title === "downbeat.txt" && Ext.parseOutput(cb.stdout).items[0].run.kind === "open" && Ext.parseOutput(cb.stdout).items[0].alt.kind === "argv", cb.stdout.slice(0, 200))
-  check("everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
-  check("everywhere: --index --max-age skips a fresh index", (() => { const t = fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs; ew("--index", "--max-age", "60"); return fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs === t })())
+  check(IMPL + " everywhere: --punctum returns rows the bar accepts", items[0].title === "downbeat.txt" && Ext.parseOutput(cb.stdout).items[0].run.kind === "open" && Ext.parseOutput(cb.stdout).items[0].alt.kind === "argv", cb.stdout.slice(0, 200))
+  check(IMPL + " everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
+  check(IMPL + " everywhere: --index --max-age skips a fresh index", (() => { const t = fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs; ew("--index", "--max-age", "60"); return fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs === t })())
   fs.rmSync(home, { recursive: true }) }
 
 // reminders: times parsed here, set through remind-set with the message on stdin
@@ -1108,8 +1112,7 @@ print(json.dumps({
   fs.rmSync(home, { recursive: true, force: true }) }
 
 // everywhere filters: size:, dm:, ext:, type:, against a scratch home with known sizes and dates
-{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const EW = P + "extensions/everywhere/everywhere"
+for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   // The folder's name mustn't hold a searched word's letters in order: the
   // fuzzy pass matches any path segment, so "everywhere-filters-" made "file"
   // find every file in it. On a machine with a system index those matches sat
@@ -1128,21 +1131,21 @@ print(json.dumps({
   const ew = (...a) => { const r = spawnSync(EW, a, { env, encoding: "utf8", timeout: 20000 }); return { rc: r.status, out: r.stdout.split("\n").filter(p => p.startsWith(home + "/") || p === home).map(p => p.replace(home, "~")), err: r.stderr } }
   ew("--index")
   const today = ew("dm:today").out
-  check("filters: dm:today alone lists what changed today, not older files", today.includes("~/Docs/newnote.txt") && !today.includes("~/Docs/oldnote.txt"), today.join(","))
-  check("filters: words and a date together", ew("note", "dm:3d").out.join() === "~/Docs/newnote.txt" && ew("note", "dm:2w").out.length === 2)
+  check(IMPL + " filters: dm:today alone lists what changed today, not older files", today.includes("~/Docs/newnote.txt") && !today.includes("~/Docs/oldnote.txt"), today.join(","))
+  check(IMPL + " filters: words and a date together", ew("note", "dm:3d").out.join() === "~/Docs/newnote.txt" && ew("note", "dm:2w").out.length === 2)
   const big = ew("size:>1M").out
-  check("filters: size:>1M alone finds the big file only", big.join() === "~/Docs/bigfile.bin", big.join())
+  check(IMPL + " filters: size:>1M alone finds the big file only", big.join() === "~/Docs/bigfile.bin", big.join())
   { const small = ew("file", "size:<1k").out
-    check("filters: size:<1k with words", small.join() === "~/Docs/smallfile.txt", small.join()) }
+    check(IMPL + " filters: size:<1k with words", small.join() === "~/Docs/smallfile.txt", small.join()) }
   const txt = ew("ext:txt").out
-  check("filters: ext:txt alone finds the .txt files and nothing else", txt.length === 3 && txt.every(p => p.endsWith(".txt")), txt.join(","))
-  check("filters: type:dir and type:file", ew("docs", "type:dir").out[0] === "~/Docs" && !ew("docs", "type:file").out.includes("~/Docs"))
-  check("filters: a filter it doesn't understand is an error, not a silent miss", ew("x", "dm:banana").rc === 2 && /dm:banana/.test(ew("x", "dm:banana").err))
+  check(IMPL + " filters: ext:txt alone finds the .txt files and nothing else", txt.length === 3 && txt.every(p => p.endsWith(".txt")), txt.join(","))
+  check(IMPL + " filters: type:dir and type:file", ew("docs", "type:dir").out[0] === "~/Docs" && !ew("docs", "type:file").out.includes("~/Docs"))
+  check(IMPL + " filters: a filter it doesn't understand is an error, not a silent miss", ew("x", "dm:banana").rc === 2 && /dm:banana/.test(ew("x", "dm:banana").err))
   const cb = JSON.parse(spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "note dm:3d", settings: { exclude: [] } }), encoding: "utf8" }).stdout)
   const mine = cb.items.filter(i => i.run.target.startsWith(home + "/"))
-  check("filters: with a date or size, the bar's rows show size and age", mine.length === 1 && / B · (just now|.*ago)$/.test(mine[0].subtitle), JSON.stringify(mine))
+  check(IMPL + " filters: with a date or size, the bar's rows show size and age", mine.length === 1 && / B · (just now|.*ago)$/.test(mine[0].subtitle), JSON.stringify(mine))
   // A distinctive folder name, so only the exclusion can keep .git out of the top rows.
-  check("filters: an exclusion like /.git/ also leaves out the folder itself", (() => { fs.mkdirSync(home + "/zzproj/.git", { recursive: true }); ew("--index"); return !ew("zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) && ew("--no-default-excludes", "zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) })())
+  check(IMPL + " filters: an exclusion like /.git/ also leaves out the folder itself", (() => { fs.mkdirSync(home + "/zzproj/.git", { recursive: true }); ew("--index"); return !ew("zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) && ew("--no-default-excludes", "zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) })())
   fs.rmSync(home, { recursive: true, force: true }) }
 
 // >_ and > for the default agent
@@ -1152,8 +1155,7 @@ print(json.dumps({
   check("agent: prefixes come from the config, and letters can't be one", a("<< hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) })[0].title === "Ask Claude Code: hi" && !a("x hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) }).some(r => r.provider === "ai")) }
 
 // everywhere review fixes: true newest-first walks, DST-proof yesterday, strict filters, negations without words
-{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const EW = P + "extensions/everywhere/everywhere"
+for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   const home = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/everywhere-walk-")
   const old = Date.now() / 1000 - 2 * 86400
   for (let d = 0; d < 30; d++) { fs.mkdirSync(home + "/old" + d); for (let i = 0; i < 200; i++) { const f = home + "/old" + d + "/f" + i; fs.writeFileSync(f, ""); fs.utimesSync(f, old, old) } }
@@ -1161,17 +1163,18 @@ print(json.dumps({
   for (let i = 0; i < 5; i++) fs.writeFileSync(home + "/new/fresh" + i, "")
   const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
   const tops = [1, 2, 3].map(() => spawnSync(EW, ["--limit", "5", "dm:week", "type:file"], { env, encoding: "utf8", timeout: 20000 }).stdout.split("\n").filter(Boolean))
-  check("everywhere: dm:week is newest first every time, among 6,000 older files", tops.every(t => t.length === 5 && t.every(p => /\/new\/fresh\d$/.test(p))), JSON.stringify(tops.map(t => t.map(p => p.replace(home, "~")))))
+  check(IMPL + " everywhere: dm:week is newest first every time, among 6,000 older files", tops.every(t => t.length === 5 && t.every(p => /\/new\/fresh\d$/.test(p))), JSON.stringify(tops.map(t => t.map(p => p.replace(home, "~")))))
   const bad = ["dm:2026-02-30", "dm:2026-13-01", "ext:pdf,b@d", "size:10M-1M", "size:<0"].filter(q => spawnSync(EW, ["x", q], { env, encoding: "utf8" }).status !== 2)
-  check("everywhere: impossible dates, odd extensions, inverted or negative sizes are errors", bad.length === 0, bad.join(" "))
+  check(IMPL + " everywhere: impossible dates, odd extensions, inverted or negative sizes are errors", bad.length === 0, bad.join(" "))
   fs.writeFileSync(home + "/new/readme.md", ""); fs.writeFileSync(home + "/new/notes.md", "")
   spawnSync(EW, ["--index"], { env })
   const neg = spawnSync(EW, ["ext:md", "!readme"], { env, encoding: "utf8" }).stdout.split("\n").filter(p => p.startsWith(home + "/"))
-  check("everywhere: !negations apply with no words too", neg.some(p => /notes\.md$/.test(p)) && !neg.some(p => /readme\.md$/.test(p)), JSON.stringify(neg))
+  check(IMPL + " everywhere: !negations apply with no words too", neg.some(p => /notes\.md$/.test(p)) && !neg.some(p => /readme\.md$/.test(p)), JSON.stringify(neg))
   // dm:yesterday the day after the November clock change, in a zone that has one.
   const py = "import importlib.util,importlib.machinery,sys,time\nl=importlib.machinery.SourceFileLoader('ew',sys.argv[1]);s=importlib.util.spec_from_loader('ew',l);m=importlib.util.module_from_spec(s);l.exec_module(m)\nnow=time.mktime((2026,11,2,12,0,0,0,0,-1))\nlo,hi=m.parse_since('yesterday',now)\nprint(time.strftime('%Y-%m-%d %H:%M',time.localtime(lo)), time.strftime('%Y-%m-%d %H:%M',time.localtime(hi)))"
-  const dst = spawnSync("python3", ["-I", "-c", py, EW], { env: Object.assign({}, process.env, { TZ: "America/Chicago" }), encoding: "utf8" }).stdout.trim()
-  check("everywhere: dm:yesterday covers the whole day across a clock change", dst === "2026-11-01 00:00 2026-11-02 00:00", dst)
+  // (The Rust one's own test, query.rs, checks the same day.)
+  if (IMPL === "py") { const dst = spawnSync("python3", ["-I", "-c", py, EW], { env: Object.assign({}, process.env, { TZ: "America/Chicago" }), encoding: "utf8" }).stdout.trim()
+    check(IMPL + " everywhere: dm:yesterday covers the whole day across a clock change", dst === "2026-11-01 00:00 2026-11-02 00:00", dst) }
   fs.rmSync(home, { recursive: true, force: true }) }
 
 // native extensions: units through punctumd (cargo build first), then back to its JS fallback

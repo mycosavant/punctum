@@ -9,6 +9,10 @@
 #                                checked against native/checksums.txt
 #        punctum-native remove   delete bin/punctumd: back to the JS versions
 #
+# Everywhere's Rust build (bin/everywhere) comes and goes with punctumd: built
+# from the same source, downloaded from the same release and checked the same
+# way. Without it, Everywhere runs its Python version.
+#
 # It installs only into this plugin's bin/, never with sudo. A punctumd from a
 # package (on PATH) is left alone. Whichever way it arrives, the bar picks it
 # up by itself: this stops the running one and the bar starts the new one.
@@ -24,8 +28,13 @@ case $(uname -m) in
   aarch64) asset="punctumd-$version-aarch64-linux-musl" ;;
   *) asset="" ;;
 esac
-sum=""
-[[ -n $asset && -f "$dir/native/checksums.txt" ]] && sum=$(awk -v a="$asset" '$2 == a && $1 ~ /^[0-9a-f]{64}$/ { print $1; exit }' "$dir/native/checksums.txt")
+# The SHA-256 native/checksums.txt gives a release file, or nothing.
+checksum() {
+  [[ -n $1 && -f "$dir/native/checksums.txt" ]] && awk -v a="$1" '$2 == a && $1 ~ /^[0-9a-f]{64}$/ { print $1; exit }' "$dir/native/checksums.txt"
+}
+sum=$(checksum "$asset")
+ew_asset=${asset/punctumd-/everywhere-}
+ew_sum=$(checksum "$ew_asset")
 
 about() {
   cat <<EOF
@@ -38,6 +47,9 @@ about() {
   punctumd runs no other programs, opens no network connections, and reads
   only your time-zone data. The bar talks to it over a pipe. Without it, the
   same extensions run in JavaScript inside the shell, as before.
+
+  Everywhere (/ in the bar) gets its Rust build too, from the same source:
+  it ranks in-process instead of through Python and fzf.
 
 EOF
 }
@@ -55,11 +67,14 @@ done_() {
 }
 
 # Replace bin/punctumd with $1 in one step, then stop the running one so the
-# bar starts the new one.
+# bar starts the new one; and bin/everywhere with $2, if given.
 place() {
   install -d "$dir/bin" &&
     install -m 755 "$1" "$bin.new" &&
     mv -f "$bin.new" "$bin" || return 1
+  if [[ -n ${2:-} ]]; then
+    install -m 755 "$2" "$dir/bin/everywhere.new" && mv -f "$dir/bin/everywhere.new" "$dir/bin/everywhere" || return 1
+  fi
   pkill -x -U "$(id -u)" punctumd 2>/dev/null
   return 0
 }
@@ -87,7 +102,7 @@ case ${1:-} in
     # file written under ~/.config/omarchy/plugins/.
     CARGO_TARGET_DIR="$target" cargo build --release --locked --manifest-path "$dir/Cargo.toml" ||
       done_ "The build failed; the bar keeps using the JavaScript versions." 1
-    place "$target/release/punctumd" || done_ "Couldn't install it into $dir/bin/." 1
+    place "$target/release/punctumd" "$target/release/everywhere" || done_ "Couldn't install it into $dir/bin/." 1
     done_ "Built and installed. The bar now uses it."
     ;;
 
@@ -109,15 +124,24 @@ case ${1:-} in
       done_ "The download failed; nothing changed." 1
     got=$(sha256sum "$tmp/$asset" | cut -d' ' -f1)
     [[ $got == "$sum" ]] || done_ "Its SHA-256 is $got, not the one in checksums.txt. Not installed." 1
-    place "$tmp/$asset" || done_ "Couldn't install it into $dir/bin/." 1
+    ew=""
+    if [[ -n $ew_sum ]]; then
+      echo "  And Everywhere's, checked against $ew_sum:"
+      curl -fL --proto '=https' --tlsv1.2 --max-filesize 50000000 -o "$tmp/$ew_asset" "$repo/releases/download/v$version/$ew_asset" ||
+        done_ "The download failed; nothing changed." 1
+      got=$(sha256sum "$tmp/$ew_asset" | cut -d' ' -f1)
+      [[ $got == "$ew_sum" ]] || done_ "Everywhere's SHA-256 is $got, not the one in checksums.txt. Not installed." 1
+      ew="$tmp/$ew_asset"
+    fi
+    place "$tmp/$asset" "$ew" || done_ "Couldn't install it into $dir/bin/." 1
     done_ "Checked and installed. The bar now uses it."
     ;;
 
   remove)
     if [[ ! -e $bin ]]; then
       echo "  There's no punctumd in $dir/bin/."
-    elif ask "Remove $bin and go back to the JavaScript versions?"; then
-      rm -f "$bin" && pkill -x -U "$(id -u)" punctumd 2>/dev/null
+    elif ask "Remove $bin (and bin/everywhere) and go back to the JavaScript versions?"; then
+      rm -f "$bin" "$dir/bin/everywhere" && pkill -x -U "$(id -u)" punctumd 2>/dev/null
       echo "  Removed."
     fi
     other=$(command -v punctumd 2>/dev/null || true)

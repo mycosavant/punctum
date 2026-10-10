@@ -31,10 +31,12 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 for target in "${TARGETS[@]}"; do
-  asset="punctumd-$version-${target/-unknown/}"
   RUSTFLAGS="--remap-path-prefix=$root=/punctum --remap-path-prefix=$cargo_home=/cargo -C strip=symbols" \
     CARGO_TARGET_DIR="$work/target" \
     cargo "+$TOOLCHAIN" build --release --locked --target "$target" --manifest-path "$root/Cargo.toml" >&2
-  install -m 755 "$work/target/$target/release/punctumd" "$out/$asset"
-  (cd "$out" && sha256sum "$asset" > "$asset.sha256" && cat "$asset.sha256")
+  for name in punctumd everywhere; do
+    asset="$name-$version-${target/-unknown/}"
+    install -m 755 "$work/target/$target/release/$name" "$out/$asset"
+    (cd "$out" && sha256sum "$asset" > "$asset.sha256" && cat "$asset.sha256")
+  done
 done

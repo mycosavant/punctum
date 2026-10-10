@@ -19,11 +19,13 @@ provides=('punctumd')
 conflicts=('punctumd')
 options=('!strip' '!debug')
 source=("LICENSE-$pkgver::https://raw.githubusercontent.com/mycosavant/punctum/v$pkgver/LICENSE")
-source_x86_64=("$_name-$pkgver-x86_64::$url/releases/download/v$pkgver/$_name-$pkgver-x86_64-linux-musl")
-sha256sums=('SKIP')           # updpkgsums once the release exists
-sha256sums_x86_64=('SKIP')    # must equal native/checksums.txt for this version
+source_x86_64=("$_name-$pkgver-x86_64::$url/releases/download/v$pkgver/$_name-$pkgver-x86_64-linux-musl"
+               "everywhere-$pkgver-x86_64::$url/releases/download/v$pkgver/everywhere-$pkgver-x86_64-linux-musl")
+sha256sums=('SKIP')                 # updpkgsums once the release exists
+sha256sums_x86_64=('SKIP' 'SKIP')   # must equal native/checksums.txt for this version
 
 package() {
   install -Dm755 "$_name-$pkgver-$CARCH" "$pkgdir/usr/bin/punctumd"
+  install -Dm755 "everywhere-$pkgver-$CARCH" "$pkgdir/usr/lib/punctum/everywhere"
   install -Dm644 "LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

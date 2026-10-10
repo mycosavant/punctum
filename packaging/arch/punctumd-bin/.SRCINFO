@@ -13,6 +13,8 @@ pkgbase = punctumd-bin
 	source = LICENSE-0.1.0::https://raw.githubusercontent.com/mycosavant/punctum/v0.1.0/LICENSE
 	sha256sums = SKIP
 	source_x86_64 = punctumd-0.1.0-x86_64::https://github.com/mycosavant/punctum/releases/download/v0.1.0/punctumd-0.1.0-x86_64-linux-musl
+	source_x86_64 = everywhere-0.1.0-x86_64::https://github.com/mycosavant/punctum/releases/download/v0.1.0/everywhere-0.1.0-x86_64-linux-musl
+	sha256sums_x86_64 = SKIP
 	sha256sums_x86_64 = SKIP
 
 pkgname = punctumd-bin

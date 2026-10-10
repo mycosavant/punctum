@@ -3,7 +3,7 @@
   "id": "everywhere",
   "name": "Everywhere",
   "version": "1.0.0",
-  "description": "/name: every file on the disk by name, as you type (plocate, ranked through fzf)",
+  "description": "/name: every file on the disk by name, as you type (plocate, ranked in Rust)",
   "icon": "󰍉",
   "type": "script",
   "command": [
@@ -40,15 +40,14 @@
   },
   "requires": [
     "plocate",
-    "fzf",
     "updatedb"
   ],
   "sandbox": false,
   "permissions": {
     "runs": [
       "plocate",
-      "fzf",
-      "updatedb (your home folder only)"
+      "updatedb (your home folder only)",
+      "fzf (only its Python version, without the Rust build)"
     ],
     "reads": [
       "file names on the disk you're allowed to list"

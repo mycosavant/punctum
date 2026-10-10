@@ -36,19 +36,22 @@ build() {
   cd "$_name"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cargo build --frozen --release -p punctumd
+  cargo build --frozen --release -p punctumd -p everywhere
 }
 
 check() {
   cd "$_name"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cargo test --frozen -p punctumd
+  cargo test --frozen -p punctumd -p everywhere
 }
 
 package() {
   cd "$_name"
   install -Dm755 target/release/punctumd "$pkgdir/usr/bin/punctumd"
+  # Everywhere's Rust build, where the plugin's launcher looks for it; off
+  # PATH while its name is settled.
+  install -Dm755 target/release/everywhere "$pkgdir/usr/lib/punctum/everywhere"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 docs/native.md "$pkgdir/usr/share/doc/$pkgname/native.md"
 }
