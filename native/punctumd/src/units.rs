@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::format::{format, js_round, plain, to_precision};
-use crate::{Extension, Row};
+use crate::{Answer, Context, Extension, Row};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Dim {
@@ -311,8 +311,8 @@ impl Extension for Units {
         "units"
     }
 
-    fn matches(&self, query: &str, _settings: &serde_json::Value) -> Vec<Row> {
-        let Some(p) = parse(query) else { return Vec::new() };
+    fn matches(&self, query: &str, _ctx: &Context) -> Answer {
+        let Some(p) = parse(query) else { return Answer::default() };
         let mut out = Vec::new();
         for (i, to) in p.targets.iter().enumerate() {
             let Some(value) = convert(p.amount.value, p.amount.unit, to).map(round) else { continue };
@@ -325,9 +325,10 @@ impl Extension for Units {
                 icon: to.dim.icon().into(),
                 score: (if p.explicit { 90.0 } else { 86.0 }) - i as f64 * 0.1,
                 copy: plain(value),
+                ..Default::default()
             });
         }
-        out
+        out.into()
     }
 }
 
@@ -335,8 +336,17 @@ impl Extension for Units {
 mod tests {
     use super::*;
 
+    fn rows(q: &str) -> Vec<Row> {
+        let ctx = Context {
+            settings: &serde_json::Value::Null,
+            now: jiff::Timestamp::now(),
+            local_zone: jiff::tz::TimeZone::UTC,
+        };
+        Units.matches(q, &ctx).rows
+    }
+
     fn top(q: &str) -> Option<String> {
-        Units.matches(q, &serde_json::Value::Null).into_iter().next().map(|r| r.title)
+        rows(q).into_iter().next().map(|r| r.title)
     }
 
     // The same cases tests/run.js puts to the JS provider.
@@ -379,12 +389,12 @@ mod tests {
 
     #[test]
     fn counterparts_copy_the_bare_number() {
-        let rows = Units.matches("5 km", &serde_json::Value::Null);
-        assert_eq!(rows[0].title, "3.1069 mi");
-        assert_eq!(rows[0].copy, "3.1069");
-        assert_eq!(rows[0].subtitle, "5 km → mi · Length");
-        assert_eq!(rows[0].score, 86.0);
-        let ft = Units.matches("3 m", &serde_json::Value::Null);
+        let km = rows("5 km");
+        assert_eq!(km[0].title, "3.1069 mi");
+        assert_eq!(km[0].copy, "3.1069");
+        assert_eq!(km[0].subtitle, "5 km → mi · Length");
+        assert_eq!(km[0].score, 86.0);
+        let ft = rows("3 m");
         assert_eq!(ft.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["9.8425 ft", "3.2808 yd"]);
         assert_eq!(ft[1].score, 85.9);
     }

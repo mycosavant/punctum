@@ -1178,17 +1178,16 @@ print(json.dumps({
 { const fs = require("fs"), { spawnSync } = require("child_process")
   const bin = process.env.PUNCTUMD || P + "target/debug/punctumd"
   const found = Extensions.discover([{ dir: P + "extensions" }])
-  // The bar's services.native, made synchronous: one punctumd per question.
-  let asked = 0
+  // The bar's services.native, made synchronous: one punctumd per question,
+  // as a Sri Lanka user at 14:00 on 23 Sep 2026, wherever the tests run.
   const native = (id, query, settings) => {
-    asked++
-    const r = spawnSync(bin, [], { input: JSON.stringify({ id: "t", ext: id, query, settings }) + "\n", encoding: "utf8" })
+    const r = spawnSync(bin, [], { input: JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" }) + "\n", encoding: "utf8" })
     return JSON.parse(r.stdout).rows
   }
   const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1199,6 +1198,14 @@ print(json.dumps({
     check("native: its commands come from the manifest", nq("convert units").some(x => x.title === "Convert units" && x.complete === "5 km to mi"))
     check("native: ?extensions says it runs in punctumd", /native, in punctumd/.test(nq("?extensions").find(x => x.title === "Units").subtitle))
     check("native: with punctumd gone (no service), units is quiet, not broken", !nq("5 km to mi", { native: null }).some(x => x.provider === "units") && nq("2+2")[0].title === "4")
+    check("native: time answers through punctumd", got.manifests.find(m => m.id === "time").runtime === "punctumd" && nq("time in tokyo")[0].title === "17:30 Tokyo"
+      && nq("3pm lkt to pst")[0].title === "02:30 Los Angeles" && nq("11pm to tokyo")[0].title === "02:30 Tokyo (+1 day)" && nq("in 2 weeks")[0].title === "Wed, 7 Oct 2026"
+      && nq("time").map(x => x.title).slice(0, 4).join() === "14:00 Colombo,08:30 UTC,04:30 New York,09:30 London", nq("time").map(x => x.title).join())
+    check("native: time's help and commands come from its manifest", nq("?time").map(x => x.subtitle).join("|") === "→ 14:00 Colombo|→ 17:30 Tokyo|→ 05:30 New York" && nq("?dates")[0].icon === "󰃭" && nq("world clock").some(x => x.title === "World clock"))
+    check("native: a zone the bar never probed answers", nq("time in reykjavik")[0].title === "08:30 Reykjavik")
+    const open = x => (nq(x).find(r => r.provider === "url") || {}).run
+    check("native: web addresses open through punctumd, actions checked by the bar", open("example.com/a?b=1").target === "https://example.com/a?b=1" && open("example.com").label === "open"
+      && open("localhost:3000").target === "http://localhost:3000" && nq("example.com")[0].alt.kind === "copy" && !open("readme.md") && !open("mr.smith") && open("nas.local").target === "https://nas.local")
     check("native: while a reply is coming (null), nothing shows", !Engine.run("5 km to mi", config, { now, native: () => null }).some(x => x.provider === "units"))
   }
   // Rows from punctumd get the same checks as a script's, keeping their scores.

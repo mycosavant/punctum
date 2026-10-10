@@ -1,9 +1,20 @@
 # Native extensions and punctumd
 
 Some of the bar's own extensions are written in Rust and run in **punctumd**, a
-small daemon the bar keeps running beside it. Units is the first. Each one
-keeps its JS provider as a fallback, so the bar works the same without
-punctumd. The plan is to move the bundled extensions over one at a time, and
+small daemon the bar keeps running beside it. Each one keeps its JS provider
+as a fallback, so the bar works without punctumd.
+
+| Extension | Rust file | What the Rust version uses | Where it does better than the JS |
+|---|---|---|---|
+| Units | `units.rs` | — | Nothing yet: a port, digit for digit |
+| Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
+| Web address | `url.rs` | [psl](https://docs.rs/psl) (Public Suffix List), [idna](https://docs.rs/idna), `std::net` | A bare name needs a real top-level domain, so `mr.smith` and `notes.txt/` stay words. Private-network names (`.local`, `.lan`, `.internal`, `home.arpa`, …) still open |
+
+Time zones come from `/usr/share/zoneinfo`, the same data `date` reads, which
+the distribution keeps current. punctumd falls back to a copy built into the
+binary only where the system has none. A copy compiled in goes stale. The
+first time port used one, and the parity check caught it: it disagreed with
+`date` about Vancouver's offset in December 2026. The plan is to move the bundled extensions over one at a time, and
 later to run third-party extensions in punctumd as WebAssembly, where they can
 be sandboxed even though they answer every keystroke.
 
@@ -42,6 +53,13 @@ If none is found, native extensions run their JS fallbacks, and
 again: it waits 0.5 s before the first try and doubles the wait each time.
 After five failures in a row without a hello it stays on the fallbacks.
 
+Building inside the installed plugin folder works, but the shell sees every
+file cargo writes under `~/.config/omarchy/plugins/` and reloads the plugin
+for each one. It's quieter to build elsewhere (your own clone, say) and copy
+the one binary in: `install -m755 target/release/punctumd
+~/.config/omarchy/plugins/io.github.mycosavant.punctum/bin/`, then
+`pkill -x punctumd`.
+
 `omarchy plugin add` only clones the repository and never builds anything, so
 a plain install runs the fallbacks until you build punctumd or install a
 package.
@@ -61,12 +79,24 @@ in order, one JSON object per line. It exits when stdin closes.
 ← {"id": "units\n5 km to mi", "rows": [{"title": "3.1069 mi", "subtitle": "5 km → mi · Length",
                                         "icon": "󰑭", "score": 90, "copy": "3.1069"}]}
 
+// an answer that reads the clock says how many ms it holds
+→ {"id": "time\ntime in tokyo", "ext": "time", "query": "time in tokyo", "settings": {...}}
+← {"id": "time\ntime in tokyo", "rows": [...], "ttl": 41250}
+
+// tests fix the clock and the system zone; the bar never sends these
+→ {"id": 1, "ext": "time", "query": "time", "now": 1790152230000, "local_zone": "Asia/Colombo"}
+
 // anything it can't answer
 ← {"id": …, "error": "no extension \"x\""}
 ```
 
+Rows may carry `run` and `alt` actions from the bar's short list (open, copy,
+paste, edit, argv). The bar checks them the way it checks a script's actions.
+
 The bar uses the extension id and query as the request id, and caches each
-answer until the config changes. While an answer is on its way,
+answer until the config changes or its `ttl` runs out. A stale answer stays
+on screen until the fresh one arrives, so a clock doesn't flicker. While a
+first answer is on its way,
 `ctx.native(query)` returns null and the extension shows nothing. When the
 answer arrives, the bar runs the query again. Rows go through the same checks
 as a script's rows (`Ext.nativeProvider`), except that they keep their own
@@ -97,7 +127,11 @@ not loaded from that folder.
    and move `help` and `commands` into the manifest.
 4. Add a parity test like [`tests/units-parity.js`](../tests/units-parity.js).
    It puts thousands of queries to both the JS and the Rust provider and fails
-   on any difference.
+   on any difference. Where the Rust version is better on purpose, pin the new
+   behaviour in its Rust tests and have the parity check count those queries
+   apart, by a rule narrow enough that nothing else hides under it
+   (`time-parity.js` and `url-parity.js` do this). CI runs every
+   `tests/*-parity.js`.
 
 Numbers are formatted by `format.rs`, which matches `Engine.format` and
 JavaScript's `String(n)` digit for digit, ties included. For example,
@@ -107,8 +141,8 @@ JavaScript's `String(n)` digit for digit, ties included. For example,
 
 ```sh
 cargo test                      # the Rust extensions and the protocol
-cargo build && node tests/run.js  # the bar, with units through punctumd and through its fallback
-node tests/units-parity.js      # JS and Rust units agree
+cargo build && node tests/run.js  # the bar, with native extensions through punctumd and through their fallbacks
+for t in tests/*-parity.js; do node "$t"; done   # each native extension agrees with its JS
 ```
 
 ## Shipping a binary

@@ -5,24 +5,21 @@
   "version": "1.0.0",
   "description": "time in tokyo, days until dec 25: time zones and dates",
   "icon": "󰥔",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 140,
   "helpOrder": 170,
   "hero": true,
-  "defaults": {
-    "zones": [
-      "UTC",
-      "America/New_York",
-      "Europe/London"
-    ],
-    "clock24": true
-  },
-  "permissions": {
-    "runs": [
-      "date",
-      "timedatectl"
-    ]
-  }
+  "defaults": {"zones": ["UTC", "America/New_York", "Europe/London"], "clock24": true},
+  "help": [
+    {"id": "time", "title": "Time zones", "about": "The time anywhere, or a time converted between zones", "examples": ["time", "time in tokyo", "3pm to new york"]},
+    {"id": "dates", "title": "Dates", "icon": "󰃭", "about": "Days until a date, days between two, and weekdays", "examples": ["days until dec 25", "today + 45 days", "next friday"]}
+  ],
+  "commands": [
+    {"title": "World clock", "keywords": "time zone zones timezone clock world now", "text": "The time now in your saved zones", "complete": "time"},
+    {"title": "Convert a time", "keywords": "time zone timezone convert meeting", "text": "3pm lkt to pst", "complete": "3pm to tokyo", "select": true},
+    {"title": "Date calculator", "keywords": "date dates days until since countdown calendar weekday", "text": "Days until a date, or between two", "complete": "days until dec 25", "select": true}
+  ],
+  "permissions": {"runs": ["date (JS fallback only)", "timedatectl (JS fallback only)"], "reads": ["/usr/share/zoneinfo"]}
 }

@@ -9,6 +9,10 @@
 //
 //   time · time in tokyo · tokyo time · 3pm lkt to pst · 15:30 in london
 //   days until dec 25 · today + 45 days · 2026-01-01 to 2026-09-23 · next friday
+//
+// This is the JS fallback for native/punctumd/src/time.rs, used when
+// punctumd isn't installed; tests/time-parity.js keeps the two the same, so
+// change both together. Help and commands live in extension.json.
 
 var DAY_MS = 86400000
 var WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]

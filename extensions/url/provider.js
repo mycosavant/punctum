@@ -9,6 +9,10 @@
 //
 // Bare file names (readme.md, notes.txt, archive.zip) stay files: they need a
 // scheme, a port or a path before they read as an address.
+//
+// This is the JS fallback for native/punctumd/src/url.rs, used when punctumd
+// isn't installed; tests/url-parity.js keeps the two the same, so change both
+// together. The Rust one also wants a top-level domain that exists.
 
 function ipv4(host) {
   var parts = host.split(".")

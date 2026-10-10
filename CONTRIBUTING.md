@@ -29,7 +29,7 @@ New features are extensions: a folder in `extensions/` with an `extension.json`.
 ```sh
 cargo test                  # native extensions (punctumd)
 cargo build && node tests/run.js
-node tests/units-parity.js  # the Rust and JS units agree
+for t in tests/*-parity.js; do node "$t"; done   # native extensions agree with their JS
 ```
 
 All tests must pass, and CI runs them on every push and pull request. Add tests for anything you add or fix, and break your change once to see the test fail. They run without the shell, using sample rates, time zones and processes; a few run real `bwrap`, `plocate`, `fd` and `fzf`.

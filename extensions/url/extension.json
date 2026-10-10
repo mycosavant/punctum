@@ -5,11 +5,14 @@
   "version": "1.0.0",
   "description": "example.com: open a web address",
   "icon": "󰖟",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 100,
   "helpOrder": 100,
+  "help": [
+    {"id": "url", "title": "Open a web address", "about": "Type or paste an address; Enter opens it in your browser", "examples": ["example.com", "http://localhost:3000"]}
+  ],
   "permissions": {
     "network": [
       "the address you typed, on Enter, in your browser"

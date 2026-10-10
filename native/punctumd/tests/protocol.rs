@@ -20,7 +20,21 @@ fn talk(input: &str) -> Vec<Value> {
 fn hello_names_the_extensions() {
     let r = talk("{\"id\":0,\"op\":\"hello\"}\n");
     assert_eq!(r[0]["protocol"], 1);
-    assert_eq!(r[0]["extensions"], serde_json::json!(["units"]));
+    assert_eq!(r[0]["extensions"], serde_json::json!(["units", "time", "url"]));
+}
+
+#[test]
+fn the_clock_and_zone_can_be_fixed_and_clock_answers_expire() {
+    // 23 Sep 2026 14:00:30 in Colombo.
+    let r = talk(concat!(
+        r#"{"id":1,"ext":"time","query":"time in tokyo","settings":{"home":"Asia/Colombo"},"now":1790152230000,"local_zone":"Asia/Colombo"}"#,
+        "\n",
+        r#"{"id":2,"ext":"units","query":"5 km to mi"}"#,
+        "\n",
+    ));
+    assert_eq!(r[0]["rows"][0]["title"], "17:30 Tokyo");
+    assert_eq!(r[0]["ttl"], 30_000);
+    assert!(r[1].get("ttl").is_none());
 }
 
 #[test]

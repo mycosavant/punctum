@@ -859,21 +859,23 @@ Item {
   // It's started again when it stops, so a rebuilt one is picked up by
   // `pkill -x punctumd`, without restarting the shell.
   property var nativeServed: ({})     // id -> true, from its hello
-  property var nativeCache: ({})      // id + "\n" + query -> rows; a reply's id is this key
+  property var nativeCache: ({})      // id + "\n" + query -> { rows, until }; a reply's id is this key
   property var nativePending: ({})
   property int nativeCached: 0
   property int nativeFailures: 0      // starts in a row without a hello
 
   // ctx.native: the rows for this query, or null while punctumd works them out.
+  // An answer that has gone stale (a clock) is shown while the fresh one comes.
   function native(id, query, settings) {
     if (!root.nativeServed[id] || !nativeProc.running) return null
     var key = id + "\n" + query
-    if (root.nativeCache.hasOwnProperty(key)) return root.nativeCache[key]
+    var have = root.nativeCache.hasOwnProperty(key) ? root.nativeCache[key] : null
+    if (have && (!have.until || have.until > Date.now())) return have.rows
     if (!root.nativePending[key]) {
       root.nativePending[key] = true
       nativeProc.write(JSON.stringify({ id: key, ext: id, query: query, settings: settings === undefined ? {} : settings }) + "\n")
     }
-    return null
+    return have ? have.rows : null
   }
 
   function nativeLanded(line) {
@@ -892,10 +894,12 @@ Item {
     if (typeof r.id !== "string" || !root.nativePending[r.id]) return
     delete root.nativePending[r.id]
     if (r.error) console.warn("punctum: punctumd: " + String(r.error).slice(0, 300))
-    // Answers depend only on the query and settings, so they're kept until
-    // the config changes; a long session's worth is dropped all at once.
+    // Answers are kept until the config changes, or for the "ttl" ms an
+    // answer that reads the clock gives; a long session's worth is dropped
+    // all at once.
     if (++root.nativeCached > 2000) { root.nativeCache = ({}); root.nativeCached = 1 }
-    root.nativeCache[r.id] = Array.isArray(r.rows) ? r.rows : []
+    var ttl = Number(r.ttl)
+    root.nativeCache[r.id] = { rows: Array.isArray(r.rows) ? r.rows : [], until: ttl > 0 ? Date.now() + ttl : 0 }
     if (root.opened) Qt.callLater(root.recompute)
   }
 
@@ -1211,6 +1215,7 @@ Item {
   // ---------------------------------------------------------------- zones
 
   function refreshZones() {
+    if (root.nativeServed.time) return   // punctumd reads the zones itself
     if (zonesProc.running) return
     if (Date.now() - root.zonesFetchedAt < 60 * 60 * 1000) return
     var t = root.config.time || {}
