@@ -1322,11 +1322,11 @@ print(json.dumps({
     Ext.setWasmTrust({})
     const row = () => Engine.run("?extensions", config, { now }).find(r => r.title === "Roman numerals")
     const fresh = row()
-    check("wasm: ?extensions shows its hash, size and source, and Enter approves it", /^Off: not approved yet · Enter approves this build/.test(fresh.subtitle)
-      && /sandboxed WebAssembly · sha256 cccccccc…cccc · 54 KB · source: src\//.test(fresh.subtitle) && /reads the output of cat; runs xdg-open on Enter/.test(fresh.subtitle)
+    check("wasm: ?extensions shows its hash, size and source, and Enter approves it", /^Not approved · sandboxed · sha256 cccccccc…cccc · 54 KB · source src\/ · Enter approves this build · yours · /.test(fresh.subtitle)
+      && /reads the output of cat; runs xdg-open on Enter/.test(fresh.subtitle)
       && fresh.run.kind === "toggle-extension" && fresh.run.on && fresh.actionLabel === "Approve" && fresh.alt.kind === "open" && fresh.alt.target === "/u/roman/src", fresh.subtitle)
     Ext.setWasmTrust({ roman: { module: "f".repeat(64), manifest: msha } })
-    check("wasm: one changed since you approved it says so", /^Off: changed since you approved it/.test(row().subtitle))
+    check("wasm: one changed since you approved it says so", /^Changed since you approved it · sandboxed/.test(row().subtitle))
     Ext.setWasmTrust({ roman: { module: sha, manifest: msha } })
     const rows = Ext.nativeProvider(m).match("roman x", { home: "/h", native: () => ({ rows: [
       { title: "web", run: { kind: "open", target: "https://example.com" } }, { title: "file", run: { kind: "open", target: "/etc/passwd" } },

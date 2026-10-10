@@ -42,8 +42,8 @@ A WebAssembly extension must come with its source: `"source"` names a file or
 folder in its own folder, and without it the extension isn't loaded. It's
 **off until you approve it** in `?extensions`. Its row shows:
 
-    Off: not approved yet · Enter approves this build and turns it on · sandboxed WebAssembly ·
-    sha256 c96300e4…7bf8 · 54 KB · source: src/ · roman 2026: Roman numerals … · runs nothing
+    Not approved · sandboxed · sha256 c96300e4…7bf8 · 54 KB · source src/ · Enter approves this build ·
+    yours · runs nothing · roman 2026: Roman numerals …
 
 Enter approves this build: the SHA-256 of the module and of its manifest are
 kept in the bar's cache (`wasm-trust.json`). If either changes, a new build or
