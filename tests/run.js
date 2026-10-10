@@ -1127,7 +1127,8 @@ print(json.dumps({
   check("filters: words and a date together", ew("note", "dm:3d").out.join() === "~/Docs/newnote.txt" && ew("note", "dm:2w").out.length === 2)
   const big = ew("size:>1M").out
   check("filters: size:>1M alone finds the big file only", big.join() === "~/Docs/bigfile.bin", big.join())
-  check("filters: size:<1k with words", ew("file", "size:<1k").out.join() === "~/Docs/smallfile.txt")
+  { const small = ew("file", "size:<1k").out
+    check("filters: size:<1k with words", small.join() === "~/Docs/smallfile.txt", small.join()) }
   const txt = ew("ext:txt").out
   check("filters: ext:txt alone finds the .txt files and nothing else", txt.length === 3 && txt.every(p => p.endsWith(".txt")), txt.join(","))
   check("filters: type:dir and type:file", ew("docs", "type:dir").out[0] === "~/Docs" && !ew("docs", "type:file").out.includes("~/Docs"))
