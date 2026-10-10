@@ -911,6 +911,13 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
   check(IMPL + " everywhere: --index builds a private index", ew("--index").status === 0 && (fs.statSync(home + "/.cache/everywhere/home.db").mode & 0o777) === 0o600 && (fs.statSync(home + "/.cache/everywhere").mode & 0o777) === 0o700)
   check(IMPL + " everywhere: * ? [ ] in a name are found literally (exact terms skip the fuzzy pass)", ew("'file[1]").stdout.split("\n")[0] === home + "/Docs/file[1].txt" && ew("'what?").stdout.split("\n")[0] === home + "/Docs/what?.md")
   check(IMPL + " everywhere: ^name matches a name's start", ew("^downbeat").stdout.split("\n")[0] === home + "/Docs/downbeat.txt")
+  check(IMPL + " everywhere: ^name$ and 'name$ match a name's end exactly", ew("^downbeat.txt$").stdout.split("\n")[0] === home + "/Docs/downbeat.txt"
+    && ew("'downbeat.txt$").stdout.split("\n")[0] === home + "/Docs/downbeat.txt", ew("^downbeat.txt$").stdout.slice(0, 200))
+  check(IMPL + " everywhere: options may come after the words", ew("downbeat", "--limit", "1").stdout.trim() === home + "/Docs/downbeat.txt"
+    && JSON.parse(ew("downbeat", "--json").stdout)[0].title === "downbeat.txt")
+  check(IMPL + " everywhere: a HOME with a trailing slash ranks as without", (() => {
+    const r = spawnSync(EW, ["--rank", "--", "hosts"], { input: "/home/u/.config/hosts\0/etc/hosts", encoding: "utf8", env: Object.assign({}, process.env, { HOME: "/home/u/" }) }).stdout.trim().split("\n")
+    return r[0] === "/etc/hosts" })())
   ew("$(touch " + home + "/pwned)"); ew("--", "`touch " + home + "/pwned2`")
   check(IMPL + " everywhere: a $(…) query runs nothing", !fs.existsSync(home + "/pwned") && !fs.existsSync(home + "/pwned2"))
   const cb = spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: [] } }), encoding: "utf8" })
@@ -1162,6 +1169,8 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
   fs.mkdirSync(home + "/new")
   for (let i = 0; i < 5; i++) fs.writeFileSync(home + "/new/fresh" + i, "")
   const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
+  // A link, a pipe and a socket-like FIFO are not files, as fd's --type f has it.
+  fs.symlinkSync(home + "/new/fresh0", home + "/new/link0"); spawnSync("mkfifo", [home + "/new/pipe.png"])
   const tops = [1, 2, 3].map(() => spawnSync(EW, ["--limit", "5", "dm:week", "type:file"], { env, encoding: "utf8", timeout: 20000 }).stdout.split("\n").filter(Boolean))
   check(IMPL + " everywhere: dm:week is newest first every time, among 6,000 older files", tops.every(t => t.length === 5 && t.every(p => /\/new\/fresh\d$/.test(p))), JSON.stringify(tops.map(t => t.map(p => p.replace(home, "~")))))
   const bad = ["dm:2026-02-30", "dm:2026-13-01", "ext:pdf,b@d", "size:10M-1M", "size:<0"].filter(q => spawnSync(EW, ["x", q], { env, encoding: "utf8" }).status !== 2)

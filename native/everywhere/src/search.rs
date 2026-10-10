@@ -25,10 +25,22 @@ const PER_PASS: usize = 3000;
 /// Each step's limit.
 pub const TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Your home folder, as Python's expanduser("~") gives it: HOME, or the
+/// password database's when HOME is unset or empty; never with a trailing /.
+pub fn home() -> String {
+    let h = std::env::var("HOME")
+        .ok()
+        .filter(|h| !h.is_empty())
+        .or_else(|| std::env::home_dir().map(|p| p.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    let trimmed = h.trim_end_matches('/');
+    if trimmed.is_empty() && h.starts_with('/') { "/".into() } else { trimmed.into() }
+}
+
 pub fn cache_dir() -> std::path::PathBuf {
     match std::env::var_os("XDG_CACHE_HOME").filter(|v| !v.is_empty()) {
         Some(x) => Path::new(&x).join("everywhere"),
-        None => Path::new(&std::env::var_os("HOME").unwrap_or_default()).join(".cache/everywhere"),
+        None => Path::new(&home()).join(".cache/everywhere"),
     }
 }
 
@@ -288,7 +300,17 @@ fn walk(f: &Filters, excludes: &[String], home: &str, limit: usize, by_size: boo
     let deadline = Instant::now() + TIMEOUT;
     // The smallest kept on top, to be replaced by a bigger one.
     let best: Arc<Mutex<BinaryHeap<Reverse<Keyed>>>> = Arc::new(Mutex::new(BinaryHeap::new()));
-    let walker = ignore::WalkBuilder::new(home)
+    // fd's own ignore files too: .fdignore in a folder, and its global one.
+    let mut builder = ignore::WalkBuilder::new(home);
+    builder.add_custom_ignore_filename(".fdignore");
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(home).join(".config"));
+    if config.join("fd/ignore").is_file() {
+        let _ = builder.add_ignore(config.join("fd/ignore"));
+    }
+    let walker = builder
         .hidden(false)
         .filter_entry(move |e| {
             !(e.depth() > 0
@@ -306,8 +328,12 @@ fn walk(f: &Filters, excludes: &[String], home: &str, limit: usize, by_size: boo
             if entry.depth() == 0 {
                 return ignore::WalkState::Continue;
             }
-            let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
-            if (f.kind == Some("dir") && !is_dir) || ((f.kind == Some("file") || f.size.is_some()) && is_dir) {
+            // As fd's --type f and --type d: by what the entry is, not what a
+            // link points to, so links, pipes and sockets aren't files.
+            let kind = entry.file_type();
+            let is_dir = kind.is_some_and(|t| t.is_dir());
+            let is_file = kind.is_some_and(|t| t.is_file());
+            if (f.kind == Some("dir") && !is_dir) || ((f.kind == Some("file") || f.size.is_some()) && !is_file) {
                 return ignore::WalkState::Continue;
             }
             let Some(p) = entry.path().to_str() else { return ignore::WalkState::Continue };

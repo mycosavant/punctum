@@ -32,6 +32,7 @@ stdin and shows the rows it prints.
 /hosts !backup      leave out anything containing "backup"
 /'exact name        an exact substring, no fuzzy matching
 /^down              a name starting with "down"
+/^readme.md$        a name that is exactly readme.md
 /^/etc host         under /etc, with "host" in it
 /report ext:pdf dm:week size:>1M     filters, as in Everything
 /dm:today           what changed today in your home folder, newest first
@@ -95,8 +96,10 @@ common short words cost more, because more of the disk matches.
    [nucleo-matcher](https://docs.rs/nucleo-matcher), which reads fzf's
    syntax: `'exact`, `^start`, `end$`, `!leave-out`. A `^name` becomes
    `'/name`, since `^` anchors to the whole path and every path starts with
-   `/`. Every match is ranked; the Python version let fzf cut them to 400
-   first, which could drop a better name for a common word.
+   `/`, and `^name$` becomes `/name$`, a name that is exactly name (fzf
+   reads the Python version's rewrite as containing it). Every match is
+   ranked; the Python version let fzf cut them to 400 first, which could
+   drop a better name for a common word.
 6. **Order**, best first:
    - a name that *is* the word, then one that starts with it, contains it,
      or has its letters in order;

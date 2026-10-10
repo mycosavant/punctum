@@ -170,11 +170,26 @@ pub fn fuzzies(ts: &[String]) -> Vec<String> {
 
 /// The matcher anchors ^ to the whole path, and every path starts with /, so
 /// ^down becomes an exact match at a segment start.
+///
+/// nucleo reads two forms differently from fzf: 'x$ is the whole text to
+/// it but an exact suffix to fzf, so it becomes x$ (nucleo's exact suffix);
+/// and ^x$, a name that is x, becomes /x$.
 pub fn match_query(ts: &[String]) -> String {
     ts.iter()
-        .map(|t| match t.strip_prefix('^') {
-            Some(rest) if !rest.is_empty() && !rest.starts_with('/') => format!("'/{rest}"),
-            _ => t.clone(),
+        .map(|t| {
+            if let Some(rest) = t.strip_prefix('^')
+                && !rest.is_empty()
+                && !rest.starts_with('/')
+            {
+                return match rest.strip_suffix('$') {
+                    Some(name) if !name.is_empty() => format!("/{name}$"),
+                    _ => format!("'/{rest}"),
+                };
+            }
+            match t.strip_prefix('\'') {
+                Some(rest) if rest.len() > 1 && rest.ends_with('$') => rest.to_string(),
+                _ => t.clone(),
+            }
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -236,6 +251,7 @@ mod tests {
         assert_eq!(fuzzies(&s(&["Dwnlds", "ab", "!no"])), ["d[^/]*w[^/]*n[^/]*l[^/]*d[^/]*s"]);
         assert_eq!(glob_safe("a*b[1]"), "a\\*b\\[1\\]");
         assert_eq!(match_query(&s(&["^down", "^/etc", "x"])), "'/down ^/etc x");
+        assert_eq!(match_query(&s(&["^todo$", "'todo$", "x$", "!a"])), "/todo$ todo$ x$ !a");
         assert!(
             usable("ab", 1e9, &tz)
                 && !usable("a", 1e9, &tz)

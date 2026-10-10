@@ -98,10 +98,19 @@ pub fn item(path: &str, home: &str, details: bool) -> Value {
 /// moment can't write into each other; the folder is 700 and the index 600.
 pub fn index(max_age: Option<f64>) -> i32 {
     let db = home_db();
+    // Young enough: younger than max_age (any age, for an endless one), or
+    // dated in the future, as Python's arithmetic counts it.
     if let (Some(age), Ok(st)) = (max_age, std::fs::metadata(&db))
-        && st.modified().ok().and_then(|m| m.elapsed().ok()).is_some_and(|e| e < Duration::from_secs_f64(age.max(0.0)))
+        && let Ok(modified) = st.modified()
     {
-        return 0;
+        let young = match (modified.elapsed(), Duration::try_from_secs_f64(age.max(0.0))) {
+            (Err(_), _) => true,
+            (Ok(_), Err(_)) => true,
+            (Ok(e), Ok(limit)) => e < limit,
+        };
+        if young {
+            return 0;
+        }
     }
     let dir = cache_dir();
     if std::fs::create_dir_all(&dir).is_err()
@@ -116,13 +125,15 @@ pub fn index(max_age: Option<f64>) -> i32 {
         eprintln!("everywhere: can't write {}", tmp.display());
         return 1;
     }
-    let home = std::env::var("HOME").unwrap_or_default();
-    let ok = Command::new("updatedb")
-        .args(["-l", "0", "-U", &home, "-o"])
-        .arg(&tmp)
-        .stdout(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success());
+    let home = crate::search::home();
+    let ok =
+        match Command::new("updatedb").args(["-l", "0", "-U", &home, "-o"]).arg(&tmp).stdout(Stdio::null()).status() {
+            Ok(s) => s.success(),
+            Err(e) => {
+                eprintln!("everywhere: can't run updatedb ({e}); it comes with plocate");
+                false
+            }
+        };
     let done = ok
         && std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600)).is_ok()
         && std::fs::rename(&tmp, &db).is_ok();

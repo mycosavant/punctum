@@ -1,14 +1,14 @@
 #!/bin/bash
 # everywhere: the Rust build when there is one (the plugin's bin/, a cargo
-# build in the plugin, a package's /usr/lib/punctum/everywhere, or everywhere
-# on PATH), else everywhere.py beside this, which needs fzf. Both take the
-# same arguments; see docs/everywhere.md.
+# build in the plugin, or a package's /usr/lib/punctum/everywhere), else
+# everywhere.py beside this, which needs fzf. Both take the same arguments;
+# see docs/everywhere.md. Not "everywhere" on PATH: that may be another
+# program of the name, or a link back to this one.
 me=$(readlink -f -- "$0")
 here=$(dirname -- "$me")
 plugin=$(cd -- "$here/../.." && pwd)
-for bin in "$plugin/bin/everywhere" "$plugin/target/release/everywhere" /usr/lib/punctum/everywhere "$(command -v everywhere)"; do
-  # Not this launcher again, as a link to it on PATH would be.
-  [ -n "$bin" ] && [ -x "$bin" ] && [ "$(readlink -f -- "$bin")" != "$me" ] && exec "$bin" "$@"
+for bin in "$plugin/bin/everywhere" "$plugin/target/release/everywhere" /usr/lib/punctum/everywhere; do
+  [ -x "$bin" ] && [ "$(readlink -f -- "$bin")" != "$me" ] && exec "$bin" "$@"
 done
 if ! command -v fzf >/dev/null && [ "${1:-}" = --punctum ]; then
   echo '{"items": [], "message": "Everywhere needs its Rust build (?extensions → Native extensions) or fzf"}'

@@ -47,7 +47,8 @@ use search::{DEFAULT_EXCLUDE, ordered, search};
 #[command(name = "everywhere", about = "Find files anywhere on the disk by name.")]
 struct Args {
     /// Words; fzf syntax: 'exact ^start end$ !leave-out; filters size: dm: ext: type:
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    /// (Options may come between the words, as `everywhere todo --limit 5`;
+    /// put -- before words that start with "-".)
     query: Vec<String>,
     /// Pick one with fzf
     #[arg(short, long)]
@@ -159,7 +160,7 @@ fn interactive(args: &Args) -> i32 {
 
 fn run() -> i32 {
     let args = Args::parse();
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = search::home();
     if args.index {
         return output::index(args.max_age);
     }
