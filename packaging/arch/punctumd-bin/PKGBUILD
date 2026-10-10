@@ -18,6 +18,7 @@ depends=('tzdata')
 provides=('punctumd')
 conflicts=('punctumd')
 options=('!strip' '!debug')
+optdepends=('plocate: Everywhere, /usr/lib/punctum/everywhere')
 source=("LICENSE-$pkgver::https://raw.githubusercontent.com/mycosavant/punctum/v$pkgver/LICENSE")
 source_x86_64=("$_name-$pkgver-x86_64::$url/releases/download/v$pkgver/$_name-$pkgver-x86_64-linux-musl"
                "everywhere-$pkgver-x86_64::$url/releases/download/v$pkgver/everywhere-$pkgver-x86_64-linux-musl")

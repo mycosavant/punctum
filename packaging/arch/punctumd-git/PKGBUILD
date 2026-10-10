@@ -13,6 +13,7 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/mycosavant/punctum'
 license=('MIT')
 depends=('gcc-libs' 'glibc' 'tzdata')
+optdepends=('plocate: Everywhere, /usr/lib/punctum/everywhere')
 makedepends=('cargo' 'git')
 provides=('punctumd')
 conflicts=('punctumd')
@@ -43,7 +44,9 @@ check() {
   cd "$_name"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cargo test --frozen -p punctumd -p everywhere
+  # The WebAssembly sandbox test builds a guest, which needs the network;
+  # CI runs it.
+  cargo test --frozen -p punctumd -p everywhere -- --skip the_sandbox_holds
 }
 
 package() {

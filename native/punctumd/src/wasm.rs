@@ -100,6 +100,9 @@ fn host() -> Host {
     }
 }
 
+/// A module's answer: its rows, how long they hold, and the loads it asked for.
+pub type Reply = (Vec<Row>, Option<u64>, Vec<String>);
+
 /// A module the bar sent, compiled, and its instance once it's running.
 pub struct Module {
     pub sha256: String,
@@ -153,7 +156,7 @@ impl Module {
         settings: &Value,
         now_ms: i64,
         loads: &Loads,
-    ) -> Result<(Vec<Row>, Option<u64>, Vec<String>), String> {
+    ) -> Result<Reply, String> {
         if self.running.is_none() {
             let linker = LINKER.as_ref().map_err(|e| e.clone())?;
             let mut store = Store::new(&ENGINE, host());

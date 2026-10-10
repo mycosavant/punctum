@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 target/
 bin/punctumd
+bin/everywhere
+bin/*.new
 dist/
 examples/wasm-roman/target/
 examples/wasm-roman/roman.wasm

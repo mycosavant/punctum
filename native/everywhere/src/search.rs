@@ -164,7 +164,7 @@ pub fn filter(paths: Vec<String>, ts: &[String]) -> Vec<(String, u32)> {
             out.push((p, score));
         }
     }
-    out.sort_by(|a, b| b.1.cmp(&a.1));
+    out.sort_by_key(|o| std::cmp::Reverse(o.1));
     out
 }
 

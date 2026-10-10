@@ -11,6 +11,7 @@ pkgbase = punctumd-git
 	depends = gcc-libs
 	depends = glibc
 	depends = tzdata
+	optdepends = plocate: Everywhere, /usr/lib/punctum/everywhere
 	provides = punctumd
 	conflicts = punctumd
 	source = punctum::git+https://github.com/mycosavant/punctum.git#branch=main

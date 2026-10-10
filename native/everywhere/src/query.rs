@@ -126,8 +126,14 @@ pub fn split_filters(ts: &[String], now: f64, tz: &TimeZone) -> (Vec<String>, Fi
                 })
             }
             _ => match val.to_lowercase().as_str() {
-                "file" | "f" => Some(f.kind = Some("file")),
-                "dir" | "d" | "folder" => Some(f.kind = Some("dir")),
+                "file" | "f" => {
+                    let _: () = f.kind = Some("file");
+                    Some(())
+                }
+                "dir" | "d" | "folder" => {
+                    let _: () = f.kind = Some("dir");
+                    Some(())
+                }
                 _ => None,
             },
         };

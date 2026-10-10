@@ -17,21 +17,27 @@ TARGETS=(x86_64-unknown-linux-musl)
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 out=$(mkdir -p "${1:-$root/dist}" && cd "${1:-$root/dist}" && pwd -P)
 version=$(sed -n 's/^ *"version": *"\([0-9][0-9.]*\)".*/\1/p' "$root/manifest.json" | head -1)
-crate=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/native/punctumd/Cargo.toml" | head -1)
-[[ $version == "$crate" ]] || { echo "manifest.json says $version, punctumd's Cargo.toml $crate" >&2; exit 1; }
+for crate in punctumd everywhere; do
+  have=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/native/$crate/Cargo.toml" | head -1)
+  [[ $version == "$have" ]] || { echo "manifest.json says $version, $crate's Cargo.toml $have" >&2; exit 1; }
+done
 
 rustup toolchain install "$TOOLCHAIN" --profile minimal --target "${TARGETS[@]}" >&2
 # wasmtime compiles a few small C helpers, so a C compiler for the target is
-# needed: the system gcc unless you name another. The release notes which
-# gcc built it; the bytes depend on it too.
+# needed: the system gcc unless you name another. The bytes depend on it
+# too, so the compiler is written beside the binaries (built-with.txt) and
+# into the release notes: rebuild with the same one to compare.
 export CC_x86_64_unknown_linux_musl=${CC_x86_64_unknown_linux_musl:-gcc}
-gcc --version | head -1 >&2
+{ echo "rustc $(rustc "+$TOOLCHAIN" --version | cut -d' ' -f2-)"; "$CC_x86_64_unknown_linux_musl" --version | head -1; } > "$out/built-with.txt"
+cat "$out/built-with.txt" >&2
 cargo_home=${CARGO_HOME:-$HOME/.cargo}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 for target in "${TARGETS[@]}"; do
-  RUSTFLAGS="--remap-path-prefix=$root=/punctum --remap-path-prefix=$cargo_home=/cargo -C strip=symbols" \
+  # The build folder too: cranelift's generated code is compiled from it,
+  # and a random folder name in the binary would make every build differ.
+  RUSTFLAGS="--remap-path-prefix=$root=/punctum --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$work=/build -C strip=symbols" \
     CARGO_TARGET_DIR="$work/target" \
     cargo "+$TOOLCHAIN" build --release --locked --target "$target" --manifest-path "$root/Cargo.toml" >&2
   for name in punctumd everywhere; do

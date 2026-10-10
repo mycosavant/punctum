@@ -49,7 +49,8 @@ about() {
   same extensions run in JavaScript inside the shell, as before.
 
   Everywhere (/ in the bar) gets its Rust build too, from the same source:
-  it ranks in-process instead of through Python and fzf.
+  it ranks in-process instead of through Python and fzf. And WebAssembly
+  extensions you install and approve run inside punctumd, sandboxed.
 
 EOF
 }
@@ -134,13 +135,15 @@ case ${1:-} in
       ew="$tmp/$ew_asset"
     fi
     place "$tmp/$asset" "$ew" || done_ "Couldn't install it into $dir/bin/." 1
+    # No Everywhere for this version: not an older one beside the new punctumd.
+    [[ -z $ew ]] && rm -f "$dir/bin/everywhere"
     done_ "Checked and installed. The bar now uses it."
     ;;
 
   remove)
-    if [[ ! -e $bin ]]; then
-      echo "  There's no punctumd in $dir/bin/."
-    elif ask "Remove $bin (and bin/everywhere) and go back to the JavaScript versions?"; then
+    if [[ ! -e $bin && ! -e $dir/bin/everywhere ]]; then
+      echo "  There's no punctumd or everywhere in $dir/bin/."
+    elif ask "Remove $dir/bin/punctumd and bin/everywhere, and go back to the JavaScript and Python versions?"; then
       rm -f "$bin" "$dir/bin/everywhere" && pkill -x -U "$(id -u)" punctumd 2>/dev/null
       echo "  Removed."
     fi

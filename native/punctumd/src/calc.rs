@@ -185,10 +185,9 @@ fn tokenize(src: &[char]) -> Option<Vec<Tok>> {
                 tokens.push(Tok::Op(if word == "mod" { "mod" } else { "of" }));
             } else if let Some(f) = FUNCTIONS.iter().find(|f| **f == word) {
                 tokens.push(Tok::Fn(f));
-            } else if let Some(v) = constant(&word) {
-                tokens.push(Tok::Const(v));
             } else {
-                return None;
+                let v = constant(&word)?;
+                tokens.push(Tok::Const(v));
             }
             continue;
         }
@@ -480,7 +479,7 @@ fn fend(text: &str) -> Option<String> {
     };
     let complex = number
         .strip_suffix('i')
-        .is_some_and(|re| re.split([' ', '+']).filter(|p| !p.is_empty() && *p != "-").all(|p| plain(p)));
+        .is_some_and(|re| re.split([' ', '+']).filter(|p| !p.is_empty() && *p != "-").all(&plain));
     (plain(number) || complex).then(|| out.to_string())
 }
 
@@ -582,7 +581,7 @@ mod tests {
     #[test]
     fn fend_answers_what_the_parser_cannot_with_numbers_only() {
         assert_eq!(title("0xff + 1"), "0x100");
-        assert_eq!(title("171!").len() > 300, true);
+        assert!(title("171!").len() > 300);
         assert_eq!(ask("0xff + 1")[0].subtitle, "= 0xff + 1 · fend");
         assert!(ask("5 km to mi").is_empty());
         assert!(ask("100 usd to eur").is_empty());

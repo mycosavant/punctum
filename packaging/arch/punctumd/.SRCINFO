@@ -10,6 +10,7 @@ pkgbase = punctumd
 	depends = gcc-libs
 	depends = glibc
 	depends = tzdata
+	optdepends = plocate: Everywhere, /usr/lib/punctum/everywhere
 	source = punctumd-0.1.0.tar.gz::https://github.com/mycosavant/punctum/archive/refs/tags/v0.1.0.tar.gz
 	sha256sums = SKIP
 

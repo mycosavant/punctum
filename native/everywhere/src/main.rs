@@ -176,7 +176,7 @@ fn run() -> i32 {
         let _ = std::io::stdin().read_to_end(&mut raw);
         let paths: Vec<String> =
             raw.split(|b| *b == 0).filter(|p| !p.is_empty()).map(|p| String::from_utf8_lossy(p).into_owned()).collect();
-        print!("{}\n", ordered(paths, &text, &home).join("\n"));
+        println!("{}", ordered(paths, &text, &home).join("\n"));
         return 0;
     }
     let (now, tz) = (now(), zone());
