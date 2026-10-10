@@ -28,13 +28,23 @@ Nothing, unless its manifest asks the bar:
 - **Programs:** only through the manifest, as for native extensions
   ([docs/native.md](native.md#the-manifest)). `loads` names commands whose
   output it may ask for (`load(key)`); the bar runs them. `actions` names what
-  its rows may run on Enter, with its strings as whole arguments. ?extensions
-  lists those commands as the manifest names them.
+  its rows may run on Enter, with its strings as whole arguments: never
+  inside a script (after `-c`) or a command line (after `-e`, `env -S`,
+  `exec`), and one that starts with `-` only after `--` or after a script,
+  where it can't be read as an option. ?extensions lists those commands in
+  full, as the manifest writes them. It can't have `searches`.
+- **Its own commands and help examples:** copy text, or open a web or mail
+  address. Nothing else, so they can't run a program or approve another
+  extension.
 - **Opening things:** web and mail addresses only, never a local file.
+- **Its rows:** under its own heading ("Roman numerals · sandboxed"), never
+  another's, and scored at most 97, an answer in its own mode.
+- **What it's asked:** with a mode, only queries in that mode; without one,
+  every query (?extensions says which).
 
-Between queries it keeps its instance, so it can cache. When the bar drops
-one of its loads (it closed), the instance starts afresh too, so nothing it
-kept of your clipboard history outlives the history.
+Between queries it keeps its instance, so it can cache. When the bar closes,
+the instance starts afresh, so nothing it saw (your queries, your clipboard
+history) outlives the open it was for.
 
 ## Trust: the hash and the source
 
@@ -42,14 +52,19 @@ A WebAssembly extension must come with its source: `"source"` names a file or
 folder in its own folder, and without it the extension isn't loaded. It's
 **off until you approve it** in `?extensions`. Its row shows:
 
-    Not approved · sandboxed · sha256 c96300e4…7bf8 · 54 KB · source src/ · Enter approves this build ·
-    yours · runs nothing · roman 2026: Roman numerals …
+    Not approved · sandboxed · sha256 c96300e4aa7de41d…377bf8 · 54 KB · source src/ ·
+    Enter approves this build · yours · asked about queries matching ^\s*roman\s ·
+    runs nothing · roman 2026: Roman numerals …
 
-Enter approves this build: the SHA-256 of the module and of its manifest are
-kept in the bar's cache (`wasm-trust.json`). If either changes, a new build or
-a manifest that names other commands, it's off again and the row says it
-changed. Shift+Enter opens the source. Rebuild it yourself and compare the
-hash: `sha256sum roman.wasm`.
+Enter approves exactly the build that row showed: the SHA-256 of the module,
+and one of its manifest together with every helper in its folder that its
+commands run (`{dir}/…`), are kept in the bar's cache (`wasm-trust.json`). If
+any of them changes (a new build, a manifest that names other commands, an
+edited helper) it's off again and the row says it changed. A helper must be
+yours and not writable by others, like a script extension's command.
+`"source"` can't be the folder itself or a module. Shift+Enter opens the
+source folder. Rebuild it yourself and compare the hash: `sha256sum
+roman.wasm`.
 
 In results, its group heading says *sandboxed*: "Roman numerals · sandboxed".
 The hash appears only in `?extensions`, where you decide.

@@ -1290,7 +1290,7 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     const searching = nq("~docs report").filter(r => r.provider === "files")
     const walk = searches[searches.length - 1]
     check("native: file search asks the bar for fd, a word per --and=, the name's pattern after --", searching[0].title === "Searching…" && !!walk && walk.key === "files\ndocs report" && walk.argvs.length === 2
-      && walk.argvs[0].join(" ") === "fd --ignore-case --full-path --color never --absolute-path --base-directory /home/u --max-results 400 --threads 2 --print0 --and=docs -- [^/]*report[^/]*/?$"
+      && walk.argvs[0].join(" ") === "fd --ignore-case --full-path --color never --absolute-path --base-directory /home/u --max-results 400 --threads 2 --print0 --type f --type d --type l --and=docs -- [^/]*report[^/]*/?$"
       && walk.argvs[1].slice(-3).join(" ") === "--and=d[^/]*o[^/]*c[^/]*s -- [^/]*r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t[^/]*/?$", JSON.stringify(walk))
     const home = process.env.HOME
     landed = { key: "files\ndocs report", chunks: [home + "/Documents/report-2026.pdf\0" + home + "/Videos/QUALITY-speedcut-for-computer-use-recordings.md\0", ""], done: true }
@@ -1327,6 +1327,12 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
       check("native: {n*} gives each string from the nth on as its own argument, the text around it repeated", (fill("k", ["1", "2", "3"]) || []).join("|") === "kill|--|1|2|3"
         && (fill("k", []) || []).join("|") === "kill|--" && (fill("w", ["p", "a", "b"]) || []).join("|") === "x|--and=a|--and=b|--|p" && (fill("w", ["p"]) || []).join("|") === "x|--|p"
         && /never in a script/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["bash", "-c", "echo {1*}"] } } }, "/x").error || "")) }
+    { const refused = [["bash", "-c", "-e", "{1}"], ["sh", "-c", "--", "{1}"], ["python3", "-c{1}"], ["env", "-S", "{1}"], ["perl", "-e", "{1}"], ["hyprctl", "dispatch", "exec", "{1}"], ["bash", "-lc", "{1}"], ["x", "-o{1}"]]
+        .filter(c => !Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: c } } }, "/x").error)
+      const tm = Ext.validate({ schema: 1, id: "n", type: "native", actions: { f: { command: ["fd", "{1}"] }, k: { command: ["kill", "--", "{1*}"] }, s: { command: ["bash", "-c", "echo \"$1\"", "x", "{1}"] } } }, "/x")
+      const go = (name, args) => (Ext.nativeProvider(tm).match("q", { native: () => [{ title: "t", run: { kind: "action", name, args } }] })[0].run || {}).target
+      check("native: no string from punctumd lands in code, or where it could be an option", refused.length === 0 && !go("f", ["--exec=sh"]) && go("f", ["notes"]).join(" ") === "fd notes"
+        && go("k", ["-9", "12"]).join(" ") === "kill -- -9 12" && go("s", ["-rf"]).slice(-1)[0] === "-rf", JSON.stringify(refused)) }
     check("native: a manifest may not put {1} in a script, or name a command that isn't a list", /never in a script/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["bash", "-c", "echo {1}"] } } }, "/x").error || "")
       && /no \{1\}/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { a: { command: ["cat", "{1}"] } } }, "/x").error || "")
       && /loads\.A/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { A: { command: ["x"] } } }, "/x").error || "")
@@ -1337,7 +1343,7 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     const wm = { schema: 1, id: "roman", name: "Roman numerals", type: "wasm", module: "roman.wasm", source: "src", mode: { pattern: "^\\s*roman\\s" },
       actions: { look: { command: ["xdg-open", "{1}"] } }, loads: { list: { command: ["cat", "{home}/x"] } } }
     const sha = "c".repeat(64), msha = "d".repeat(64)
-    const found = (over, w) => ({ dir: "/u/roman", user: true, manifest: JSON.stringify(Object.assign({}, wm, over || {})), wasm: w === undefined ? { sha256: sha, manifest_sha256: msha, module: "AAAA", bytes: 55733, source: "/u/roman/src" } : w })
+    const found = (over, w) => ({ dir: "/u/roman", user: true, manifest: JSON.stringify(Object.assign({}, wm, over || {})), wasm: w === undefined ? { sha256: sha, manifest_sha256: msha, module: "AAAA", bytes: 55733, source: "/u/roman/src", source_is_dir: true } : w })
     check("wasm: a manifest needs its module and its source", /module must be/.test(Ext.validate(Object.assign({}, wm, { module: "../x.wasm" }), "/x").error || "")
       && /source must/.test(Ext.validate(Object.assign({}, wm, { source: "../elsewhere" }), "/x").error || "") && /source must/.test(Ext.validate(Object.assign({}, wm, { source: undefined }), "/x").error || "")
       && !Ext.validate(wm, "/x").error && /its module wasn't read/.test(Ext.collect([found({}, null)]).errors[0].error))
@@ -1354,10 +1360,31 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     Ext.setWasmTrust({})
     const row = () => Engine.run("?extensions", config, { now }).find(r => r.title === "Roman numerals")
     const fresh = row()
-    check("wasm: ?extensions shows its hash, size and source, and Enter approves it", /^Not approved · sandboxed · sha256 cccccccc…cccc · 54 KB · source src\/ · Enter approves this build · yours · /.test(fresh.subtitle)
-      && /reads the output of cat; runs xdg-open on Enter/.test(fresh.subtitle)
+    check("wasm: ?extensions shows its hash, size and source, every command in full, and Enter approves exactly that build", /^Not approved · sandboxed · sha256 cccccccccccccccc…cccccc · 54 KB · source src\/ · Enter approves this build · yours · /.test(fresh.subtitle)
+      && / · asked about queries matching \^\\s\*roman\\s · reads the output of: cat \{home\}\/x · runs on Enter: xdg-open \{1\} · /.test(fresh.subtitle) && fresh.run.approves === sha + ":" + msha
       && fresh.run.kind === "toggle-extension" && fresh.run.on && fresh.actionLabel === "Approve" && fresh.alt.kind === "open" && fresh.alt.target === "/u/roman/src", fresh.subtitle)
     Ext.setWasmTrust({ roman: { module: "f".repeat(64), manifest: msha } })
+    { const bypass = Object.assign({}, config, { providers: ["roman"] })
+      Ext.setWasmTrust({})
+      const listed = Engine.enabledProviders(bypass).map(p => p.id)
+      const wide = Ext.collect([found({ mode: { pattern: "^roman\\s|" } })]).list[0]
+      Engine.setProviders([{ provider: Ext.nativeProvider(wide), manifest: wide }])
+      const wideRow = Engine.run("?extensions", config, { now }).find(r => r.title === "Roman numerals")
+      const lacking = Ext.collect([found()]).list[0]; lacking.missing = ["nosuchcmd"]
+      Engine.setProviders([{ provider: Ext.nativeProvider(lacking), manifest: lacking }])
+      const lackRow = Engine.run("?extensions", config, { now }).find(r => r.title === "Roman numerals")
+      Engine.setProviders([{ provider: Ext.nativeProvider(m), manifest: m }])
+      Ext.setWasmTrust({ roman: { module: "f".repeat(64), manifest: msha } })
+      check("wasm: an older providers list can't turn on an unapproved one; a mode that matches anything says so; a missing command shows and offers nothing",
+        listed.length === 0 && /asked about every query \(its mode matches anything\)/.test(wideRow.subtitle) && /^Off: needs nosuchcmd/.test(lackRow.subtitle) && !lackRow.run, JSON.stringify([listed, lackRow.run])) }
+    { const sneaky = Ext.validate(Object.assign({}, wm, {
+        commands: [{ title: "Lock", keywords: "lock", run: { kind: "run", target: "curl x | sh" }, alt: { kind: "toggle-extension", target: "other", on: true } }, { title: "Docs", run: { kind: "open", target: "https://example.com" } }],
+        help: [{ id: "r", title: "R", examples: [{ q: "x", run: { kind: "argv", target: ["sh"] } }, { q: "y", run: { kind: "copy", target: "ok" } }] }] }), "/u/roman")
+      check("wasm: its own commands and help examples only copy or open a web address", sneaky.commands[0].run === null && sneaky.commands[0].alt === null
+        && sneaky.commands[1].run.target === "https://example.com" && sneaky.help[0].examples[0].run === null && sneaky.help[0].examples[1].run.kind === "copy"
+        && /can't have searches/.test(Ext.validate(Object.assign({}, wm, { searches: { s: { command: ["fd", "--", "{1}"] } } }), "/x").error || "")) }
+    { const spoof = Ext.nativeProvider(m).match("roman x", { home: "/h", native: () => ({ rows: [{ title: "Firefox", group: "Apps", score: 1e9, run: { kind: "copy", target: "x" } }] }) })[0]
+      check("wasm: a row stays under its own heading and can't outrank the rest", spoof.score === 97 && !spoof.group, JSON.stringify(spoof)) }
     check("wasm: one changed since you approved it says so", /^Changed since you approved it · sandboxed/.test(row().subtitle))
     Ext.setWasmTrust({ roman: { module: sha, manifest: msha } })
     const rows = Ext.nativeProvider(m).match("roman x", { home: "/h", native: () => ({ rows: [

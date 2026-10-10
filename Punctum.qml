@@ -201,6 +201,9 @@ Item {
     }
     root.loadCache = kept
     // punctumd's answers too: they hold clipboard texts and package lists.
+    // And each WebAssembly module starts afresh, keeping nothing it saw.
+    for (var w in root.wasmSent)
+      if (nativeProc.running) nativeProc.write(JSON.stringify({ id: "reset", op: "reset", ext: w }) + "\n")
     root.dropNativeSearches()
     root.nativeCache = ({})
     root.nativePending = ({})
@@ -242,6 +245,9 @@ Item {
   // ---------------------------------------------------------------- queries
 
   function recompute() {
+    // A recompute scheduled before the bar closed mustn't refill what
+    // forget() just dropped (or ask for loads under the next open).
+    if (!root.opened) return
     root.results = Engine.run(input.text, root.config, {
       rates: root.rates,
       ratesStatus: root.ratesStatus,
@@ -333,7 +339,7 @@ Item {
     else if (run.kind === "note") root.addNote(run.path, run.target)
     else if (run.kind === "edit") Quickshell.execDetached([root.pluginDir + "/bin/punctum-edit", String(run.line), String(run.target)])
     else if (run.kind === "reset-geometry") root.resetGeometry()
-    else if (run.kind === "toggle-extension") root.switchExtension(String(run.target), !!run.on)
+    else if (run.kind === "toggle-extension") root.switchExtension(String(run.target), !!run.on, String(run.approves || ""))
     else if (run.kind === "reset-switches") root.saveSwitches({})
     else if (run.kind === "open-settings") Quickshell.execDetached([root.pluginDir + "/bin/punctum-edit", "1", root.userConfigPath])
     else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "punctum", String(run.arg)])
@@ -771,12 +777,15 @@ Item {
   // Enter on an extension in ?extensions switches it. The switch lives in the
   // bar's cache (extension-switches.json), never in your config file, and is
   // laid over it; "Reset extension switches" drops them all.
-  function switchExtension(id, on) {
+  function switchExtension(id, on, approves) {
     // Turning on a WebAssembly extension approves the module and manifest
     // you see in ?extensions: their SHA-256s are kept, and a change to
     // either turns it off again until you look.
     var m = root.manifests.filter(function(x) { return x.id === id })[0]
     if (on && m && m.type === "wasm") {
+      // Only the build the row showed: a module or manifest that changed
+      // since the list was drawn isn't approved by the Enter on it.
+      if (approves !== m.sha256 + ":" + m.manifestSha256) return
       var trust = Object.assign({}, root.wasmTrust)
       trust[id] = { module: m.sha256, manifest: m.manifestSha256 }
       root.wasmTrust = trust
@@ -1087,6 +1096,10 @@ Item {
       served[id] = true
       root.nativeServed = served
       root.staleNative(id + "\n")
+      // Loads the bar holds for it go again: punctumd drops them with a
+      // module, and refuses them for one it doesn't have yet (after a restart).
+      for (var k in root.loadCache)
+        if (root.loadCache[k].native && k.indexOf(id + "\n") === 0) root.pushNativeLoad(k, root.loadCache[k].text)
     } else if (r.error) {
       errors[id] = String(r.error).slice(0, 200)
       console.warn("punctum: extension " + id + ": " + errors[id])
@@ -1137,7 +1150,8 @@ Item {
       root.nativeFailures = 0
       root.nativeVersion = typeof r.version === "string" ? r.version.slice(0, 32) : ""
       root.nativeServed = served
-      root.nativeHelloed = true
+      // A punctumd speaking another protocol is used for nothing, modules included.
+      root.nativeHelloed = r.protocol === 1
       root.wasmSent = ({})
       root.pushAllNative()
       root.syncWasm()
@@ -1219,6 +1233,7 @@ Item {
 
   onConfigChanged: {
     root.nativeCache = ({})   // an extension's settings may have changed
+    root.nativePending = ({}) // and replies to requests sent with the old ones are dropped
     if (root.opened) root.recompute()
     root.zonesFetchedAt = 0   // the zone list may have changed
     root.ensureHotkey()

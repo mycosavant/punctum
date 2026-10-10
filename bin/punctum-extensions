@@ -71,6 +71,7 @@ def named_files(data):
         out.append(data.get("entry") if isinstance(data.get("entry"), str) else "provider.js")
     elif data.get("type") == "wasm":
         out.append(data.get("module") if isinstance(data.get("module"), str) else "")
+        out.extend(helpers(data))
     else:
         for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
             if isinstance(c, list) and c and isinstance(c[0], str) and c[0].startswith("./"):
@@ -101,6 +102,20 @@ def private(path, kind):
     return None
 
 
+def helpers(data):
+    """Files in its own folder a WebAssembly extension's loads and actions run
+    ({dir}/x): checked like a script's command, and part of what's approved."""
+    out = []
+    for section in ("loads", "actions"):
+        table = data.get(section) if isinstance(data.get(section), dict) else {}
+        for entry in table.values():
+            cmd = entry.get("command") if isinstance(entry, dict) else None
+            for part in cmd if isinstance(cmd, list) else []:
+                if isinstance(part, str) and part.startswith("{dir}/") and part[6:]:
+                    out.append(part[6:])
+    return sorted(set(out))
+
+
 def read_wasm(d, data):
     """A WebAssembly extension's module and source, or ValueError."""
     name = data.get("module")
@@ -113,6 +128,9 @@ def read_wasm(d, data):
     source = os.path.realpath(os.path.join(d, src))
     if not (source + "/").startswith(real_dir + "/") or not os.path.exists(source):
         raise ValueError("its source, %s, isn't in its folder" % src)
+    # The folder itself, or the module, or another module, isn't its source.
+    if source == real_dir or source.endswith(".wasm"):
+        raise ValueError("\"source\" must name its source code, not %s" % src)
     path = os.path.realpath(os.path.join(d, name))
     if not path.startswith(real_dir + "/"):
         raise ValueError("%s points outside its folder" % name)
@@ -136,7 +154,20 @@ def read_wasm(d, data):
     if len(blob) > MAX_MODULE:
         raise ValueError("%s is over 32 MB" % name)
     return {"sha256": hashlib.sha256(blob).hexdigest(), "module": base64.b64encode(blob).decode("ascii"),
-            "bytes": len(blob), "source": source}
+            "bytes": len(blob), "source": source, "source_is_dir": os.path.isdir(source)}
+
+
+def approval_hash(d, text, data):
+    """What approving a WebAssembly extension covers besides its module: its
+    manifest, and every helper in its folder its commands run."""
+    h = hashlib.sha256(text.encode("utf-8"))
+    for rel in helpers(data):
+        path = os.path.realpath(os.path.join(d, rel))
+        if not path.startswith(os.path.realpath(d) + "/") or not os.path.isfile(path):
+            raise ValueError("{dir}/%s isn't a file in its folder" % rel)
+        with open(path, "rb") as f:
+            h.update(b"\0" + rel.encode("utf-8") + b"\0" + f.read())
+    return h.hexdigest()
 
 
 def read_manifest(path, strict):
@@ -253,9 +284,10 @@ def scan(root, user):
                 data = None
             if isinstance(data, dict) and data.get("type") == "wasm":
                 entry["wasm"] = read_wasm(d, data)
-                # Approval covers the manifest too: its loads and actions
-                # name the commands the bar runs for the module.
-                entry["wasm"]["manifest_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                # Approval covers the manifest too, and the helpers in its
+                # folder: its loads and actions name the commands the bar
+                # runs for the module.
+                entry["wasm"]["manifest_sha256"] = approval_hash(d, text, data)
             entry["manifest"] = text
             entry["missing"] = missing_commands(text, d)
         except FileNotFoundError:

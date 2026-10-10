@@ -55,7 +55,10 @@ function argvs(query, home, settings) {
 function argv(query, home, settings, fuzzy) {
   var ws = words(query)
   var out = ["fd", "--ignore-case", "--full-path", "--color", "never", "--absolute-path",
-             "--base-directory", home, "--max-results", String(CANDIDATES), "--threads", "2", "--print0"]
+             "--base-directory", home, "--max-results", String(CANDIDATES), "--threads", "2", "--print0",
+             // Files, folders and links only: a FIFO named like an image would
+             // block the thread that loads pictures.
+             "--type", "f", "--type", "d", "--type", "l"]
   if (settings && settings.hidden) out.push("--hidden", "--exclude", ".git")
   for (var i = 0; i < ws.length - 1; i++) out.push("--and=" + pattern(ws[i], fuzzy))
   out.push("--", "[^/]*" + pattern(ws[ws.length - 1], fuzzy) + "[^/]*/?$")
