@@ -33,7 +33,7 @@ Saikomantisu.
 
 | Type | Result |
 |------|--------|
-| `12*8 + 15%`, `sqrt(2)`, `15% of 200`, `5!` | Calculator |
+| `12*8 + 15%`, `sqrt(2)`, `15% of 200`, `5!` | Calculator. With [native extensions](docs/native.md), [fend](https://github.com/printfn/fend) also answers what it can't read: `100!`, `0xff + 1`, `10 choose 3` |
 | `100 usd to eur`, `$50`, `50 gbp`, `usd jpy` | Currency conversion, using rates from [open.er-api.com](https://open.er-api.com) |
 | `time`, `time in tokyo`, `3pm cet to pst` | Time zones |
 | `days until dec 25`, `today + 45 days`, `next friday` | Date calculations |
@@ -107,7 +107,7 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
-Apps, windows, keybindings, clipboard history, packages, reminders, units,
+The calculator, apps, windows, keybindings, clipboard history, packages, reminders, units,
 time zones, colours and web addresses can also run natively, in punctumd, a
 small Rust daemon. It's optional, and the bar works without it; with it,
 time zones come from your system's tzdata and every IANA zone answers.
