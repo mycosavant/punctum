@@ -1,0 +1,16 @@
+# A guest that misbehaves on request, for tests/wasm.rs: what the sandbox
+# stops, and what it lets through.
+[package]
+name = "misbehave"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.61.1"
+
+# Its own workspace: built for wasm32-wasip2, apart from punctumd.
+[workspace]

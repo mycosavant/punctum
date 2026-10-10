@@ -1,0 +1,23 @@
+# A Punctum extension in Rust, compiled to a WebAssembly component:
+# ./build, then copy this folder to ~/.config/omarchy/punctum/extensions/roman.
+[package]
+name = "punctum-roman"
+version = "1.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+wit-bindgen = "0.61.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+
+# Its own workspace: built for wasm32-wasip2, apart from punctumd.
+[workspace]

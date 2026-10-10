@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "roman",
+  "name": "Roman numerals",
+  "version": "1.0.0",
+  "description": "roman 2026: Roman numerals both ways, a WebAssembly extension to copy from",
+  "icon": "󰎤",
+  "type": "wasm",
+  "module": "roman.wasm",
+  "source": "src",
+  "mode": { "pattern": "^\\s*roman\\s", "label": "Roman" },
+  "help": [{ "id": "roman", "title": "Roman numerals", "about": "roman and a number or a numeral; Enter copies the other",
+             "examples": [{ "q": "roman 2026", "note": "MMXXVI" }, { "q": "roman mcmxc", "note": "1990" }] }],
+  "permissions": {}
+}

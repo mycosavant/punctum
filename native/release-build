@@ -21,6 +21,11 @@ crate=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/native/punctumd/Cargo.toml" |
 [[ $version == "$crate" ]] || { echo "manifest.json says $version, punctumd's Cargo.toml $crate" >&2; exit 1; }
 
 rustup toolchain install "$TOOLCHAIN" --profile minimal --target "${TARGETS[@]}" >&2
+# wasmtime compiles a few small C helpers, so a C compiler for the target is
+# needed: the system gcc unless you name another. The release notes which
+# gcc built it; the bytes depend on it too.
+export CC_x86_64_unknown_linux_musl=${CC_x86_64_unknown_linux_musl:-gcc}
+gcc --version | head -1 >&2
 cargo_home=${CARGO_HOME:-$HOME/.cargo}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

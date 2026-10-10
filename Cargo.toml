@@ -2,4 +2,6 @@
 # to over stdin/stdout. See docs/native.md.
 [workspace]
 members = ["native/punctumd"]
+# WebAssembly guests: their own target and lock file.
+exclude = ["examples/wasm-roman", "native/punctumd/tests/guests/misbehave"]
 resolver = "2"

@@ -24,6 +24,10 @@ A few of the bar's own extensions are a third kind, `native`: Rust inside
 punctumd, with a JS fallback. Units is one. Only bundled extensions can be
 native; [Native extensions](native.md) explains why and how they work.
 
+Yours can be a fourth kind, `wasm`: a WebAssembly component that punctumd
+runs in a sandbox, fast enough to answer every keystroke, off until you
+approve its hash. See [WebAssembly extensions](wasm.md).
+
 ## The manifest
 
 ```jsonc

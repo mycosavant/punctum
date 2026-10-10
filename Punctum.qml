@@ -769,6 +769,17 @@ Item {
   // bar's cache (extension-switches.json), never in your config file, and is
   // laid over it; "Reset extension switches" drops them all.
   function switchExtension(id, on) {
+    // Turning on a WebAssembly extension approves the module and manifest
+    // you see in ?extensions: their SHA-256s are kept, and a change to
+    // either turns it off again until you look.
+    var m = root.manifests.filter(function(x) { return x.id === id })[0]
+    if (on && m && m.type === "wasm") {
+      var trust = Object.assign({}, root.wasmTrust)
+      trust[id] = { module: m.sha256, manifest: m.manifestSha256 }
+      root.wasmTrust = trust
+      Ext.setWasmTrust(trust)
+      root.cacheWrite("wasm-trust.json", JSON.stringify(trust))
+    }
     var next = Object.assign({}, root.extensionSwitches)
     next[id] = on
     root.saveSwitches(next)
@@ -781,6 +792,29 @@ Item {
     root.extensionSwitches = next
     Engine.setExtensionSwitches(next)
     root.cacheWrite("extension-switches.json", JSON.stringify(next))
+    root.syncWasm()
+    if (root.opened) root.recompute()
+  }
+
+  property var wasmTrust: ({})
+  property bool wasmTrustRead: false
+
+  function loadWasmTrust(text) {
+    var data = {}
+    try { data = JSON.parse(text || "{}") || {} } catch (e) {}
+    var next = {}
+    if (data && typeof data === "object" && !Array.isArray(data))
+      for (var id in data) {
+        var t = data[id]
+        if (/^[a-z0-9][a-z0-9_-]{0,31}$/.test(id) && t && /^[0-9a-f]{64}$/.test(String(t.module)) && /^([0-9a-f]{64})?$/.test(String(t.manifest)))
+          next[id] = { module: t.module, manifest: t.manifest }
+      }
+    // An approval given before this read returned wins.
+    for (var k in root.wasmTrust) next[k] = root.wasmTrust[k]
+    root.wasmTrust = next
+    root.wasmTrustRead = true
+    Ext.setWasmTrust(next)
+    root.syncWasm()
     if (root.opened) root.recompute()
   }
 
@@ -834,6 +868,7 @@ Item {
     for (var i = 0; i < got.list.length; i++) {
       var m = got.list[i]
       if (m.type === "script") { entries.push({ provider: Ext.scriptProvider(m), manifest: m }); continue }
+      if (m.type === "wasm") { entries.push({ provider: Ext.nativeProvider(m), manifest: m }); continue }
       if (m.type === "native") {
         m.runtime = root.nativeServed[m.id] ? "punctumd" : "js"
         if (m.runtime === "punctumd") { entries.push({ provider: Ext.nativeProvider(m), manifest: m }); continue }
@@ -855,6 +890,7 @@ Item {
     Engine.setProviders(entries)
     Engine.setExtensionErrors(errors)
     root.manifests = got.list
+    root.syncWasm()
     if (root.opened) root.recompute()
   }
 
@@ -885,6 +921,7 @@ Item {
   property var nativeCache: ({})      // id + "\n" + query -> { rows, needs, until, stale }
   property var nativePending: ({})    // id + "\n" + query -> the id of the request asking it now
   property int nativeSeq: 0
+  property bool nativeHelloed: false
   property int nativeCached: 0
   property int nativeFailures: 0      // starts in a row without a hello
   property string nativeVersion: ""
@@ -1005,6 +1042,57 @@ Item {
     if (root.opened) Qt.callLater(root.recompute)
   }
 
+  // WebAssembly extensions (docs/wasm.md) run in punctumd: each one that's on
+  // and approved is sent there, once per build and again after punctumd
+  // restarts; one switched off or removed is dropped. punctumd answers with
+  // the module's SHA-256 when it's running, or why it can't take it.
+  property var wasmSent: ({})       // id -> sha256 sent, or "" while it's on its way
+  property var wasmErrors: ({})
+
+  function syncWasm() {
+    if (!nativeProc.running || !root.nativeHelloed || !root.wasmTrustRead) return
+    var want = {}
+    Engine.enabledProviders(root.config).forEach(function(p) { want[p.id] = true })
+    var sent = Object.assign({}, root.wasmSent), served = Object.assign({}, root.nativeServed)
+    root.manifests.forEach(function(m) {
+      if (m.type !== "wasm") return
+      if (want[m.id] && sent[m.id] !== m.sha256) {
+        sent[m.id] = m.sha256
+        delete served[m.id]
+        nativeProc.write(JSON.stringify({ id: "wasm\n" + m.id, op: "wasm", ext: m.id, module: m.wasmModule, sha256: m.sha256 }) + "\n")
+      } else if (!want[m.id] && sent[m.id] !== undefined) {
+        delete sent[m.id]
+        delete served[m.id]
+        nativeProc.write(JSON.stringify({ id: "wasm\n" + m.id, op: "wasm", ext: m.id, module: null }) + "\n")
+      }
+    })
+    for (var id in sent) if (!root.manifests.some(function(m) { return m.id === id && m.type === "wasm" })) {
+      delete sent[id]
+      delete served[id]
+      nativeProc.write(JSON.stringify({ id: "wasm\n" + id, op: "wasm", ext: id, module: null }) + "\n")
+    }
+    root.wasmSent = sent
+    root.nativeServed = served
+  }
+
+  function wasmLanded(r) {
+    var id = r.id.slice(5)
+    var errors = Object.assign({}, root.wasmErrors)
+    if (r.ok && r.sha256 && root.wasmSent[id] === r.sha256) {
+      delete errors[id]
+      var served = Object.assign({}, root.nativeServed)
+      served[id] = true
+      root.nativeServed = served
+      root.staleNative(id + "\n")
+    } else if (r.error) {
+      errors[id] = String(r.error).slice(0, 200)
+      console.warn("punctum: extension " + id + ": " + errors[id])
+    }
+    root.wasmErrors = errors
+    Engine.setWasmErrors(errors)
+    if (root.opened) Qt.callLater(root.recompute)
+  }
+
   onAppsChanged: root.pushNative("apps", root.apps)
   onLaunchesChanged: root.pushNative("launches", root.launches)
   onPinnedAppsChanged: root.pushNative("pinned", root.pinnedApps)
@@ -1021,12 +1109,16 @@ Item {
       root.nativeFailures = 0
       root.nativeVersion = typeof r.version === "string" ? r.version.slice(0, 32) : ""
       root.nativeServed = served
+      root.nativeHelloed = true
+      root.wasmSent = ({})
       root.pushAllNative()
+      root.syncWasm()
       root.refreshNativeStatus()
       if (root.extensionsText) root.installExtensions(root.extensionsText)
       return
     }
     if (typeof r.id !== "string") return
+    if (r.id.indexOf("wasm\n") === 0) { root.wasmLanded(r); return }
     var key = r.id.slice(r.id.indexOf("\n") + 1)
     if (root.nativePending[key] !== r.id) return
     delete root.nativePending[key]
@@ -1050,6 +1142,8 @@ Item {
     onExited: function(exitCode) {
       var had = Object.keys(root.nativeServed).length > 0
       root.nativeServed = ({})
+      root.nativeHelloed = false
+      root.wasmSent = ({})
       root.nativePending = ({})
       root.nativeVersion = ""
       root.refreshNativeStatus()
@@ -1541,6 +1635,7 @@ Item {
     root.cacheRead("pinned-apps.json", root.loadPinned)
     root.cacheRead("geometry.json", root.loadGeometry)
     root.cacheRead("extension-switches.json", root.loadSwitches)
+    root.cacheRead("wasm-trust.json", root.loadWasmTrust)
     layerRuleDebounce.restart()
     root.cacheRead("rates.json", root.loadRates)
     root.refreshAgent()

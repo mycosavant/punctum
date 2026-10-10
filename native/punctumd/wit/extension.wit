@@ -1,0 +1,67 @@
+/// A Punctum extension as a WebAssembly component, run by punctumd in a
+/// sandbox: no files, no network, no environment, at most 64 MB of memory
+/// and 50 ms a query. See docs/wasm.md.
+package punctum:extension@1.0.0;
+
+interface types {
+    /// One of the manifest's "actions", by name, with strings for its
+    /// {1}…{9} (each a whole argument) and, if the action says "input": true,
+    /// text for its stdin.
+    record named-action {
+        name: string,
+        args: list<string>,
+        input: option<string>,
+    }
+
+    /// What Enter (run) or Shift+Enter (alt) does on a row.
+    variant action {
+        /// An http, https or mailto address, in the default app.
+        open(string),
+        /// Text to the clipboard.
+        copy(string),
+        /// Text typed into the window the bar was opened from.
+        paste(string),
+        /// One of the manifest's actions.
+        run(named-action),
+    }
+
+    record row {
+        title: string,
+        subtitle: string,
+        /// A Nerd Font glyph, or empty.
+        icon: string,
+        /// Higher ranks first: about 97 for an answer in your own mode, 80
+        /// for a sum, 56–62 for a command.
+        score: f64,
+        /// What Ctrl+C copies, or empty.
+        copy: string,
+        run: option<action>,
+        alt: option<action>,
+        /// A colour tile beside the row, as #rrggbb.
+        swatch: option<string>,
+        /// The heading it's listed under.
+        group: option<string>,
+        /// What Tab puts in the search field.
+        complete: option<string>,
+    }
+
+    record answer {
+        rows: list<row>,
+        /// How long the answer holds, if it reads the clock.
+        ttl-ms: option<u64>,
+    }
+}
+
+world extension {
+    use types.{answer};
+
+    /// The output of the program the manifest names under "loads" for this
+    /// key, or none until the bar has run it. Asking says the answer needs
+    /// it: the bar runs it and asks again.
+    import load: func(key: string) -> option<string>;
+
+    /// The answer to a query. `settings` is the extension's section of the
+    /// config as JSON (manifest defaults merged with yours); `now-ms` the
+    /// time in ms since the epoch.
+    export respond: func(query: string, settings: string, now-ms: s64) -> answer;
+}

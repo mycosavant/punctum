@@ -13,6 +13,7 @@ pub mod remind;
 pub mod time;
 pub mod units;
 pub mod url;
+pub mod wasm;
 pub mod windows;
 
 use std::cell::RefCell;
@@ -69,7 +70,7 @@ pub type Data = HashMap<String, Value>;
 /// kept until the text changes (see [`Memo`]).
 #[derive(Debug)]
 pub struct Load {
-    pub text: String,
+    pub text: Arc<str>,
     pub generation: u64,
 }
 
@@ -81,6 +82,9 @@ pub type Loads = HashMap<(String, String), Load>;
 pub struct State {
     pub data: Data,
     pub loads: Loads,
+    /// WebAssembly extensions the bar sent, by id. One with a built-in's id
+    /// answers in its place.
+    pub wasm: HashMap<String, wasm::Module>,
     generation: u64,
 }
 
@@ -239,6 +243,12 @@ pub struct Request {
     pub value: Value,
     #[serde(default)]
     pub text: Option<String>,
+    /// wasm: the module, base64, and its SHA-256 as the bar read it; a null
+    /// module drops the extension.
+    #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub sha256: String,
     #[serde(default)]
     pub ext: String,
     #[serde(default)]
@@ -263,6 +273,14 @@ pub fn system_zone() -> TimeZone {
 
 /// The keys `op: "data"` takes; anything else is refused.
 pub const DATA_KEYS: &[&str] = &["apps", "launches", "pinned", "windows"];
+
+/// An extension's id, as a manifest may give it.
+fn extension_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 32
+        && id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
 
 /// A load's key, as a manifest may name it.
 fn load_key(key: &str) -> bool {
@@ -293,23 +311,63 @@ pub fn handle(line: &str, state: &mut State) -> Value {
             state.data.insert(req.key, req.value);
             serde_json::json!({ "id": req.id, "ok": true })
         }
-        "load" => {
-            let Some(ext) = extensions().iter().find(|e| e.id() == req.ext).filter(|_| load_key(&req.key)) else {
-                return serde_json::json!({ "id": req.id, "error": format!("no load \"{}\" for \"{}\"", req.key, req.ext) });
+        "wasm" => {
+            if !extension_id(&req.ext) {
+                return serde_json::json!({ "id": req.id, "error": "an extension id is lower-case letters, digits, - or _" });
+            }
+            let Some(module) = req.module else {
+                state.wasm.remove(&req.ext);
+                return serde_json::json!({ "id": req.id, "ok": true });
             };
+            match wasm::compile(&module, &req.sha256) {
+                Ok(m) => {
+                    let sha256 = m.sha256.clone();
+                    state.wasm.insert(req.ext, m);
+                    serde_json::json!({ "id": req.id, "ok": true, "sha256": sha256 })
+                }
+                Err(e) => serde_json::json!({ "id": req.id, "error": e }),
+            }
+        }
+        "load" => {
+            let builtin = extensions().iter().find(|e| e.id() == req.ext);
+            if !load_key(&req.key) || (builtin.is_none() && !state.wasm.contains_key(&req.ext)) {
+                return serde_json::json!({ "id": req.id, "error": format!("no load \"{}\" for \"{}\"", req.key, req.ext) });
+            }
             match req.text {
                 Some(text) => {
                     state.generation += 1;
-                    state.loads.insert((req.ext, req.key), Load { text, generation: state.generation });
+                    state.loads.insert((req.ext, req.key), Load { text: text.into(), generation: state.generation });
                 }
                 None => {
-                    ext.forget(&req.key);
+                    // What was made from it goes too: a built-in's parse, a
+                    // module's whole instance.
+                    if let Some(m) = state.wasm.get_mut(&req.ext) {
+                        m.reset();
+                    } else if let Some(ext) = builtin {
+                        ext.forget(&req.key);
+                    }
                     state.loads.remove(&(req.ext, req.key));
                 }
             }
             serde_json::json!({ "id": req.id, "ok": true })
         }
         "match" => {
+            if let Some(m) = state.wasm.get_mut(&req.ext) {
+                let now = req.now.unwrap_or_else(|| Timestamp::now().as_millisecond());
+                return match m.respond(&req.ext, &req.query, &req.settings, now, &state.loads) {
+                    Ok((rows, ttl, needs)) => {
+                        let mut reply = serde_json::json!({ "id": req.id, "rows": rows });
+                        if let Some(ttl) = ttl {
+                            reply["ttl"] = ttl.into();
+                        }
+                        if !needs.is_empty() {
+                            reply["needs"] = needs.into();
+                        }
+                        reply
+                    }
+                    Err(e) => serde_json::json!({ "id": req.id, "error": format!("{}: {e}", req.ext) }),
+                };
+            }
             let Some(ext) = extensions().iter().find(|e| e.id() == req.ext) else {
                 return serde_json::json!({ "id": req.id, "error": format!("no extension \"{}\"", req.ext) });
             };

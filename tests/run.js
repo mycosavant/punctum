@@ -1300,6 +1300,50 @@ print(json.dumps({
       && /loads\.A/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { A: { command: ["x"] } } }, "/x").error || "")
       && /actions must/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: [] }, "/x").error || "")
       && !Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["x", "--title=Install {1}", "-e", "bash", "-c", "echo \"$1\"", "n", "{1}"] } } }, "/x").error) }
+  // WebAssembly extensions: a module with its source, off until approved.
+  { const fs = require("fs"), { spawnSync } = require("child_process")
+    const wm = { schema: 1, id: "roman", name: "Roman numerals", type: "wasm", module: "roman.wasm", source: "src", mode: { pattern: "^\\s*roman\\s" },
+      actions: { look: { command: ["xdg-open", "{1}"] } }, loads: { list: { command: ["cat", "{home}/x"] } } }
+    const sha = "c".repeat(64), msha = "d".repeat(64)
+    const found = (over, w) => ({ dir: "/u/roman", user: true, manifest: JSON.stringify(Object.assign({}, wm, over || {})), wasm: w === undefined ? { sha256: sha, manifest_sha256: msha, module: "AAAA", bytes: 55733, source: "/u/roman/src" } : w })
+    check("wasm: a manifest needs its module and its source", /module must be/.test(Ext.validate(Object.assign({}, wm, { module: "../x.wasm" }), "/x").error || "")
+      && /source must/.test(Ext.validate(Object.assign({}, wm, { source: "../elsewhere" }), "/x").error || "") && /source must/.test(Ext.validate(Object.assign({}, wm, { source: undefined }), "/x").error || "")
+      && !Ext.validate(wm, "/x").error && /its module wasn't read/.test(Ext.collect([found({}, null)]).errors[0].error))
+    const got = Ext.collect([found()]), m = got.list[0]
+    check("wasm: yours may be WebAssembly, with its hashes from the bar's read", m.type === "wasm" && m.user && m.sha256 === sha && m.manifestSha256 === msha && m.wasmModule === "AAAA")
+    Ext.setWasmTrust({})
+    const offNew = !Ext.isOn(m, { extensions: { roman: true } })
+    Ext.setWasmTrust({ roman: { module: sha, manifest: msha } })
+    const onOk = Ext.isOn(m, {})
+    Ext.setWasmTrust({ roman: { module: sha, manifest: "e".repeat(64) } })
+    const offChanged = !Ext.isOn(m, {})
+    check("wasm: off until you approve its module and manifest; a change to either turns it off", offNew && onOk && offChanged)
+    Engine.setProviders([{ provider: Ext.nativeProvider(m), manifest: m }])
+    Ext.setWasmTrust({})
+    const row = () => Engine.run("?extensions", config, { now }).find(r => r.title === "Roman numerals")
+    const fresh = row()
+    check("wasm: ?extensions shows its hash, size and source, and Enter approves it", /^Off: not approved yet · Enter approves this build/.test(fresh.subtitle)
+      && /sandboxed WebAssembly · sha256 cccccccc…cccc · 54 KB · source: src\//.test(fresh.subtitle) && /reads the output of cat; runs xdg-open on Enter/.test(fresh.subtitle)
+      && fresh.run.kind === "toggle-extension" && fresh.run.on && fresh.actionLabel === "Approve" && fresh.alt.kind === "open" && fresh.alt.target === "/u/roman/src", fresh.subtitle)
+    Ext.setWasmTrust({ roman: { module: "f".repeat(64), manifest: msha } })
+    check("wasm: one changed since you approved it says so", /^Off: changed since you approved it/.test(row().subtitle))
+    Ext.setWasmTrust({ roman: { module: sha, manifest: msha } })
+    const rows = Ext.nativeProvider(m).match("roman x", { home: "/h", native: () => ({ rows: [
+      { title: "web", run: { kind: "open", target: "https://example.com" } }, { title: "file", run: { kind: "open", target: "/etc/passwd" } },
+      { title: "local", run: { kind: "open", target: "file:///etc/passwd" } }, { title: "act", run: { kind: "action", name: "look", args: ["https://x.org"] } }] }) })
+    check("wasm: a module opens web addresses, never a local file; its group says sandboxed", rows.map(r => r.run ? r.run.target + "" : "-").join(" ") === "https://example.com - - xdg-open,https://x.org"
+      && Ext.nativeProvider(m).name === "Roman numerals · sandboxed")
+    // End to end, with the example built (examples/wasm-roman/build).
+    const built = P + "examples/wasm-roman/roman.wasm", bin = process.env.PUNCTUMD || P + "target/debug/punctumd"
+    if (!fs.existsSync(built) || !fs.existsSync(bin)) console.log("--    wasm: untested end to end, no examples/wasm-roman/roman.wasm (examples/wasm-roman/build)")
+    else {
+      const bytes = fs.readFileSync(built), hash = require("crypto").createHash("sha256").update(bytes).digest("hex")
+      const lines = [{ id: "w", op: "wasm", ext: "roman", module: bytes.toString("base64"), sha256: hash }, { id: 1, ext: "roman", query: "roman 2026" }, { id: 2, ext: "roman", query: "roman mcmxc" }]
+      const out = spawnSync(bin, [], { input: lines.map(l => JSON.stringify(l)).join("\n") + "\n", encoding: "utf8" }).stdout.trim().split("\n").map(l => JSON.parse(l))
+      check("wasm: the Roman example answers through punctumd", out[0].ok && out[0].sha256 === hash && out[1].rows[0].title === "MMXXVI" && out[2].rows[0].title === "1990", JSON.stringify(out))
+    }
+    Ext.setWasmTrust({})
+    Extensions.install(Engine, Ext, Extensions.discover([{ dir: P + "extensions" }])) }
   const mine = Ext.collect([{ dir: "/home/x/ext/n", manifest: JSON.stringify({ schema: 1, id: "n", type: "native" }), user: true }])
   check("native: only the bar's own extensions may be native", mine.list.length === 0 && /come with Punctum/.test(mine.errors[0].error))
   check("native: a native entry must be a .js file", /entry must be/.test(Ext.validate({ schema: 1, id: "n", type: "native", entry: "../x.sh" }, "/x").error || ""))

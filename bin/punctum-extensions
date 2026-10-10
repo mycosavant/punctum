@@ -5,7 +5,14 @@
 
 Prints a JSON list, one entry per extension folder:
     { "dir", "manifest" (the extension.json text), "missing" (required
-      commands not on PATH), "user" (from the user dir), "error" (if refused) }
+      commands not on PATH), "user" (from the user dir), "error" (if refused),
+      "wasm" (a WebAssembly extension's module: { "sha256", "module" (base64),
+      "bytes", "source" (the folder or file its "source" names) }) }
+
+A WebAssembly extension is refused without its source beside it: "source"
+must name a file or folder inside its own folder. The bar shows the
+module's SHA-256 in ?extensions and keeps it off until you approve that
+hash; punctumd checks the module against it.
 
 lib/Extensions.js validates the manifests; this finds and reads them, and
 reports a script extension's command as missing when it isn't executable
@@ -21,6 +28,8 @@ symlinked extension.json is refused. This is checked when the bar looks;
 a file you change afterwards is yours to change. Manifests over 64 KiB are
 refused.
 """
+import base64
+import hashlib
 import json
 import os
 import re
@@ -29,6 +38,8 @@ import stat
 import sys
 
 MAX_MANIFEST = 64 * 1024
+MAX_MODULE = 32 * 1024 * 1024
+MODULE = re.compile(r"^[A-Za-z0-9._-]+\.wasm$")
 COMMAND = re.compile(r"^[A-Za-z0-9._+-]+$")
 
 
@@ -58,6 +69,8 @@ def named_files(data):
         return out
     if data.get("type", "js") == "js":
         out.append(data.get("entry") if isinstance(data.get("entry"), str) else "provider.js")
+    elif data.get("type") == "wasm":
+        out.append(data.get("module") if isinstance(data.get("module"), str) else "")
     else:
         for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
             if isinstance(c, list) and c and isinstance(c[0], str) and c[0].startswith("./"):
@@ -86,6 +99,44 @@ def private(path, kind):
     if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
         return "%s is writable by others" % kind
     return None
+
+
+def read_wasm(d, data):
+    """A WebAssembly extension's module and source, or ValueError."""
+    name = data.get("module")
+    if not isinstance(name, str) or not MODULE.match(name):
+        raise ValueError("\"module\" must name a .wasm file in its folder")
+    src = data.get("source")
+    if not isinstance(src, str) or not src or src.startswith("/") or ".." in src.split("/"):
+        raise ValueError("\"source\" must name its source, in its folder: a WebAssembly extension comes with it")
+    real_dir = os.path.realpath(d)
+    source = os.path.realpath(os.path.join(d, src))
+    if not (source + "/").startswith(real_dir + "/") or not os.path.exists(source):
+        raise ValueError("its source, %s, isn't in its folder" % src)
+    path = os.path.realpath(os.path.join(d, name))
+    if not path.startswith(real_dir + "/"):
+        raise ValueError("%s points outside its folder" % name)
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError("%s isn't a file" % name)
+        if st.st_size > MAX_MODULE:
+            raise ValueError("%s is over 32 MB" % name)
+        chunks, size = [], 0
+        while size <= MAX_MODULE:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        blob = b"".join(chunks)
+    finally:
+        os.close(fd)
+    if len(blob) > MAX_MODULE:
+        raise ValueError("%s is over 32 MB" % name)
+    return {"sha256": hashlib.sha256(blob).hexdigest(), "module": base64.b64encode(blob).decode("ascii"),
+            "bytes": len(blob), "source": source}
 
 
 def read_manifest(path, strict):
@@ -196,6 +247,15 @@ def scan(root, user):
                     why = check_file(d, rel)
                     if why:
                         raise ValueError(why)
+            try:
+                data = json.loads(text)
+            except ValueError:
+                data = None
+            if isinstance(data, dict) and data.get("type") == "wasm":
+                entry["wasm"] = read_wasm(d, data)
+                # Approval covers the manifest too: its loads and actions
+                # name the commands the bar runs for the module.
+                entry["wasm"]["manifest_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
             entry["manifest"] = text
             entry["missing"] = missing_commands(text, d)
         except FileNotFoundError:

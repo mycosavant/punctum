@@ -9,6 +9,7 @@ repository = "https://github.com/mycosavant/punctum"
 publish = false
 
 [dependencies]
+base64 = "0.23.1"
 csscolorparser = { version = "0.9.0", default-features = false, features = ["std"] }
 fancy-regex = "0.19.2"
 fend-core = "1.5.8"
@@ -21,3 +22,10 @@ psl = "2.1.241"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11.0"
+wasmtime = { version = "49", default-features = false, features = ["cranelift", "component-model", "runtime", "std"] }
+wasmtime-wasi = "49"
+
+[dev-dependencies]
+base64 = "0.23.1"
+sha2 = "0.11.0"

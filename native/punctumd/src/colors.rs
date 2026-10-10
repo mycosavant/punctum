@@ -363,7 +363,7 @@ const DEFAULT_EXPORTS: [&str; 5] = ["css", "scss", "json", "tailwind", "gpl"];
 /// those colours as the "exports" you keep.
 fn picked(ctx: &Context, filter: &str) -> Answer {
     let mut rows = vec![picker(ctx, 97.0), contrast_picker(96.9)];
-    let text = ctx.load("picks").map_or("", |l| l.text.as_str());
+    let text = ctx.load("picks").map_or("", |l| &*l.text);
     let now = ctx.now.as_millisecond() as f64;
     let filter = filter.trim().trim_start_matches('#').to_lowercase();
     let mut colors: Vec<[u8; 3]> = Vec::new();

@@ -3,3 +3,6 @@ __pycache__/
 target/
 bin/punctumd
 dist/
+examples/wasm-roman/target/
+examples/wasm-roman/roman.wasm
+native/punctumd/tests/guests/*/target/
