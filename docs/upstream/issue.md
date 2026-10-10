@@ -1,4 +1,4 @@
-**Title:** Thanks for Command Bar: three fixes (PRs), and a question about a fork
+**Title:** Thanks for Command Bar: three fixes (PRs), and a heads-up about a fork (Punctum)
 
 ---
 
@@ -21,6 +21,6 @@ PR 1 and PR 3 are independent; PR 2 builds on PR 1. All three merge together cle
 
 Something else I noticed but haven't fixed: typing `2+2` and pressing Enter launches Pinta instead of copying 4. The app search matches Pinta's desktop keyword `2d` (score 83) above the calculator answer (80). Happy to send a fix if you'd like one.
 
-**And the question:** my fork has grown quite a bit. It now has file search across the whole disk (plocate and fzf), search inside files (ripgrep), clipboard history, pacman package search, bangs, an inbox note, Bible references, and a movable frosted card, plus docs. It has drifted from Command Bar's scope, and I'm considering releasing it some day as its own project under a different name, credited to Command Bar and keeping your MIT notice. Before anything like that: is there anything in it you'd want upstream? I'm glad to send focused PRs for whatever fits, and equally glad to keep it separate if you'd rather Command Bar stay small. The fork: <link once it's on GitHub>.
+**And a heads-up:** my fork grew well beyond Command Bar's scope: file search across the whole disk (plocate and fzf), search inside files (ripgrep), clipboard history, pacman package search, bangs, reminders, an inbox note, and an extension system with a bubblewrap sandbox for script extensions in any language. Rather than ask you to take all that on, I'm releasing it as its own project, **Punctum** (https://github.com/mycosavant/punctum), credited to Command Bar in its README and keeping your MIT notice in its LICENSE. If anything there would suit Command Bar, I'm glad to send focused PRs for it; equally glad to keep things separate if you'd rather Command Bar stay small.
 
 Thanks again!
