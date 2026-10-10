@@ -1189,13 +1189,14 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
   // sent along as the bar sends them once they land; and what was asked for.
   const loaded = {}, asked = {}, searched = {}, searches = []
   let landed = null   // what the bar's search runner has found, as services.search
-  const native = (id, query, settings) => {
+  // Through the bar's own keeping of a reply (Ext.nativeAnswer), as Punctum.qml does.
+  const native = (id, query, settings) => Ext.nativeAnswer(nativeReply(id, query, settings), 0)
+  const nativeReply = (id, query, settings) => {
     const data = Object.keys(shell).map(key => JSON.stringify({ id: "d", op: "data", key, value: shell[key] }))
     const loads = Object.keys(loaded).filter(k => k.indexOf(id + "\n") === 0).map(k => JSON.stringify({ id: "l", op: "load", ext: id, key: k.split("\n")[1], text: loaded[k] }))
     const found = searched[id] ? [JSON.stringify(Object.assign({ id: "s", op: "search", ext: id }, searched[id]))] : []
     const r = spawnSync(bin, [], { input: data.concat(loads, found, [JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8", maxBuffer: 1 << 26 })
-    const reply = JSON.parse(r.stdout.trim().split("\n").pop())
-    return { rows: reply.rows, needs: reply.needs, search: reply.search }
+    return JSON.parse(r.stdout.trim().split("\n").pop())
   }
   const requestSearch = (key, argvs, opts) => searches.push({ key, argvs })
   const nativeSearch = (id, f) => { searched[id] = { key: f.key, chunks: f.chunks, done: f.done } }
@@ -1288,7 +1289,7 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     // Files: the answer asks for fd's two walks, the bar runs them, and what they find goes back.
     const searching = nq("~docs report").filter(r => r.provider === "files")
     const walk = searches[searches.length - 1]
-    check("native: file search asks the bar for fd, a word per --and=, the name's pattern after --", searching[0].title === "Searching…" && walk.key === "files\ndocs report" && walk.argvs.length === 2
+    check("native: file search asks the bar for fd, a word per --and=, the name's pattern after --", searching[0].title === "Searching…" && !!walk && walk.key === "files\ndocs report" && walk.argvs.length === 2
       && walk.argvs[0].join(" ") === "fd --ignore-case --full-path --color never --absolute-path --base-directory /home/u --max-results 400 --threads 2 --print0 --and=docs -- [^/]*report[^/]*/?$"
       && walk.argvs[1].slice(-3).join(" ") === "--and=d[^/]*o[^/]*c[^/]*s -- [^/]*r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t[^/]*/?$", JSON.stringify(walk))
     const home = process.env.HOME

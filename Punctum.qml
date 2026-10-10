@@ -1155,8 +1155,7 @@ Item {
     // answer that reads the clock gives; a long session's worth is dropped
     // all at once.
     if (++root.nativeCached > 2000) { root.nativeCache = ({}); root.nativeCached = 1 }
-    var ttl = Number(r.ttl)
-    root.nativeCache[key] = { rows: Array.isArray(r.rows) ? r.rows : [], needs: Array.isArray(r.needs) ? r.needs : [], until: ttl > 0 ? Date.now() + ttl : 0 }
+    root.nativeCache[key] = Ext.nativeAnswer(r, Date.now())
     if (root.opened) Qt.callLater(root.recompute)
   }
 
