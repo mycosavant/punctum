@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "remind",
+  "name": "Reminders",
+  "version": "1.0.0",
+  "description": "remind 10m tea, alarm 6:45: reminders and alarms that show with Omarchy's own",
+  "icon": "󰢌",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 15,
+  "helpOrder": 85,
+  "mode": {
+    "pattern": "^\\s*(!remindme|!remind|remind(\\s+me)?|reminder|alarm|wake(\\s+me)?)(\\s|$)",
+    "label": "Remind"
+  },
+  "requires": [
+    "systemd-run",
+    "omarchy-reminder"
+  ],
+  "permissions": {
+    "runs": [
+      "remind-set: systemd-run --user timers named like Omarchy's",
+      "omarchy-reminder show --json",
+      "pw-play (alarms)"
+    ],
+    "writes": [
+      "$XDG_RUNTIME_DIR/omarchy-reminders/<timer>.message"
+    ],
+    "reads": [],
+    "network": []
+  }
+}

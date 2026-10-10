@@ -1,0 +1,88 @@
+#!/bin/bash
+# Set or cancel a reminder or alarm, compatible with Omarchy's own reminders.
+#
+#   remind-set --at <unix time> [--alarm]     the message on stdin
+#   remind-set --cancel <omarchy-reminder-….timer>
+#
+# A reminder is a transient systemd user timer named the way omarchy-reminder
+# names its own (omarchy-reminder-<minutes>m-<set at>-<n>), with its message
+# in $XDG_RUNTIME_DIR/omarchy-reminders/<unit>.message, so Omarchy's bar
+# indicator and `omarchy-reminder show` / `clear` see these too. It fires an
+# Omarchy notification; an alarm's is critical and plays the freedesktop
+# alarm sound three times. Like Omarchy's, a reminder doesn't survive a
+# reboot or logout, and one due while the laptop sleeps fires when it wakes.
+#
+# The message arrives on stdin (cut at 1000 characters, control characters
+# dropped), never in this script's arguments.
+set -euo pipefail
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy-reminders"
+sound=/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga
+refresh() { omarchy-shell -q omarchy.indicators refresh >/dev/null 2>&1 || true; }
+
+case ${1:-} in
+--cancel)
+  unit=${2:-}
+  [[ $unit =~ ^omarchy-reminder-[A-Za-z0-9-]+\.timer$ ]] || { echo "not a reminder: $unit" >&2; exit 2; }
+  systemctl --user stop "$unit" 2>/dev/null || true
+  rm -f "$dir/${unit%.timer}.message"
+  refresh
+  omarchy-notification-send -g 󰢌 "Reminder cancelled"
+  exit 0
+  ;;
+--at)
+  at=${2:-}
+  alarm=0
+  [[ ${3:-} == --alarm ]] && alarm=1
+  ;;
+*)
+  echo "usage: remind-set --at <unix time> [--alarm] < message" >&2
+  echo "       remind-set --cancel <omarchy-reminder-….timer>" >&2
+  exit 2
+  ;;
+esac
+
+[[ $at =~ ^[0-9]{1,12}$ ]] || { echo "bad time: $at" >&2; exit 2; }
+now=$(date +%s)
+if ((at < now + 5 || at > now + 366 * 86400)); then
+  echo "the time must be between 5 seconds and a year from now" >&2
+  exit 2
+fi
+
+message=$(head -c 4000 | tr '\n\t' '  ' | tr -d '\000-\037\177' | cut -c1-1000)
+minutes=$(((at - now + 59) / 60))
+unit="omarchy-reminder-${minutes}m-${now}-${RANDOM}"
+when=$(date -d "@$at" +%-H:%M)
+[[ $(date -d "@$at" +%F) == "$(date +%F)" ]] || when=$(date -d "@$at" '+%a %-d %b, %-H:%M')
+
+mkdir -p -m 700 "$dir"
+if [[ -n $message ]]; then
+  (umask 077 && printf '%s' "$message" >"$dir/$unit.message")
+fi
+
+if ((alarm)); then
+  title=Alarm
+  body=${message:-"It's $(date -d "@$at" +%-H:%M)"}
+else
+  title=Reminder
+  body=${message:-"It's $(date -d "@$at" +%-H:%M)"}
+fi
+
+# The fired command is a fixed script; title, body and paths are its arguments.
+systemd-run --user --quiet --collect \
+  --on-calendar="$(date -d "@$at" '+%Y-%m-%d %H:%M:%S')" --timer-property=AccuracySec=1s \
+  --unit="$unit" \
+  bash -c '
+    u=normal; [ "$4" = 1 ] && u=critical
+    omarchy-notification-send -g 󰢌 -u "$u" "$1" "$2"
+    rm -f "$3"
+    omarchy-shell -q omarchy.indicators refresh >/dev/null 2>&1 || true
+    if [ "$4" = 1 ] && [ -r "$5" ]; then for i in 1 2 3; do pw-play "$5" 2>/dev/null || break; done; fi
+  ' bash "$title" "$body" "$dir/$unit.message" "$alarm" "$sound"
+
+refresh
+if ((alarm)); then
+  omarchy-notification-send -g 󰢌 "Alarm set for $when" "$message"
+else
+  omarchy-notification-send -g 󰢌 "Reminder set for $when" "$message"
+fi

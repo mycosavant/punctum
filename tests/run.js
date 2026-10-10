@@ -5,6 +5,7 @@ const Engine = load(P + "lib/Engine.js")
 const Ext = load(P + "lib/Extensions.js")
 const Extensions = require("./extensions")
 const loaded = Extensions.install(Engine, Ext, Extensions.discover([{ dir: P + "extensions" }]))
+const BUNDLED = require("fs").readdirSync(P + "extensions").filter(d => require("fs").existsSync(P + "extensions/" + d + "/extension.json")).length
 // The defaults every provider sees: the bar's own plus each manifest's.
 const defaults = Ext.effectiveConfig(Engine.parseJsonc(require("fs").readFileSync(P + "config.default.json", "utf8")), loaded.manifests, {})
 // Most cases run as a Sri Lanka user; the neutral defaults are checked separately below.
@@ -190,8 +191,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Extensions|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[13].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Reminders and alarms|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Extensions|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[14].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -677,7 +678,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const cfg = Ext.effectiveConfig({ hotkey: "X" }, [m], { demo: { b: { d: 3 } }, hotkey: "Y" })
   check("ext: settings merge your section over the manifest's defaults", cfg.hotkey === "Y" && cfg.demo.a === 1 && cfg.demo.b.c === 2 && cfg.demo.b.d === 3)
   check("ext: null removes a default key", !("a" in Ext.effectiveConfig({}, [m], { demo: { a: null } }).demo))
-  check("ext: every bundled manifest loaded, none refused", loaded.errors.length === 0 && loaded.manifests.length === 21, loaded.manifests.length + " " + JSON.stringify(loaded.errors))
+  check("ext: every bundled manifest loaded, none refused", loaded.errors.length === 0 && loaded.manifests.length === BUNDLED, loaded.manifests.length + " " + JSON.stringify(loaded.errors))
   check("ext: config.default.json holds only the bar's own settings", Object.keys(Engine.parseJsonc(require("fs").readFileSync(P + "config.default.json", "utf8"))).sort().join() === "extensions,glass,hotkey,window") }
 
 // script extensions: rows from JSON, only the bar's own actions
@@ -734,7 +735,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // ?extensions
 { const rows = q("?extensions")
-  check("ext: ?extensions lists every extension with its state and what it touches", rows.length === 21 && rows.some(r => r.title === "Everywhere" && /^On/.test(r.subtitle) && /script/.test(r.subtitle) && /runs plocate/.test(r.subtitle)), rows.length + " " + (rows[0] && rows[0].subtitle))
+  check("ext: ?extensions lists every extension with its state and what it touches", rows.length === BUNDLED && rows.some(r => r.title === "Everywhere" && /^On/.test(r.subtitle) && /script/.test(r.subtitle) && /runs plocate/.test(r.subtitle)), rows.length + " " + (rows[0] && rows[0].subtitle))
   const off = Engine.run("?extensions", Object.assign({}, config, { extensions: { bible: false } }), { now })
   check("ext: a switched-off extension says how to turn it on", off.some(r => r.title === "Bible" && /^Off: "extensions": \{ "bible": true \}/.test(r.subtitle)))
   check("ext: switched off, it stops answering", !Engine.run("john 3:16", Object.assign({}, config, { extensions: { bible: false } }), { now, apps }).some(r => r.provider === "bible")) }
@@ -758,7 +759,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   fs.chmodSync(user, 0o777)
   const open = list().filter(e => e.user)
   check("ext helper: a user folder others can write to is refused whole", open.length === 1 && /writable by others/.test(open[0].error), JSON.stringify(open))
-  check("ext helper: the bundled ones are all found", list().filter(e => !e.user).length === 21)
+  check("ext helper: the bundled ones are all found", list().filter(e => !e.user).length === BUNDLED)
   fs.chmodSync(user, 0o700); fs.rmSync(root, { recursive: true }) }
 
 // everywhere: the command itself
@@ -785,5 +786,53 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
   check("everywhere: --index --max-age skips a fresh index", (() => { const t = fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs; ew("--index", "--max-age", "60"); return fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs === t })())
   fs.rmSync(home, { recursive: true }) }
+
+// reminders: times parsed here, set through remind-set with the message on stdin
+{ const R = load(P + "extensions/remind/provider.js")
+  const at = (t) => { const p = R.parse(t, now()); return p && p.at ? R.when(p.at, now()) + "|" + p.message : JSON.stringify(p) }
+  check("remind: durations, clock times, days and omarchy's bare minutes",
+    at("10m take out the laundry") === "14:10|take out the laundry" && at("me to call mom at 3pm") === "15:00|call mom" && at("1h30m stretch") === "15:30|stretch"
+    && at("20 tea") === "14:20|tea" && at("tomorrow 9am dentist") === "9:00 tomorrow|dentist" && at("friday noon lunch") === "12:00 Fri 25 Sep|lunch"
+    && at("in 2 hours check oven") === "16:00|check oven" && at("tonight 8 movie") === "20:00|movie", [at("10m take out the laundry"), at("friday noon lunch")].join(" / "))
+  check("remind: 6:45 is the 24-hour clock (tomorrow), a bare at 7 is the next 7 o'clock", at("6:45") === "6:45 tomorrow|" && at("at 7") === "19:00|" && at("18:30 dinner") === "18:30|dinner")
+  check("remind: a passed time today, no time at all, a year away", at("today 9am") === '{"past":true}' && JSON.parse(at("call mom")).missing && at("400d x") === "null")
+  const helperRows = (q, extra) => Engine.run(q, config, Object.assign({ now, apps, windows: [] }, extra || {}))
+  const r = helperRows("remind 10m take out the laundry")
+  check("remind: Enter runs remind-set with the time, the message on stdin",
+    r[0].provider === "remind" && r[0].title === "Remind me at 14:10: take out the laundry" && r[0].run.kind === "argv" && /extensions\/remind\/remind-set$/.test(r[0].run.target[0])
+    && r[0].run.target[1] === "--at" && r[0].run.target[2] === String(Math.round(new Date(2026, 8, 23, 14, 10).getTime() / 1000)) && r[0].run.input === "take out the laundry" && r[0].run.target.length === 3, JSON.stringify(r[0].run))
+  const a = helperRows("alarm 6:45")
+  check("remind: alarm adds --alarm", a[0].title === "Alarm at 6:45 tomorrow" && a[0].run.target[3] === "--alarm")
+  const bang = helperRows("!remindme 10m tea")
+  check("remind: !remindme is this extension's, not a bang", bang[0].provider === "remind" && !bang.some(x => x.provider === "bangs") && (Engine.mode("!remindme 10m tea", config) || {}).label === "Remind", JSON.stringify(bang.map(x => x.provider)))
+  check("remind: a bare !remindme isn't offered to DuckDuckGo", !helperRows("!remindme").some(x => x.provider === "bangs"))
+  const list = JSON.stringify({ reminders: [{ timer: "omarchy-reminder-5m-1-2.timer", label: "tea", message: "tea", atTime: "14:05", remaining: "5m" }, { timer: "evil; rm", label: "x" }] })
+  const listed = helperRows("remind ", loadedText("remind", "list", list))
+  check("remind: alone it lists Omarchy's reminders; Shift+Enter cancels; odd timer names are skipped",
+    listed.length === 2 && listed[1].title === "tea" && listed[1].alt.target.slice(1).join(" ") === "--cancel omarchy-reminder-5m-1-2.timer", JSON.stringify(listed.map(x => x.title)))
+  check("remind: argv input passes the script-extension filter only as a string", Ext.parseOutput(JSON.stringify({ items: [{ title: "t", run: { kind: "argv", target: ["x"], input: "hi" } }, { title: "u", run: { kind: "argv", target: ["x"], input: 3 } }] })).items.map(i => i.run.input).join() === "hi,") }
+
+// remind-set, run for real against stubs: no timer or notification is really made
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/remind-set-")
+  for (const name of ["systemd-run", "omarchy-notification-send", "omarchy-shell", "systemctl"])
+    fs.writeFileSync(dir + "/" + name, "#!/bin/bash\nprintf '%s\\0' \"$@\" >> \"$STUBS/" + name + ".log\"\n", { mode: 0o755 })
+  const env = Object.assign({}, process.env, { PATH: dir + ":" + process.env.PATH, STUBS: dir, XDG_RUNTIME_DIR: dir })
+  const set = (args, input) => spawnSync(P + "extensions/remind/remind-set", args, { env, input, encoding: "utf8" })
+  const atTime = Math.floor(Date.now() / 1000) + 600
+  const msg = "tea $(touch " + dir + "/pwned) `touch " + dir + "/pwned2`\nline two"
+  const ok = set(["--at", String(atTime)], msg)
+  const runArgs = fs.readFileSync(dir + "/systemd-run.log", "utf8").split("\0")
+  const unit = (runArgs.find(a => a.startsWith("--unit=")) || "").slice(7)
+  check("remind-set: a timer named the way omarchy-reminder names its own", ok.status === 0 && /^omarchy-reminder-10m-\d+-\d+$/.test(unit), unit + " " + ok.stderr)
+  check("remind-set: the message reaches the timer as one argument, newlines flattened, nothing run",
+    runArgs.includes("tea $(touch " + dir + "/pwned) `touch " + dir + "/pwned2` line two") && !fs.existsSync(dir + "/pwned") && !fs.existsSync(dir + "/pwned2"))
+  const mf = dir + "/omarchy-reminders/" + unit + ".message"
+  check("remind-set: the message file Omarchy reads, mode 600", fs.readFileSync(mf, "utf8").startsWith("tea $(touch") && (fs.statSync(mf).mode & 0o777) === 0o600)
+  check("remind-set: times in the past or over a year away are refused", set(["--at", String(Math.floor(Date.now() / 1000) - 5)], "x").status === 2 && set(["--at", String(Math.floor(Date.now() / 1000) + 400 * 86400)], "x").status === 2 && set(["--at", "12;rm"], "x").status === 2)
+  check("remind-set: an alarm is critical", set(["--at", String(atTime), "--alarm"], "wake").status === 0 && fs.readFileSync(dir + "/systemd-run.log", "utf8").split("\0").includes("1"))
+  check("remind-set: --cancel takes only a reminder timer's name", set(["--cancel", "sshd.service"], "").status === 2 && set(["--cancel", "omarchy-reminder-5m-1-2.timer"], "").status === 0
+    && fs.readFileSync(dir + "/systemctl.log", "utf8").split("\0").slice(0, 3).join(" ") === "--user stop omarchy-reminder-5m-1-2.timer")
+  fs.rmSync(dir, { recursive: true }) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

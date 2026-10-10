@@ -298,6 +298,7 @@ Item {
     else if (run.kind === "window") root.focusWindow(run.target)
     else if (run.kind === "open") Quickshell.execDetached(["xdg-open", run.target])
     else if (run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-agent", run.target])
+    else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0 && typeof run.input === "string") root.runWithInput(run.target.map(String), run.input)
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
@@ -364,6 +365,37 @@ Item {
       root.copyPaste = false
       root.copyNext()
     }
+  }
+
+  // An argv action with "input": the text goes to the command's stdin, never
+  // its arguments (a reminder's message, for one). One at a time.
+  property var inputQueue: []
+  property var inputCurrent: null
+
+  function runWithInput(argv, input) {
+    root.inputQueue.push({ argv: argv, input: String(input) })
+    if (!inputProc.running) root.inputNext()
+  }
+
+  function inputNext() {
+    if (root.inputQueue.length === 0) return
+    root.inputCurrent = root.inputQueue.shift()
+    inputProc.command = root.inputCurrent.argv
+    inputProc.stdinEnabled = true
+    inputProc.running = true
+  }
+
+  Process {
+    id: inputProc
+    onStarted: {
+      var job = root.inputCurrent
+      if (job) inputProc.write(job.input)
+      inputProc.stdinEnabled = false
+    }
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: " + text.trim().slice(0, 300))
+    }
+    onExited: { root.inputCurrent = null; root.inputNext() }
   }
 
   // ---------------------------------------------------------------- inbox note
