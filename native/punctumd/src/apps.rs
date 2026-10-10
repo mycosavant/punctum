@@ -176,15 +176,21 @@ struct State {
     running: HashSet<String>,
 }
 
+/// Each entry of a list that reads as T; one that doesn't is skipped, not
+/// the whole list.
+fn each<T: serde::de::DeserializeOwned>(v: &Value) -> Vec<T> {
+    v.as_array().map(|a| a.iter().filter_map(|x| serde_json::from_value(x.clone()).ok()).collect()).unwrap_or_default()
+}
+
 fn state(ctx: &Context) -> State {
-    let apps: Vec<App> = serde_json::from_value(ctx.data("apps").clone()).unwrap_or_default();
+    let apps: Vec<App> = each(ctx.data("apps"));
     let launches = ctx
         .data("launches")
         .as_object()
         .map(|o| o.iter().filter_map(|(k, v)| v.as_f64().map(|n| (k.clone(), n))).collect())
         .unwrap_or_default();
-    let pinned: Vec<String> = serde_json::from_value(ctx.data("pinned").clone()).unwrap_or_default();
-    let windows: Vec<Window> = serde_json::from_value(ctx.data("windows").clone()).unwrap_or_default();
+    let pinned: Vec<String> = each(ctx.data("pinned"));
+    let windows: Vec<Window> = each(ctx.data("windows"));
     let running = windows.iter().map(|w| w.cls.to_lowercase()).collect();
     State { apps, launches, pinned, running }
 }
@@ -366,7 +372,7 @@ mod tests {
         let mut d = crate::Data::new();
         d.insert("apps".into(), apps);
         d.insert("launches".into(), json!({ "firefox": 12 }));
-        d.insert("pinned".into(), json!(["signal", "gone"]));
+        d.insert("pinned".into(), json!(["signal", "gone", 7]));
         d.insert("windows".into(), json!([{ "cls": "brave-browser" }]));
         d
     }
@@ -415,6 +421,19 @@ mod tests {
         assert!(titles("rfx").is_empty());
         // Below every rule-found app: "sig" is Signal by prefix, before any fuzzy hit.
         assert_eq!(titles("sig")[0], "Signal");
+    }
+
+    #[test]
+    fn a_bad_entry_is_skipped_not_the_list() {
+        let mut d = data();
+        d.get_mut("apps").unwrap().as_array_mut().unwrap().push(json!({ "id": "bad", "name": 5, "keywords": "x" }));
+        let ctx = Context {
+            settings: &Value::Null,
+            now: jiff::Timestamp::now(),
+            local_zone: jiff::tz::TimeZone::UTC,
+            data: &d,
+        };
+        assert_eq!(Apps.matches("firefox", &ctx).rows[0].title, "Firefox");
     }
 
     #[test]

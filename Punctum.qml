@@ -929,12 +929,15 @@ Item {
 
   // The shell's state a native extension needs (apps, launches, pins,
   // windows), sent when it changes and after each hello. Answers given
-  // before are dropped, cached or still coming: they used the old state.
+  // before are dropped, cached or still coming: they used the old state. So
+  // the query is asked again, or a reply dropped on its way (opening the bar
+  // refreshes the windows) would leave the bar empty until the next key.
   function pushNative(key, value) {
     if (!nativeProc.running || !Object.keys(root.nativeServed).length) return
     root.nativeCache = ({})
     root.nativePending = ({})
     nativeProc.write(JSON.stringify({ id: "data", op: "data", key: key, value: value }) + "\n")
+    if (root.opened) Qt.callLater(root.recompute)
   }
 
   function pushAllNative() {
