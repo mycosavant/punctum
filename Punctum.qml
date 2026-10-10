@@ -621,10 +621,21 @@ Item {
   function requestLoad(key, argv, opts) {
     if (!Array.isArray(argv) || argv.length === 0 || root.loading[key]) return
     var ttl = Number(opts && opts.ttl) || 0
+    var native = !!(opts && opts.native)
     var e = root.loadCache[key]
-    if (e && (ttl <= 0 || Date.now() - e.at < ttl)) return
+    if (e && (ttl <= 0 || Date.now() - e.at < ttl)) {
+      // Read for an extension's JS fallback (before punctumd said hello),
+      // and now wanted by its native self: punctumd hasn't seen it yet.
+      if (native && !e.native) {
+        var next = Object.assign({}, root.loadCache)
+        next[key] = Object.assign({}, e, { native: true })
+        root.loadCache = next
+        root.pushNativeLoad(key, e.text)
+      }
+      return
+    }
     root.loading[key] = true
-    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, native: !!(opts && opts.native), generation: root.loadGeneration })
+    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, native: native, generation: root.loadGeneration })
     if (!loadProc.running) root.loadNext()
   }
 
