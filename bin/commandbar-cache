@@ -29,6 +29,7 @@ LIMITS = {
     "geometry.json": 1024,
     "launches.json": 64 * 1024,
     "pinned-apps.json": 16 * 1024,
+    "extension-switches.json": 16 * 1024,
     "rates.json": 256 * 1024,   # matches ratesMaxBytes in CommandBar.qml
 }
 

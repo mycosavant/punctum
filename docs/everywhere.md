@@ -29,7 +29,25 @@ stdin and shows the rows it prints.
 /'exact name        an exact substring, no fuzzy matching
 /^down              a name starting with "down"
 /^/etc host         under /etc, with "host" in it
+/report ext:pdf dm:week size:>1M     filters, as in Everything
+/dm:today           what changed today in your home folder, newest first
+/size:>1G           your biggest files, biggest first
 ```
+
+| Filter | Means |
+|---|---|
+| `size:>10M`, `size:<500k`, `size:>=1G`, `size:1M-10M` | file size (bare `size:10M` means at least); k, M, G, T in 1024s |
+| `dm:today`, `dm:yesterday`, `dm:week`, `dm:month`, `dm:year` | modified then (`week` is the last 7 days) |
+| `dm:3d`, `dm:12h`, `dm:2w`, `dm:2026-10-01` | modified within that time, or since that date |
+| `ext:pdf`, `ext:md,txt` | extension |
+| `type:dir`, `type:file` | folders or files only |
+
+With words, the filters narrow what the name search found (it looks deeper,
+so a filter doesn't empty a common word's results). Without words, `dm:` and
+`size:` walk your home folder with `fd` (plocate needs a name), and `ext:`
+searches the indexes for the extension. A filter it can't read is an error,
+not a silent miss. With a size or date filter the rows show each file's size
+and age.
 
 Enter opens the file or folder with its default app. Shift+Enter opens a
 terminal in its folder.
@@ -119,5 +137,5 @@ working on its own (`--exclude` adds exclusions there).
 
 ## Limits
 
-- No size or date filters yet (Everything's `size:` and `dm:`).
+- `dm:` and `size:` without words cover your home folder only.
 - Outside your home folder, files from today are missing until tonight.

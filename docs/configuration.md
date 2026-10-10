@@ -34,7 +34,7 @@ A short example:
 | Key | Default | Meaning |
 |---|---|---|
 | `hotkey` | `"SUPER + PERIOD"` | The key that opens the bar. If it's taken by another binding, the bar says so instead of binding over it |
-| `extensions` | `{}` | `"id": false` switches an extension off, `true` on (`{ "enabled": false }` works too). Unlisted ones follow their manifest |
+| `extensions` | `{}` | `"id": false` switches an extension off, `true` on (`{ "enabled": false }` works too). Unlisted ones follow their manifest. Switches flipped in the bar (Enter in `?extensions`) are kept in the cache and win over these until "Reset extension switches" |
 | `providers` | unset | The older form: a list of ids that are on, in order. If present, it decides alone. `locate` in it means `everywhere`, and a `"locate"` section still sets Everywhere's exclusions when there's no `"everywhere"` one |
 
 Your own extensions go in `~/.config/omarchy/commandbar/extensions/<id>/`; see
@@ -139,6 +139,7 @@ Defaults: `nasb`, `bible` and `nasb95`, `esv`, `kjv` (Bible Gateway), `ddg`,
 | `ai.keyword` | `"ai"` | The keyword |
 | `ai.fallback` | `false` | Offer "Ask…" when nothing else answers |
 | `ai.chats` | ChatGPT, Claude | `{ title, open }` chat sites, `{q}` URL-encoded |
+| `ai.prefixes` | `[">_", ">"]` | Prefixes that ask the agent like the keyword does; no space needed. Symbols only |
 
 ### `commands`
 
@@ -160,6 +161,7 @@ All under `~/.cache/omarchy-commandbar/`, mode 600 in a 700 folder:
 | `launches.json` | How often you open each app, for ranking |
 | `last-query` | The text you closed the bar with, so it comes back |
 | `rates.json` | The last exchange rates, so currency works offline |
+| `extension-switches.json` | Extensions you switched on or off in `?extensions` |
 
 Each goes through `bin/commandbar-cache`, which knows only these names, caps
 each file's size, refuses symlinks and files it doesn't own, and writes

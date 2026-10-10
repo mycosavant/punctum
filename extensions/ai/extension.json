@@ -3,7 +3,7 @@
   "id": "ai",
   "name": "Agent",
   "version": "1.0.0",
-  "description": "ai question: ask your Omarchy default agent or a chat site",
+  "description": "ai question, or >_ question: ask your Omarchy default agent or a chat site",
   "icon": "󰚩",
   "type": "js",
   "entry": "provider.js",
@@ -22,6 +22,10 @@
         "title": "Claude",
         "open": "https://claude.ai/new?q={q}"
       }
+    ],
+    "prefixes": [
+      ">_",
+      ">"
     ]
   },
   "permissions": {

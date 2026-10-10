@@ -35,7 +35,8 @@ Item {
   property var manifests: []        // the extensions found, validated (lib/Extensions.js)
   // The bar's settings and your file, each extension's section built from its
   // manifest's defaults and yours.
-  readonly property var config: Ext.effectiveConfig(defaultConfig, manifests, userConfig)
+  property var extensionSwitches: ({})   // flipped in ?extensions, kept in the cache
+  readonly property var config: Ext.effectiveConfig(defaultConfig, manifests, Ext.withSwitches(userConfig, extensionSwitches))
 
   property var rates: null          // { rates, updated, next, stale }
   property string ratesStatus: ""
@@ -283,6 +284,8 @@ Item {
   function activate(index) {
     var row = root.rows[index]
     if (!row) return
+    // Switching an extension keeps the bar open on the list.
+    if (row.run && row.run.kind === "toggle-extension") { root.perform(row.run); return }
     if (row.run) {
       root.finish()
       root.perform(row.run)
@@ -319,6 +322,9 @@ Item {
     else if (run.kind === "note") root.addNote(run.path, run.target)
     else if (run.kind === "edit") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-edit", String(run.line), String(run.target)])
     else if (run.kind === "reset-geometry") root.resetGeometry()
+    else if (run.kind === "toggle-extension") root.switchExtension(String(run.target), !!run.on)
+    else if (run.kind === "reset-switches") root.saveSwitches({})
+    else if (run.kind === "open-settings") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-edit", "1", root.userConfigPath])
     else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
     else console.warn("commandbar: unknown action kind " + run.kind)
@@ -715,6 +721,34 @@ Item {
       }
       root.jobNext()
     }
+  }
+
+  // ---------------------------------------------------------------- extension switches
+
+  // Enter on an extension in ?extensions switches it. The switch lives in the
+  // bar's cache (extension-switches.json), never in your config file, and is
+  // laid over it; "Reset extension switches" drops them all.
+  function switchExtension(id, on) {
+    var next = Object.assign({}, root.extensionSwitches)
+    next[id] = on
+    root.saveSwitches(next)
+  }
+
+  function saveSwitches(next) {
+    root.extensionSwitches = next
+    Engine.setExtensionSwitches(next)
+    root.cacheWrite("extension-switches.json", JSON.stringify(next))
+    if (root.opened) root.recompute()
+  }
+
+  function loadSwitches(text) {
+    var data = {}
+    try { data = JSON.parse(text || "{}") || {} } catch (e) {}
+    var next = {}
+    if (data && typeof data === "object" && !Array.isArray(data))
+      for (var id in data) if (typeof data[id] === "boolean" && /^[a-z0-9][a-z0-9_-]{0,31}$/.test(id)) next[id] = data[id]
+    root.extensionSwitches = next
+    Engine.setExtensionSwitches(next)
   }
 
   // ---------------------------------------------------------------- extensions
@@ -1232,6 +1266,7 @@ Item {
     root.cacheRead("launches.json", root.loadLaunches)
     root.cacheRead("pinned-apps.json", root.loadPinned)
     root.cacheRead("geometry.json", root.loadGeometry)
+    root.cacheRead("extension-switches.json", root.loadSwitches)
     layerRuleDebounce.restart()
     root.cacheRead("rates.json", root.loadRates)
     root.refreshAgent()

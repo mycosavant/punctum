@@ -319,7 +319,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     check("fallback offers the agent first, then the chat sites", rows.map(r => r.title.split(":")[0]).join("|") === "Ask Claude Code|Ask ChatGPT|Ask Claude" && rows[1].section === "Chat websites", rows.map(r => r.title.split(":")[0]).join("|")) }
   check("fallback hides when anything else answers", (r => r[0].title === "4" && !r.some(x => x.provider === "ai"))(ai("2 + 2", "claude", fb)))
   check("mode chip", (Engine.mode("ai foo", config) || {}).label === "Agent" && !Engine.mode("aim foo", config))
-  check("help topic", Engine.run("?ai", config, { agent: "claude" }).length === 2)
+  check("help topic", Engine.run("?ai", config, { agent: "claude" }).length === 3 && Engine.run("?ai", config, { agent: "claude" })[2].title === ">_ why is my wifi slow")
   { const rows = ai("ai what's 5 & 6?", "claude").filter(r => r.provider === "ai")
     check("chat sites follow the agent, in order", rows.map(r => r.title.split(":")[0]).join("|") === "Ask Claude Code|Ask ChatGPT|Ask Claude", rows.map(r => r.title.split(":")[0]).join("|"))
     check("chat prompt is URL-encoded", rows[1].run.kind === "open" && rows[1].run.target === "https://chatgpt.com/?q=what's%205%20%26%206%3F", rows[1].run.target) }
@@ -701,7 +701,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("script: only in its mode; a placeholder below minQuery", sp.match("hello", ctx()).length === 0 && sp.match("wx a", ctx())[0].title === "Type a city")
   const first = sp.match("wx paris", ctx())
   const req = asked && JSON.parse(asked.o.stdin)
-  check("script: asks with the command and a JSON request on stdin", first[0].title === "Searching…" && asked.k === "paris" && asked.a[0].join(" ") === "/e/wx/wx"
+  check("script: asks with the command and a JSON request on stdin", first[0].title === "Searching…" && asked.k === "paris" && asked.a[0][0] === "bwrap" && asked.a[0].slice(-1)[0] === "/e/wx/wx"
     && req.protocol === 1 && req.text === "paris" && req.query === "wx paris" && req.settings.unit === "c" && req.home === "/h")
   const rows = sp.match("wx paris", ctx({ search: { key: "paris", text: '{"items":[{"title":"12°"}]}' } }))
   check("script: the landed output becomes rows", rows.length === 1 && rows[0].title === "12°")
@@ -898,5 +898,118 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("remind-set: --cancel takes only a reminder timer's name", set(["--cancel", "sshd.service"], "").status === 2 && set(["--cancel", "omarchy-reminder-5m-1-2.timer"], "").status === 0
     && fs.readFileSync(dir + "/systemctl.log", "utf8").split("\0").slice(0, 3).join(" ") === "--user stop omarchy-reminder-5m-1-2.timer")
   fs.rmSync(dir, { recursive: true }) }
+
+// the sandbox, for real: bwrap with exactly what the manifest asked for
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/commandbar-sandbox-")
+  const home = root + "/home", ext = root + "/ext"
+  fs.mkdirSync(home + "/.cache/ok", { recursive: true }); fs.mkdirSync(home + "/.config"); fs.mkdirSync(ext)
+  fs.writeFileSync(home + "/secret", "s3cret"); fs.writeFileSync(home + "/.config/thing", "cfg")
+  // The probe reports what it could do as JSON, one key per attempt.
+  fs.writeFileSync(ext + "/probe", `#!/usr/bin/env python3
+import json, os, socket
+def can(f):
+    try:
+        f(); return True
+    except Exception:
+        return False
+h = os.environ["HOME"]
+def net():
+    s = socket.socket(); s.settimeout(2); s.connect(("1.1.1.1", 53))
+print(json.dumps({
+  "secret": can(lambda: open(h + "/secret").read()),
+  "config": can(lambda: open(h + "/.config/thing").read()),
+  "write_home": can(lambda: open(h + "/new", "w").write("x")),
+  "write_ok": can(lambda: open(h + "/.cache/ok/f", "w").write("x")),
+  "runtime": os.path.exists(${JSON.stringify(process.env.XDG_RUNTIME_DIR || "/run/user/0")} + "/bus"),
+  "net": can(net),
+  "tmp": can(lambda: open("/tmp/x", "w").write("x")),
+}))
+`, { mode: 0o755 })
+  const run = (sandbox) => {
+    const m = Ext.validate({ schema: 1, id: "probe", type: "script", command: ["./probe"], mode: { pattern: "^p " }, sandbox }, ext)
+    const argv = Ext.wrap(m, m.command, home)
+    const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", timeout: 20000, env: Object.assign({}, process.env, { HOME: home }) })
+    try { return JSON.parse(r.stdout) } catch (e) { return { error: r.stderr || r.stdout } }
+  }
+  const strict = run(undefined)
+  // A hidden home is an empty in-memory folder: writing there works and reaches nothing.
+  check("sandbox: by default no network, home hidden (writes vanish), no desktop session",
+    strict.secret === false && strict.config === false && !fs.existsSync(home + "/new") && strict.net === false && strict.runtime === false && strict.tmp === true, JSON.stringify(strict))
+  const asked = run({ home: "read", reads: ["~/.config/thing"], writes: ["~/.cache/ok"] })
+  check("sandbox: home read-only means readable, not writable; writes are writable",
+    asked.secret === true && asked.config === true && asked.write_home === false && asked.write_ok === true && asked.net === false, JSON.stringify(asked))
+  const hidden = run({ reads: ["~/.config/thing"] })
+  check("sandbox: with home hidden, only the paths it asks to read are there", hidden.config === true && hidden.secret === false, JSON.stringify(hidden))
+  const off = run(false)
+  check("sandbox: false runs it as it is (calibration: the probe sees home, the session and writes for real)", off.secret === true && off.runtime === true && fs.existsSync(home + "/new"), JSON.stringify(off))
+  check("sandbox: bad sandbox settings are refused",
+    /sandbox/.test(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { writes: ["/etc"] } }, "/e").error || "")
+    && /sandbox/.test(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { writes: ["~/../x"] } }, "/e").error || "")
+    && /sandbox/.test(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { home: "all" } }, "/e").error || ""))
+  check("sandbox: a sandboxed script requires bwrap; Everywhere says it isn't sandboxed",
+    Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " } }, "/e").requires.includes("bwrap")
+    && q("?extensions").some(r => r.title === "Everywhere" && /not sandboxed/.test(r.subtitle)))
+  fs.rmSync(root, { recursive: true, force: true }) }
+
+// switches flipped in ?extensions: kept in the cache, laid over the config
+{ check("switches: lay over the extensions map", JSON.stringify(Ext.withSwitches({ extensions: { bible: false, x: true } }, { bible: true, remind: false }).extensions) === '{"bible":true,"x":true,"remind":false}')
+  check("switches: add to or take from an older providers list", Ext.withSwitches({ providers: ["apps", "locate"] }, { bible: true, apps: false }).providers.join() === "everywhere,bible")
+  check("switches: the user's own config object isn't changed", (() => { const u = { extensions: { a: true } }; Ext.withSwitches(u, { a: false }); return u.extensions.a === true })())
+  const rows = q("?extensions")
+  const bible = rows.find(r => r.title === "Bible")
+  check("switches: Enter on an extension switches it, and says which way", bible.run.kind === "toggle-extension" && bible.run.target === "bible" && bible.run.on === false && bible.actionLabel === "Turn off" && bible.complete === "")
+  const offCfg = Ext.effectiveConfig(defaults, loaded.manifests, Ext.withSwitches({}, { bible: false }))
+  Engine.setExtensionSwitches({ bible: false })
+  const after = Engine.run("?extensions", offCfg, { now }).find(r => r.title === "Bible")
+  Engine.setExtensionSwitches({})
+  check("switches: switched off in the bar, it says so and offers to turn it on", /^Off/.test(after.subtitle) && /switched in the bar/.test(after.subtitle) && after.run.on === true && after.actionLabel === "Turn on", after.subtitle)
+  check("switches: and it stops answering", !Engine.run("john 3:16", offCfg, { now, apps }).some(r => r.provider === "bible"))
+  check("switches: reset and settings commands are findable", q("reset extension")[0].run.kind === "reset-switches" && q("open settings")[0].run.kind === "open-settings") }
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const home = fs.mkdtempSync(os.tmpdir() + "/commandbar-sw-")
+  const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
+  const w = spawnSync("python3", [P + "bin/commandbar-cache", "write", "extension-switches.json"], { input: '{"bible":false}', env, encoding: "utf8" })
+  const r = spawnSync("python3", [P + "bin/commandbar-cache", "read", "extension-switches.json"], { env, encoding: "utf8" })
+  check("switches: the cache helper keeps them", w.status === 0 && r.stdout === '{"bible":false}', w.stderr + r.stderr)
+  fs.rmSync(home, { recursive: true, force: true }) }
+
+// everywhere filters: size:, dm:, ext:, type:, against a scratch home with known sizes and dates
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const EW = P + "extensions/everywhere/everywhere"
+  const home = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/everywhere-filters-")
+  fs.mkdirSync(home + "/Docs")
+  fs.writeFileSync(home + "/Docs/bigfile.bin", Buffer.alloc(2 * 1024 * 1024))
+  fs.writeFileSync(home + "/Docs/smallfile.txt", "hello")
+  fs.writeFileSync(home + "/Docs/oldnote.txt", "old"); fs.writeFileSync(home + "/Docs/newnote.txt", "new")
+  const tenDays = Date.now() / 1000 - 10 * 86400
+  for (const f of ["bigfile.bin", "smallfile.txt", "oldnote.txt"]) fs.utimesSync(home + "/Docs/" + f, tenDays, tenDays)
+  fs.utimesSync(home + "/Docs", tenDays, tenDays)
+  const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
+  // The system index holds the machine's real files too; only what's under the scratch home counts here.
+  const ew = (...a) => { const r = spawnSync(EW, a, { env, encoding: "utf8", timeout: 20000 }); return { rc: r.status, out: r.stdout.split("\n").filter(p => p.startsWith(home + "/") || p === home).map(p => p.replace(home, "~")), err: r.stderr } }
+  ew("--index")
+  const today = ew("dm:today").out
+  check("filters: dm:today alone lists what changed today, not older files", today.includes("~/Docs/newnote.txt") && !today.includes("~/Docs/oldnote.txt"), today.join(","))
+  check("filters: words and a date together", ew("note", "dm:3d").out.join() === "~/Docs/newnote.txt" && ew("note", "dm:2w").out.length === 2)
+  const big = ew("size:>1M").out
+  check("filters: size:>1M alone finds the big file only", big.join() === "~/Docs/bigfile.bin", big.join())
+  check("filters: size:<1k with words", ew("file", "size:<1k").out.join() === "~/Docs/smallfile.txt")
+  const txt = ew("ext:txt").out
+  check("filters: ext:txt alone finds the .txt files and nothing else", txt.length === 3 && txt.every(p => p.endsWith(".txt")), txt.join(","))
+  check("filters: type:dir and type:file", ew("docs", "type:dir").out[0] === "~/Docs" && !ew("docs", "type:file").out.includes("~/Docs"))
+  check("filters: a filter it doesn't understand is an error, not a silent miss", ew("x", "dm:banana").rc === 2 && /dm:banana/.test(ew("x", "dm:banana").err))
+  const cb = JSON.parse(spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "note dm:3d", settings: { exclude: [] } }), encoding: "utf8" }).stdout)
+  const mine = cb.items.filter(i => i.run.target.startsWith(home + "/"))
+  check("filters: with a date or size, the bar's rows show size and age", mine.length === 1 && / B · (just now|.*ago)$/.test(mine[0].subtitle), JSON.stringify(mine))
+  // A distinctive folder name, so only the exclusion can keep .git out of the top rows.
+  check("filters: an exclusion like /.git/ also leaves out the folder itself", (() => { fs.mkdirSync(home + "/zzproj/.git", { recursive: true }); ew("--index"); return !ew("zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) && ew("--no-default-excludes", "zzproj", "git", "type:dir").out.some(p => /\/\.git$/.test(p)) })())
+  fs.rmSync(home, { recursive: true, force: true }) }
+
+// >_ and > for the default agent
+{ const a = (query, extra) => Engine.run(query, Object.assign({}, config, extra || {}), { now, apps: [], windows: [], agent: "claude" })
+  check("agent: >_ and > ask the default agent, with or without a space", a(">_ why is my wifi slow")[0].title === "Ask Claude Code: why is my wifi slow" && a(">_why")[0].title === "Ask Claude Code: why" && a("> fix it")[0].title === "Ask Claude Code: fix it")
+  check("agent: the prefix gives the Agent chip; a > inside a sum doesn't", (Engine.mode(">_ x", config) || {}).label === "Agent" && Engine.mode("2 > 1", config) === null && !a("2 > 1").some(r => r.provider === "ai"))
+  check("agent: prefixes come from the config, and letters can't be one", a("<< hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) })[0].title === "Ask Claude Code: hi" && !a("x hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) }).some(r => r.provider === "ai")) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

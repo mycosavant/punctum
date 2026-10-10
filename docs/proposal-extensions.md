@@ -221,7 +221,10 @@ What differs from the proposal above, checked against the code:
   list: size and date filters, inotify.
 - **Also added:** reminders and alarms (`extensions/remind`), and
   `examples/hello`, the smallest script extension.
-- **Not built:** a sandbox for script extensions; a settings panel.
+- **Built since** (2026-10-09, later): a bubblewrap sandbox for script
+  extensions from a `sandbox` manifest field; switches in `?extensions`
+  (Enter turns one on or off, kept in the cache, not your config file);
+  Everywhere's `size:`, `dm:`, `ext:` and `type:` filters.
 
 ## Decisions for the maintainer
 

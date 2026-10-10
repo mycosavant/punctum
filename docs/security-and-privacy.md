@@ -102,8 +102,15 @@ run. So:
   `extension.json` is refused. These are checked when the bar looks (at
   startup and when your config changes); it does nothing about code you
   copied in yourself, or change afterwards.
-- `?extensions` shows each one's declared permissions. They're labels the
-  author wrote, not enforcement. Read an extension before adding it.
+- **Script extensions run sandboxed** (bubblewrap) unless their manifest says
+  `"sandbox": false`: by default no network, an empty home folder, no desktop
+  session, nothing writable but a private `/tmp`; a manifest can ask for
+  network, home read or write, and named paths. That's enforcement, and
+  `?extensions` shows each one's sandbox. Everywhere is the one bundled
+  script that isn't sandboxed (plocate's setgid can't work inside one).
+- `?extensions` also shows each one's declared `permissions`. For JS
+  extensions those are labels the author wrote, not enforcement: a JS
+  extension runs inside the shell. Read an extension before adding it.
 - A script extension can only *propose* actions from the list above; the bar
   carries them out and writes the footer label itself ("open", "copy",
   "paste", "run <program>"), whatever the script calls it. `argv` runs any

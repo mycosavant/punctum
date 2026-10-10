@@ -17,6 +17,8 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | [Writing extensions](writing-extensions.md) | Your own features: the manifest, script extensions in any language, JS extensions, actions, tests |
 | [Architecture](architecture.md) | How a keystroke becomes rows, and where each piece lives |
 | [Extensions and release proposal](proposal-extensions.md) | Making features optional plugins others can write, releasing Everywhere on its own, and what a community release needs |
+| [Agent proposal](proposal-agent.md) | `>_`: from a doorway to the default agent to answers in the bar |
+| [Naming](release/naming.md) | Name candidates for a release, checked for availability |
 
 ## In one minute
 
@@ -35,6 +37,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | `pkg ` | Packages |
 | `remind `, `alarm `, `!remindme ` | Reminders and alarms |
 | `!` | Bangs (`!nasb john 3:16`) |
+| `>_ `, `> `, `ai ` | Ask your default agent |
 | `n ` | Add a line to your inbox note |
 | `keys ` | Keybindings |
 | `w ` | Open windows |

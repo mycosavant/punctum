@@ -105,5 +105,6 @@ script names.
   files it has imported.
 - Script extensions run only in their mode; one that answered every keystroke
   would start a process per key.
-- Permissions are labels. A real sandbox for script extensions (`bwrap`,
-  `systemd-run --user -p ...`) is possible and not built.
+- Script extensions run in a bubblewrap sandbox built from their manifest
+  (`Ext.wrap`); JS extensions can't be sandboxed, since they run inside the
+  shell, and their permissions stay labels.

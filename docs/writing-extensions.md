@@ -45,6 +45,7 @@ Start with a script extension unless you need to answer outside a mode.
   "defaults": { "greeting": "Hello" },          // settings, merged with the user's "hello": {...}
   "requires": ["fzf"],               // commands that must be on PATH, or it stays off
   "refresh": { "command": ["./hello", "--warm"], "every": 60 },   // script: background job, see below
+  "sandbox": { "network": false, "home": "none", "reads": [], "writes": [] },   // script: see below
   "permissions": {                   // what it touches, shown in ?extensions
     "runs": [], "reads": [], "writes": [], "network": []
   },
@@ -88,6 +89,36 @@ The bar runs `command` with one JSON request on stdin:
   extension says so in a row; `bin/commandbar-extensions` also keeps an
   extension off when its `./` command isn't executable or its command isn't
   on PATH.
+
+## The sandbox
+
+A script extension runs inside a [bubblewrap](https://github.com/containers/bubblewrap)
+sandbox the bar builds from its manifest, and `?extensions` shows what each
+one got. With no `sandbox` field it gets the strictest one:
+
+- no network;
+- an empty, throwaway home folder;
+- read-only `/usr` and `/etc`, its own folder (read-only, and the working
+  directory), a private `/tmp`;
+- no desktop session: no Wayland, no D-Bus, no `$XDG_RUNTIME_DIR`.
+
+It asks for more, and only what it needs:
+
+```jsonc
+"sandbox": {
+  "network": true,                    // for a web lookup
+  "home": "read",                     // "none" (default), "read" or "read-write"
+  "reads": ["~/.config/thing"],       // these paths readable, even with home "none"
+  "writes": ["~/.cache/thing"]        // these paths writable
+}
+```
+
+Paths are under `~/`, with no `..`. `"sandbox": false` runs it unsandboxed,
+which `?extensions` says plainly; Everywhere needs that, because `plocate`
+reads the system index through its setgid bit, which a sandbox turns off. A
+sandboxed extension needs `bwrap` (the `bubblewrap` package) and stays off
+without it. The tests run a probe script through each setting and check what
+it could and couldn't reach.
 
 ## Actions
 

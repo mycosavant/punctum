@@ -19,7 +19,8 @@ Files and folders anywhere on the disk, by name, as you type. Also a command
 of its own (`everywhere`, with an fzf picker). [Everywhere](everywhere.md)
 has the full account.
 
-- `/notes`, `/dwnlds`, `/report .pdf$`, `/hosts !backup`
+- `/notes`, `/dwnlds`, `/report .pdf$`, `/hosts !backup`, and filters:
+  `/report ext:pdf dm:week`, `/dm:today`, `/size:>1G`
 - **Enter** opens with the default app. **Shift+Enter** opens a terminal in its folder.
 - **Runs** the `everywhere` command, a script extension, which runs `plocate`,
   `fzf` and, for its home index, `updatedb`. All local.
@@ -211,6 +212,14 @@ Your own shortcuts, entirely in the config:
 
 ---
 
+## Switching extensions — `?extensions`
+
+Every extension, on or off, with what it runs, reads, writes and contacts
+and, for script extensions, its sandbox. **Enter** switches the selected one
+and the bar stays open. Switches are kept in the bar's cache, not your config
+file; "Reset extension switches" goes back to what the config says, and "Open
+settings file" opens `commandbar.json` in your editor.
+
 ## From upstream
 
 | Provider | Type | Notes |
@@ -223,4 +232,4 @@ Your own shortcuts, entirely in the config:
 | `windows` | `w `, `w github` | Switch to an open window |
 | `apps` | `firefox`, `brave new window` | Launch an app or one of its actions |
 | `processes` | `kill chrome`, `kill -9 node` | Quit your own processes |
-| `ai` | `ai why is my wifi slow` | Opens your Omarchy default agent, or a chat site |
+| `ai` | `ai why is my wifi slow`, `>_ why is my wifi slow` | Opens your Omarchy default agent, or a chat site. `>_` and `>` work like the keyword; see [the agent proposal](proposal-agent.md) for where this could go |

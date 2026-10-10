@@ -3,6 +3,7 @@
 // Hands a prompt to Omarchy's default coding agent (`omarchy default agent`):
 //
 //   ai why is my wifi slow    → omarchy-agent-prompt 'why is my wifi slow'
+//   >_ why is my wifi slow    the same, by prefix (also ">"; "prefixes" in the config)
 //
 // through bin/commandbar-agent, which says so in a notification when the
 // agent isn't installed instead of failing where nothing shows it.
@@ -21,7 +22,22 @@ var NAMES = {
 function settingsOf(ctx) {
   var s = ctx.settings && typeof ctx.settings === "object" ? ctx.settings : {}
   return { keyword: String(s.keyword || "ai").toLowerCase(), fallback: s.fallback === true,
-           chats: Array.isArray(s.chats) ? s.chats : [] }
+           chats: Array.isArray(s.chats) ? s.chats : [], prefixes: prefixesOf(s) }
+}
+
+// ">_" and ">" by default: a prefix needs no space after it, and the longest
+// one that fits wins, so ">_fix it" isn't read as ">" and "_fix it".
+function prefixesOf(s) {
+  var list = Array.isArray(s.prefixes) ? s.prefixes : [">_", ">"]
+  return list.map(String).filter(function(p) { return p && p.length <= 4 && !/[\sA-Za-z0-9]/.test(p) })
+             .sort(function(a, b) { return b.length - a.length })
+}
+
+// The prompt after a prefix, or null.
+function afterPrefix(query, prefixes) {
+  var t = String(query || "").replace(/^\s+/, "")
+  for (var i = 0; i < prefixes.length; i++) if (t.indexOf(prefixes[i]) === 0) return t.slice(prefixes[i].length).trim()
+  return null
 }
 
 // "Ask ChatGPT: …" rows, opened in the browser with the prompt URL-encoded.
@@ -75,7 +91,8 @@ var provider = {
       about: "Opens " + name + " in a terminal with your prompt" + (s.chats.length ? ", or a chat website with Alt+2 and on" : ""),
       examples: [
         { q: s.keyword + " ", note: agent ? "Type a prompt after \"" + s.keyword + " \"" : "Choose an agent first with: omarchy default agent <name>" },
-        { q: s.keyword + " explain what a .desktop file is", note: "Opens " + name + " with that prompt. It runs commands without asking" }
+        { q: s.keyword + " explain what a .desktop file is", note: "Opens " + name + " with that prompt. It runs commands without asking" },
+        { q: (s.prefixes[0] || ">_") + " why is my wifi slow", note: "The same, by prefix" }
       ]
     }]
   },
@@ -87,6 +104,7 @@ var provider = {
   },
   // "ai " and a prompt; a keyword command of yours with the same word wins.
   mode: function(query, ctx) {
+    if (afterPrefix(query, settingsOf(ctx).prefixes) !== null) return { label: "Agent", icon: "󰚩" }
     var kw = String((ctx.settings && ctx.settings.keyword) || "ai").toLowerCase()
     var m = String(query || "").match(/^\s*(\S+)\s/)
     if (!m || m[1].toLowerCase() !== kw || (ctx.keywords || []).indexOf(kw) !== -1) return null
@@ -98,6 +116,13 @@ var provider = {
     var space = text.search(/\s/)
     var word = (space === -1 ? text : text.slice(0, space)).toLowerCase()
     var rest = space === -1 ? "" : text.slice(space).trim()
+
+    // ">_ prompt": the same as the keyword.
+    var prefixed = afterPrefix(query, s.prefixes)
+    if (prefixed !== null) {
+      if (!prefixed) return [agent ? { title: "Ask " + agentName(agent) + "…", subtitle: "Type your prompt after " + s.prefixes[0], score: 95, icon: "󰚩", copy: "" } : chooseRow(98)]
+      return [agent ? askRow(agent, prefixed, 98) : chooseRow(98)].concat(chatRows(s.chats, prefixed, 98))
+    }
 
     // Your own keyword command with the same word wins.
     var taken = (ctx.keywords || []).indexOf(s.keyword) !== -1

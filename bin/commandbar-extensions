@@ -113,6 +113,8 @@ def missing_commands(text, d):
     req = data.get("requires")
     out = [c for c in req if isinstance(c, str) and COMMAND.match(c) and shutil.which(c) is None] if isinstance(req, list) else []
     if data.get("type") == "script":
+        if data.get("sandbox") is not False and shutil.which("bwrap") is None:
+            out.append("bwrap")
         for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
             if not (isinstance(c, list) and c and isinstance(c[0], str)):
                 continue
