@@ -10,7 +10,7 @@ Builds on #PR1 (its first commit is PR 1's), since these tests use the safe payl
 |---|---|---|
 | Replacement patterns | `$'"; touch m; #` against `printf %s {q} "it's"` | `$'` inserted the template's tail, and `touch m` ran. `price $& tax` came out as `price {q} tax` |
 | `{q}` inside double quotes | `notify-send "Looking up {q}"` + `$(touch m)` | Became `"Looking up '$(touch m)'"`. Single quotes mean nothing inside double quotes, so it ran |
-| Bash evaluates a value | `echo $(( {q} ))`, `${a[{q}]}` + `a[$(touch m)]` | Runs `touch m` however the value is quoted |
+| Bash evaluates a value | `echo $(( {q} ))`, `${a[{q}]}`, `test -v {q}`, `printf -v {q} …`, `read {q}` + `a[$(touch m)]` | Runs `touch m` however the value is quoted |
 
 **The fix.**
 
@@ -19,13 +19,14 @@ Builds on #PR1 (its first commit is PR 1's), since these tests use the safe payl
 - The scan tracks quoting and skips comments.
 - Templates where that still isn't safe are refused, with a "switched off" row instead of running:
   - `{q}` inside single quotes, where it would never expand;
-  - any use of `$(( ))`, `(( ))`, `[[ ]]`, `let`, `declare`, `typeset`, `local` or `${a[…]}`.
+  - any use of arithmetic, array subscripts or a builtin that takes a variable's name: `$(( ))`, `(( ))`, `[[ ]]`, `let`, `declare`, `typeset`, `local`, `${a[…]}`, `${!…}`, `test -v`/`[ -v ]`, `printf -v`, `read`, `mapfile`, `unset`, `getopts`, `wait -p`. With bash 5.3, `test -v`, `[ -v ]`, `${!x}`, `printf -v`, `read` and `declare -n` ran the payload; the rest are refused because they take a name too.
+- A template that hands the text to another shell on purpose (`eval`, `sh -c`, `ssh host {q}`) still runs it as code: that's what those commands are for.
 - A template without `{q}` runs as before, and `open` templates are unchanged apart from also using a replacement function.
 
 **Checked:**
 
 - `node tests/run.js` passes.
-- With the old `commands.js` swapped back in, 8 checks fail, three of them by creating their marker file.
+- With the old `commands.js` swapped back in, 8 checks fail, some by creating their marker file (re-counted 2026-10-10 on 1.3.1).
 - Not run in the shell on this branch. Please try a keyword command with `{q}` (e.g. `{ "keyword": "say", "run": "notify-send \"{q}\"" }`) before merging.
 
 Part of #ISSUE.

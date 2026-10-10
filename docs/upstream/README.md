@@ -10,7 +10,7 @@ here has been sent yet.
 |---|---|---|---|
 | [Issue: hello, fixes and a question](issue.md) | n/a | n/a | n/a |
 | [PR 1: safe test payloads](pr-1-safe-test-payloads.md) | `fix/safe-test-payloads` | `upstream/main` | `220d00e` |
-| [PR 2: keyword text as $1](pr-2-run-query-as-arg.md) | `fix/run-query-as-arg` | PR 1 | `35af8d2` |
+| [PR 2: keyword text as $1](pr-2-run-query-as-arg.md) | `fix/run-query-as-arg` | PR 1 | `fc7fa6c` |
 | [PR 3: copy through stdin](pr-3-copy-via-stdin.md) | `fix/copy-via-stdin` | `upstream/main` | `c816ead` |
 
 Each branch, and all three merged onto 1.3.1 together, pass upstream's

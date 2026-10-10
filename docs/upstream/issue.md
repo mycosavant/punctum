@@ -11,7 +11,7 @@ While building on it I ran into three problems. I've opened a small PR for each:
 2. **Typed text can run as code in keyword `run` commands** (#PR2, builds on #PR1). `{q}` is spliced into the template, so:
    - with `{q}` inside double quotes, e.g. `"run": "notify-send \"Looking up {q}\""`, typing `$(touch /tmp/x)` runs it;
    - `$'`, `` $` `` and `$&` in the typed text are JavaScript replacement patterns and pull parts of the template back in, which can also run code;
-   - in arithmetic or array subscripts, bash evaluates a value like `a[$(cmd)]` however it's quoted.
+   - in arithmetic, array subscripts and builtins that take a variable's name (`test -v`, `printf -v`, `read`), bash evaluates a value like `a[$(cmd)]` however it's quoted.
 
    It needs a `run` command with `{q}` plus text you type or paste, so it's low severity, but pasting untrusted text into a launcher is ordinary. The PR passes the text to bash as `$1` instead, and refuses the few template shapes where that still isn't safe. Tests cover each case, and they fail on the current code.
 
