@@ -85,10 +85,11 @@ The bar runs `command` with one JSON request on stdin:
 - `refresh` runs a background job on a query in the mode, at most every
   `every` seconds; when it finishes, the current query runs again, so the
   rows may refresh while you look. Everywhere uses it to refresh its index.
-- If the command can't start (not executable, interpreter missing), the
-  extension says so in a row; `bin/commandbar-extensions` also keeps an
-  extension off when its `./` command isn't executable or its command isn't
-  on PATH.
+- If the command can't start, or fails with no output, the extension says
+  so in a row with the first error line; `bin/commandbar-extensions` also
+  keeps an extension off when its `./` command isn't executable, its command
+  isn't on PATH, or (sandboxed) its command or interpreter lives in your
+  home folder.
 
 ## The sandbox
 
@@ -113,12 +114,39 @@ It asks for more, and only what it needs:
 }
 ```
 
-Paths are under `~/`, with no `..`. `"sandbox": false` runs it unsandboxed,
-which `?extensions` says plainly; Everywhere needs that, because `plocate`
-reads the system index through its setgid bit, which a sandbox turns off. A
-sandboxed extension needs `bwrap` (the `bubblewrap` package) and stays off
-without it. The tests run a probe script through each setting and check what
-it could and couldn't reach.
+How it holds:
+
+- `bin/commandbar-sandbox` builds the bwrap command each time the script
+  runs. It opens every `reads` and `writes` path one component at a time
+  from your home folder without following symlinks and mounts the open file,
+  so a script can't plant a link in a folder it may write and have a later
+  run mount something else there. A symlink anywhere in a path is refused.
+- Paths are under `~/`, with no empty, `.` or `..` parts, and none may
+  contain another. `writes` may not touch places that run code or hold keys
+  (shell rc files, `~/.ssh`, `~/.gnupg`, `~/.local/bin`, `~/.config/hypr`,
+  systemd, autostart, the bar's own folders). A `writes` folder that doesn't
+  exist yet is created, mode 700.
+- The environment is cleared: the script sees `HOME`, `TMPDIR`, the locale,
+  `TZ`, and a `PATH` without folders in your home (so a command or
+  interpreter from mise or `~/.local/bin` isn't there; the bar reports such
+  an extension as "not reachable inside the sandbox" and keeps it off).
+- With `"network": true` the resolver files are mounted, so DNS works.
+- A command one of its rows runs on Enter (an `argv` action) runs in the same
+  sandbox. `open` rows still open in your browser or default app, outside
+  it, so a URL a script builds can carry what it was allowed to read; the
+  footer and row show what Enter opens.
+- `"home": "read"` also lets it connect to sockets in your home folder;
+  `"home": "read-write"` is not a sandbox, and `?extensions` says so.
+- If the sandboxed command fails (it exits non-zero with no output), the row
+  says so with its first error line.
+
+`"sandbox": false` runs it unsandboxed, which `?extensions` says plainly;
+Everywhere needs that, because `plocate` reads the system index through its
+setgid bit, which a sandbox turns off. A sandboxed extension needs `bwrap`
+(the `bubblewrap` package) and stays off without it. The tests run a probe
+script through the default, home read, named reads, network on, home
+read-write and unsandboxed, and check what it could and couldn't reach,
+including a planted symlink.
 
 ## Actions
 

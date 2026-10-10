@@ -104,10 +104,16 @@ run. So:
   copied in yourself, or change afterwards.
 - **Script extensions run sandboxed** (bubblewrap) unless their manifest says
   `"sandbox": false`: by default no network, an empty home folder, no desktop
-  session, nothing writable but a private `/tmp`; a manifest can ask for
-  network, home read or write, and named paths. That's enforcement, and
-  `?extensions` shows each one's sandbox. Everywhere is the one bundled
-  script that isn't sandboxed (plocate's setgid can't work inside one).
+  session, a cleared environment, nothing writable but a private `/tmp`. A
+  manifest can ask for network, home read or write, and named paths;
+  `bin/commandbar-sandbox` opens those paths itself at each run without
+  following symlinks, refuses overlapping ones and writes to places that run
+  code or hold keys. Commands their rows run on Enter run in the same
+  sandbox. `?extensions` shows each one's sandbox. Limits: `open` rows open
+  outside it (a URL can carry what the script could read, after you press
+  Enter), "home read" includes sockets in your home, and "home read-write"
+  is not a sandbox. Everywhere is the one bundled script that isn't
+  sandboxed (plocate's setgid can't work inside one).
 - `?extensions` also shows each one's declared `permissions`. For JS
   extensions those are labels the author wrote, not enforcement: a JS
   extension runs inside the shell. Read an extension before adding it.

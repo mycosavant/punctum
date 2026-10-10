@@ -74,9 +74,14 @@ Shift+Enter                            continue in a terminal, same session
   terminal gets the agent's normal mode, which Omarchy sets to unattended;
   the hand-off row should say which mode it opens in.
 - **Sandbox**: an inline-answer script needs the network and the agent's
-  credentials (`~/.claude`), so it would declare
-  `"sandbox": { "network": true, "home": "read", "writes": ["~/.claude"] }`;
-  that's honest about its reach and still keeps it off the desktop session.
+  credentials, which is close to what an agent session has anyway. Declared
+  with `"network": true` and `"home": "read"`, it can read anything in your
+  home (keys, browser profiles) and send it out, and reach sockets there, so
+  that sandbox mostly keeps it off the desktop session and out of writes; it
+  is not containment. Claude Code also writes `~/.claude.json` and
+  `~/.claude/`, which the denylist allows but `"home": "read"` alone doesn't.
+  Not tried: running `claude -p` inside bwrap. Read-only tools and the plan
+  permission mode, not the sandbox, are what keep an inline answer harmless.
 - **Latency**: answers take seconds; the row shows progress and Esc stops the
   run (the search service already stops a superseded command).
 

@@ -31,6 +31,7 @@ Every subprocess is an argument list, never a shell string; the query reaches
 plocate after "--" and fzf as one --filter= value.
 """
 import argparse
+import heapq
 import json
 import re
 import os
@@ -87,12 +88,14 @@ def parse_size(spec):
     m = re.fullmatch(r"(\d[\d.]*\s*[a-z]*)-(\d[\d.]*\s*[a-z]*)", spec.lower())
     if m:
         lo, hi = size_value(m.group(1)), size_value(m.group(2))
-        return None if lo is None or hi is None else (lo, hi)
+        return None if lo is None or hi is None or lo > hi else (lo, hi)
     m = re.fullmatch(r"(>=|<=|>|<)?(.+)", spec)
     v = size_value(m.group(2)) if m else None
     if v is None:
         return None
     op = m.group(1) or ">="
+    if op == "<" and v < 1:
+        return None   # nothing is smaller than nothing
     return {">": (v + 1, None), ">=": (v, None), "<": (None, v - 1), "<=": (None, v)}[op]
 
 
@@ -100,8 +103,11 @@ def parse_since(spec, now):
     """dm:today|yesterday|week|month|year|3d|12h|2w|2026-10-01 -> (since, until) epoch seconds."""
     t = time.localtime(now)
     midnight = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))
+    # Yesterday's midnight from the calendar, not midnight - 86400: a day with
+    # a clock change is 23 or 25 hours long.
+    yesterday = time.mktime((t.tm_year, t.tm_mon, t.tm_mday - 1, 0, 0, 0, 0, 0, -1))
     spec = spec.lower()
-    named = {"today": (midnight, None), "yesterday": (midnight - 86400, midnight),
+    named = {"today": (midnight, None), "yesterday": (yesterday, midnight),
              "week": (now - 7 * 86400, None), "month": (now - 31 * 86400, None), "year": (now - 366 * 86400, None)}
     if spec in named:
         return named[spec]
@@ -111,10 +117,14 @@ def parse_since(spec, now):
         return (now - n, None)
     m = re.fullmatch(r"(\d{4})-(\d\d)-(\d\d)", spec)
     if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         try:
-            start = time.mktime((int(m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, 0, 0, 0, -1))
+            start = time.mktime((y, mo, d, 0, 0, 0, 0, 0, -1))
         except (OverflowError, ValueError):
             return None
+        back = time.localtime(start)
+        if (back.tm_year, back.tm_mon, back.tm_mday) != (y, mo, d):
+            return None   # 2026-02-30 would quietly become 2026-03-02
         return (start, None)
     return None
 
@@ -135,7 +145,8 @@ def split_filters(ts, now=None):
         elif key in ("dm", "date", "modified"):
             key, v = "since", parse_since(val, now)
         elif key == "ext":
-            v = [e.lower().lstrip(".") for e in val.split(",") if re.fullmatch(r"\.?[A-Za-z0-9_+-]{1,16}", e)] or None
+            items = val.split(",")
+            v = [e.lower().lstrip(".") for e in items] if all(re.fullmatch(r"\.?[A-Za-z0-9_+-]{1,16}", e) for e in items) else None
         else:
             v = {"file": "file", "f": "file", "dir": "dir", "d": "dir", "folder": "dir"}.get(val.lower())
         if v is None:
@@ -306,6 +317,12 @@ def fzf_filter(paths, ts, keep=FZF_KEEP):
     return out
 
 
+def fzf_keep_order(paths, ts):
+    """paths that fzf's query (only !negations here) lets through, in their order."""
+    allowed = set(fzf_filter(paths, ts, keep=len(paths) + 1))
+    return [p for p in paths if p in allowed]
+
+
 def subsequence(text, word):
     i = 0
     for c in text:
@@ -333,13 +350,20 @@ def ordered(paths, text, home):
     return [p for _, _, p in sorted(((-rank(p, lits, home), i, p) for i, p in enumerate(paths)))]
 
 
-def walk(f, excludes, home):
-    """Files under home by date or size, with fd: plocate needs a name to look
-    for, fd can walk by date and size."""
+def walk(f, excludes, home, limit, key):
+    """The newest (or biggest) files under home matching the filters, by
+    walking it with fd: plocate needs a name to look for, fd can walk by date
+    and size. fd's output is streamed and the best `limit` kept as it comes,
+    so the order is the true one, not that of whatever fd found first; at the
+    deadline what was kept is returned."""
     # --hidden: ~/.config counts. .gitignore is still respected, which keeps
-    # build trees out; the exclusions apply as everywhere else.
-    argv = ["fd", "--hidden", "--absolute-path", "--base-directory", home,
-            "--max-results", str(PER_PASS * 3), "--print0", "--color", "never"]
+    # build trees out. Single-folder exclusions (/.cache/) go to fd as -E so
+    # it doesn't walk into them; the rest are checked here.
+    argv = ["fd", "--hidden", "--absolute-path", "--base-directory", home, "--print0", "--color", "never"]
+    for e in excludes:
+        name = e.strip("/")
+        if name and "/" not in name and re.fullmatch(r"[A-Za-z0-9._ -]+", name):
+            argv += ["-E", name]
     if f.get("since"):
         argv += ["--changed-within", "%ds" % max(1, int(time.time() - f["since"][0]))]
     if f.get("size"):
@@ -352,13 +376,34 @@ def walk(f, excludes, home):
         argv += ["--type", "d"]
     elif f.get("type") == "file" or "size" in f:
         argv += ["--type", "f"]
-    try:
-        r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=TIMEOUT)
-    except (OSError, subprocess.TimeoutExpired):
-        return []
     ex = [e.lower() for e in excludes if e]
-    paths = [p.rstrip("/") for p in r.stdout.decode("utf-8", "surrogateescape").split("\0") if p]
-    return [p for p in paths if not excluded(p, ex)]
+    best = []   # a heap of (key, path), the smallest key first
+    deadline = time.monotonic() + TIMEOUT
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return []
+    buf = b""
+    try:
+        while time.monotonic() < deadline:
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                break
+            buf += chunk
+            *done, buf = buf.split(b"\0")
+            for raw in done:
+                p = raw.decode("utf-8", "surrogateescape").rstrip("/")
+                if not p or excluded(p, ex) or not passes(p, f):
+                    continue
+                k = key(p)
+                if len(best) < limit:
+                    heapq.heappush(best, (k, p))
+                elif k > best[0][0]:
+                    heapq.heapreplace(best, (k, p))
+    finally:
+        proc.kill()
+        proc.wait()
+    return [p for _, p in sorted(best, reverse=True)]
 
 
 def size_of(path):
@@ -379,9 +424,10 @@ def search(text, excludes, home, limit):
     ts, f = split_filters(terms(text))
     if not literals(ts):
         if f.get("since") or (f.get("size") and not f.get("ext")):
-            hits = [p for p in walk(f, excludes, home) if passes(p, f)]
             # Newest first for a date, biggest first for a size alone.
-            return sorted(hits, key=mtime if f.get("since") else size_of, reverse=True)[:limit]
+            hits = walk(f, excludes, home, limit * 4 if ts else limit, mtime if f.get("since") else size_of)
+            # !negations still apply with no words to search for.
+            return (fzf_keep_order(hits, ts) if ts else hits)[:limit]
         # Only ext:, maybe size:/type:: each extension is the name to look for.
         hits, seen = [], set()
         for e in f.get("ext") or []:
@@ -389,6 +435,8 @@ def search(text, excludes, home, limit):
                 if p not in seen and passes(p, f):
                     seen.add(p)
                     hits.append(p)
+        if ts:
+            hits = fzf_keep_order(hits, ts)
         return ordered(hits, " ".join("." + e for e in f.get("ext") or []), home)[:limit]
     rest = " ".join(ts)
     keep = FZF_KEEP * 8 if len(f) > 1 else FZF_KEEP

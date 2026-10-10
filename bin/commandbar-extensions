@@ -113,17 +113,55 @@ def missing_commands(text, d):
     req = data.get("requires")
     out = [c for c in req if isinstance(c, str) and COMMAND.match(c) and shutil.which(c) is None] if isinstance(req, list) else []
     if data.get("type") == "script":
-        if data.get("sandbox") is not False and shutil.which("bwrap") is None:
+        sandboxed = data.get("sandbox") is not False
+        if sandboxed and shutil.which("bwrap") is None:
             out.append("bwrap")
+        # With home hidden, nothing on PATH under home (mise shims, ~/.cargo/bin,
+        # ~/.local/bin) exists inside the sandbox, nor does an interpreter there.
+        sb = data.get("sandbox") if isinstance(data.get("sandbox"), dict) else {}
+        home_hidden = sandboxed and sb.get("home", "none") == "none"
+        home = os.path.realpath(os.path.expanduser("~")) + "/"
+
+        def reachable(path):
+            return path is not None and not (home_hidden and (os.path.realpath(path) + "/").startswith(home))
+
         for c in (data.get("command"), (data.get("refresh") or {}).get("command") if isinstance(data.get("refresh"), dict) else None):
             if not (isinstance(c, list) and c and isinstance(c[0], str)):
                 continue
             if c[0].startswith("./"):
-                if not os.access(os.path.join(d, c[0][2:]), os.X_OK):
+                f = os.path.join(d, c[0][2:])
+                if not os.access(f, os.X_OK):
                     out.append(c[0] + " (not executable)")
-            elif COMMAND.match(c[0]) and shutil.which(c[0]) is None:
-                out.append(c[0])
+                    continue
+                interp = shebang(f)
+                if interp and not reachable(interp):
+                    out.append(os.path.basename(interp) + " (not reachable inside the sandbox)")
+            elif COMMAND.match(c[0]):
+                found = shutil.which(c[0])
+                if found is None:
+                    out.append(c[0])
+                elif not reachable(found):
+                    out.append(c[0] + " (not reachable inside the sandbox)")
     return out
+
+
+def shebang(path):
+    """The interpreter a script's #! line names (env's argument resolved on
+    PATH), or None."""
+    try:
+        with open(path, "rb") as f:
+            line = f.readline(256).decode("utf-8", "replace")
+    except OSError:
+        return None
+    if not line.startswith("#!"):
+        return None
+    words = line[2:].split()
+    if not words:
+        return None
+    if os.path.basename(words[0]) == "env":
+        rest = [w for w in words[1:] if not w.startswith("-")]
+        return shutil.which(rest[0]) if rest else None
+    return words[0]
 
 
 def scan(root, user):

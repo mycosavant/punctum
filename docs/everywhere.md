@@ -44,8 +44,10 @@ stdin and shows the rows it prints.
 
 With words, the filters narrow what the name search found (it looks deeper,
 so a filter doesn't empty a common word's results). Without words, `dm:` and
-`size:` walk your home folder with `fd` (plocate needs a name), and `ext:`
-searches the indexes for the extension. A filter it can't read is an error,
+`size:` walk your home folder with `fd` (plocate needs a name), keeping the
+true newest or biggest as results stream in (up to 3 s, then what it has),
+and `ext:` searches the indexes for the extension. `!negations` apply either
+way. A filter it can't read is an error,
 not a silent miss. With a size or date filter the rows show each file's size
 and age.
 

@@ -29,7 +29,8 @@ function settingsOf(ctx) {
 // one that fits wins, so ">_fix it" isn't read as ">" and "_fix it".
 function prefixesOf(s) {
   var list = Array.isArray(s.prefixes) ? s.prefixes : [">_", ">"]
-  return list.map(String).filter(function(p) { return p && p.length <= 4 && !/[\sA-Za-z0-9]/.test(p) })
+  // Not the characters the bar's own modes start with (? help, : emoji, / ~ ! …).
+  return list.map(String).filter(function(p) { return p && p.length <= 4 && !/[\sA-Za-z0-9]/.test(p) && !/^[?:\/~!#$]/.test(p) })
              .sort(function(a, b) { return b.length - a.length })
 }
 

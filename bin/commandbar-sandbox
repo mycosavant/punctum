@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Run a script extension's command inside bubblewrap.
+
+    commandbar-sandbox '<spec JSON>' -- command [args...]
+
+spec: {"dir": extension folder, "home": your home, "network": bool,
+       "home_mode": "none" | "read" | "read-write",
+       "reads": ["~/..."], "writes": ["~/..."]}
+
+Built from the manifest by lib/Extensions.js. Everything about paths is
+decided here, when the command runs, not when the manifest was read:
+
+- Each reads/writes path is opened one component at a time from the home
+  folder with O_NOFOLLOW, and the sandbox mounts that open file descriptor
+  (--bind-fd), not a path bwrap would resolve again. A symlink anywhere in
+  the path is refused, so a script can't plant a link in a folder it may
+  write and have the next run mount your ~/.ssh.
+- Entries that contain one another are refused, as are writes to places
+  that run code or hold keys (shell rc files, ~/.config/hypr, systemd,
+  autostart, ~/.local/bin, ~/.ssh, ~/.gnupg, the bar's own folders).
+- A writes folder that doesn't exist yet is created, mode 700.
+- The environment is cleared; HOME, a PATH without folders in your home
+  (unless home is readable), the locale and TZ are set.
+- With network on, the resolver files under /run are mounted, so DNS works.
+- No /run, no $XDG_RUNTIME_DIR: no Wayland, no D-Bus, no agent sockets there.
+"""
+import json
+import os
+import stat
+import sys
+
+DENY_WRITES = [
+    ".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zprofile", ".zshenv",
+    ".xinitrc", ".xprofile", ".pam_environment", ".ssh", ".gnupg", ".local/bin",
+    ".config/hypr", ".config/systemd", ".config/autostart", ".config/uwsm", ".config/environment.d",
+    ".config/omarchy", ".cache/omarchy-commandbar", ".local/share/applications", ".config/fish",
+    ".config/nvim", ".config/git", ".gitconfig",
+]
+RESOLVER = ["/run/systemd/resolve/stub-resolv.conf", "/run/systemd/resolve/resolv.conf",
+            "/run/NetworkManager/resolv.conf", "/run/NetworkManager/no-stub-resolv.conf"]
+
+
+class Refused(Exception):
+    pass
+
+
+def segments(p):
+    if not isinstance(p, str) or not p.startswith("~/"):
+        raise Refused("%r isn't a path under ~/" % (p,))
+    parts = p[2:].split("/")
+    if not parts or any(s in ("", ".", "..") for s in parts):
+        raise Refused("%r has an empty, . or .. part" % p)
+    return parts
+
+
+def inside(a, b):
+    """Whether path parts a are b or under b."""
+    return a[:len(b)] == b
+
+
+def check_lists(reads, writes):
+    entries = [segments(p) for p in reads] + [segments(p) for p in writes]
+    for i, a in enumerate(entries):
+        for j, b in enumerate(entries):
+            if i != j and inside(a, b):
+                raise Refused("%s is inside %s; list each place once" % ("/".join(a), "/".join(b)))
+    for p in writes:
+        w = segments(p)
+        for d in DENY_WRITES:
+            ds = d.split("/")
+            if inside(w, ds) or inside(ds, w):
+                raise Refused("won't make ~/%s writable: it runs code or holds keys" % "/".join(w))
+
+
+def walk(home_fd, parts, create):
+    """An O_PATH fd for home/parts, never following a symlink; None if missing
+    (and not created)."""
+    fd = os.dup(home_fd)
+    try:
+        for i, part in enumerate(parts):
+            last = i == len(parts) - 1
+            flags = os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC | (0 if last else os.O_DIRECTORY)
+            try:
+                nxt = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not create:
+                    return None
+                os.mkdir(part, 0o700, dir_fd=fd)
+                nxt = os.open(part, flags, dir_fd=fd)
+            except NotADirectoryError:
+                raise Refused("~/%s: a part of the path isn't a folder (or is a symlink)" % "/".join(parts[:i + 1]))
+            except OSError as e:
+                if e.errno == 40:   # ELOOP: the last part is a symlink
+                    raise Refused("~/%s is a symlink" % "/".join(parts[:i + 1]))
+                raise
+            os.close(fd)
+            fd = nxt
+        st = os.fstat(fd)
+        if stat.S_ISLNK(st.st_mode):
+            raise Refused("~/%s is a symlink" % "/".join(parts))
+        if not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
+            raise Refused("~/%s isn't a file or folder" % "/".join(parts))
+        if create and st.st_uid != os.getuid():
+            raise Refused("~/%s isn't yours" % "/".join(parts))
+        result, fd = fd, -1
+        return result
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+
+def keep(fd):
+    os.set_inheritable(fd, True)
+    return str(fd)
+
+
+def build(spec, command):
+    home = spec.get("home")
+    if not isinstance(home, str) or not home.startswith("/"):
+        raise Refused("no home folder")
+    real_home = os.path.realpath(home)
+    folder = spec.get("dir")
+    if not isinstance(folder, str) or not folder.startswith("/"):
+        raise Refused("no extension folder")
+    mode = spec.get("home_mode", "none")
+    if mode not in ("none", "read", "read-write"):
+        raise Refused("bad home mode")
+    reads, writes = spec.get("reads") or [], spec.get("writes") or []
+    check_lists(reads, writes)
+
+    home_fd = os.open(real_home, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+    a = ["bwrap", "--unshare-all", "--die-with-parent", "--new-session"]
+    if spec.get("network") is True:
+        a.append("--share-net")
+    a += ["--ro-bind", "/usr", "/usr", "--symlink", "usr/bin", "/bin", "--symlink", "usr/bin", "/sbin",
+          "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib", "/lib64",
+          "--ro-bind", "/etc", "/etc", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+    if spec.get("network") is True:
+        for f in RESOLVER:
+            a += ["--ro-bind-try", f, f]
+    if mode == "read":
+        a += ["--ro-bind-fd", keep(home_fd), home]
+    elif mode == "read-write":
+        a += ["--bind-fd", keep(home_fd), home]
+    else:
+        a += ["--tmpfs", home]
+    for p in reads:
+        fd = walk(home_fd, segments(p), False)
+        if fd is not None:
+            a += ["--ro-bind-fd", keep(fd), home + "/" + p[2:]]
+    for p in writes:
+        fd = walk(home_fd, segments(p), True)
+        a += ["--bind-fd", keep(fd), home + "/" + p[2:]]
+    dir_fd = os.open(os.path.realpath(folder), os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
+    a += ["--ro-bind-fd", keep(dir_fd), folder, "--chdir", folder, "--clearenv",
+          "--setenv", "HOME", home, "--setenv", "TMPDIR", "/tmp"]
+    prefix = real_home.rstrip("/") + "/"
+    path = [d for d in os.environ.get("PATH", "/usr/bin").split(":")
+            if d.startswith("/") and (mode != "none" or not (d + "/").startswith(prefix))]
+    a += ["--setenv", "PATH", ":".join(path or ["/usr/local/bin", "/usr/bin"])]
+    for k, v in os.environ.items():
+        if k in ("LANG", "LANGUAGE", "TZ") or k.startswith("LC_"):
+            a += ["--setenv", k, v]
+    return a + ["--"] + command
+
+
+def main(argv):
+    if len(argv) < 3 or argv[1] != "--":
+        print("usage: commandbar-sandbox '<spec JSON>' -- command [args...]", file=sys.stderr)
+        return 2
+    try:
+        spec = json.loads(argv[0])
+        if not isinstance(spec, dict):
+            raise Refused("bad spec")
+        args = build(spec, argv[2:])
+    except (Refused, ValueError) as e:
+        print("commandbar-sandbox: refused: %s" % e, file=sys.stderr)
+        return 3
+    except OSError as e:
+        print("commandbar-sandbox: %s" % e, file=sys.stderr)
+        return 3
+    os.execvp("bwrap", args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

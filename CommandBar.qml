@@ -246,6 +246,7 @@ Item {
       launches: root.launches,
       agent: root.agent,
       search: root.search,
+      sandboxHelper: root.pluginDir + "/bin/commandbar-sandbox",
       pinnedApps: root.pinnedApps,
       home: root.home,
       omarchyPath: root.omarchyPath,
@@ -561,7 +562,22 @@ Item {
         root.startSearch()
       }
     }
-    onExited: { searchWatchdog.stop(); root.searchExited = true; root.startSearch() }
+    stderr: StdioCollector { id: searchErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      searchWatchdog.stop()
+      root.searchExited = true
+      // A command that ran but failed (a sandboxed script whose interpreter
+      // isn't inside the sandbox, a refused sandbox path) prints nothing and
+      // exits non-zero: say so, with its first error line, rather than
+      // "Nothing found".
+      var s = root.search
+      if (exitCode !== 0 && !searchProc.timedOut && s && s.key === searchProc.forKey && s.key === root.searchWantKey && !String(s.text || "").trim()) {
+        var line = String(searchErr.text || "").split("\n").filter(function(l) { return l.trim() })[0] || ("exit " + exitCode)
+        root.search = Object.assign({}, s, { failed: true, error: line.slice(0, 200) })
+        if (root.opened) root.recompute()
+      }
+      root.startSearch()
+    }
   }
 
   function searchFailedToStart() {
@@ -734,7 +750,10 @@ Item {
     root.saveSwitches(next)
   }
 
+  property bool switchesTouched: false
+
   function saveSwitches(next) {
+    root.switchesTouched = true
     root.extensionSwitches = next
     Engine.setExtensionSwitches(next)
     root.cacheWrite("extension-switches.json", JSON.stringify(next))
@@ -742,6 +761,8 @@ Item {
   }
 
   function loadSwitches(text) {
+    // A switch flipped before the startup read returned wins over the file.
+    if (root.switchesTouched) return
     var data = {}
     try { data = JSON.parse(text || "{}") || {} } catch (e) {}
     var next = {}

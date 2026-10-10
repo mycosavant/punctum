@@ -398,6 +398,7 @@ function check(name, ok, detail) { console.log((ok ? "ok  " : "FAIL") + "  " + n
 // provider's key, and a search that has landed.
 const loadedText = (id, key, text, onRequest) => ({ cached: k => k === id + "\n" + key ? text : null, requestLoad: (k, a, o) => onRequest && onRequest(k, a, o) })
 const landed = (id, key, text, more) => Object.assign({ search: { key: id + "\n" + key, text, chunks: [text], timedOut: false, done: true }, requestSearch: () => {} }, more || {})
+const SANDBOX = P + "bin/commandbar-sandbox"
 const run = (query, providers, extra) => Engine.run(query, Object.assign({}, config, { providers }), Object.assign({ now, apps, windows: [], launches: {} }, extra || {}))
 
 { const history = [
@@ -697,13 +698,14 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const m = Ext.validate({ schema: 1, id: "wx", name: "Weather", type: "script", command: ["./wx"], mode: { pattern: "^\\s*wx\\s" }, minQuery: 2, placeholder: "Type a city" }, "/e/wx")
   const sp = Ext.scriptProvider(m)
   let asked = null
-  const ctx = (extra) => Object.assign({ settings: { unit: "c" }, home: "/h", requestSearch: (k, a, o) => { asked = { k, a, o } } }, extra || {})
+  const ctx = (extra) => Object.assign({ settings: { unit: "c" }, home: "/h", sandboxHelper: SANDBOX, requestSearch: (k, a, o) => { asked = { k, a, o } } }, extra || {})
   check("script: only in its mode; a placeholder below minQuery", sp.match("hello", ctx()).length === 0 && sp.match("wx a", ctx())[0].title === "Type a city")
   const first = sp.match("wx paris", ctx())
   const req = asked && JSON.parse(asked.o.stdin)
-  check("script: asks with the command and a JSON request on stdin", first[0].title === "Searching…" && asked.k === "paris" && asked.a[0][0] === "bwrap" && asked.a[0].slice(-1)[0] === "/e/wx/wx"
+  check("script: asks with the command and a JSON request on stdin", first[0].title === "Searching…" && asked.k === "paris" && asked.a[0][1] === SANDBOX && asked.a[0].slice(-1)[0] === "/e/wx/wx"
     && req.protocol === 1 && req.text === "paris" && req.query === "wx paris" && req.settings.unit === "c" && req.home === "/h")
   const rows = sp.match("wx paris", ctx({ search: { key: "paris", text: '{"items":[{"title":"12°"}]}' } }))
+  check("script: sandboxed with no helper or home, it refuses to run rather than run unsandboxed", /can't run sandboxed/.test(sp.match("wx paris", ctx({ sandboxHelper: "" }))[0].title) && Ext.wrap(m, ["x"], "", SANDBOX) === null)
   check("script: the landed output becomes rows", rows.length === 1 && rows[0].title === "12°")
   check("script: bad output is an error row; nothing found uses its message; a timeout says so",
     /isn't JSON/.test(sp.match("wx paris", ctx({ search: { key: "paris", text: "x" } }))[0].title)
@@ -718,9 +720,10 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const sp = Ext.scriptProvider(m)
   let req = null
   const hostile = "$(touch " + dir + "/pwned) `touch " + dir + "/pwned2`"
-  sp.match("echo " + hostile, { requestSearch: (k, a, o) => { req = { k, a, o } } })
+  const home = process.env.HOME
+  sp.match("echo " + hostile, { home, sandboxHelper: SANDBOX, requestSearch: (k, a, o) => { req = { k, a, o } } })
   const r = spawnSync(req.a[0][0], req.a[0].slice(1), { input: req.o.stdin, encoding: "utf8", cwd: dir })
-  const rows = sp.match("echo " + hostile, { search: { key: req.k, text: r.stdout } })
+  const rows = sp.match("echo " + hostile, { home, sandboxHelper: SANDBOX, search: { key: req.k, text: r.stdout } })
   check("script: a real script gets the text as data and its rows come back", rows[0].title === "you typed " + hostile && rows[0].copy === hostile && !fs.existsSync(dir + "/pwned") && !fs.existsSync(dir + "/pwned2"), rows[0] && rows[0].title)
   fs.rmSync(dir, { recursive: true }) }
 
@@ -806,7 +809,8 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   Engine.setProviders(saved)
   check("ext: in a mode, only that mode's extension gets the search slot", inMode.length === 1 && /^everywhere\n/.test(inMode[0]) && asked.length === 1 && /^rival\n/.test(asked[0]), JSON.stringify([inMode, asked]))
   const m = Ext.validate({ schema: 1, id: "brk", type: "script", command: ["./run"], mode: { pattern: "^brk\\s" } }, "/e/brk")
-  check("ext: a script that couldn't start says so", /couldn't start/.test(Ext.scriptProvider(m).match("brk x", { search: { key: "x", text: "", failed: true } })[0].title)) }
+  const failed = Ext.scriptProvider(m).match("brk x", { home: "/h", sandboxHelper: SANDBOX, search: { key: "x", text: "", failed: true, error: "bwrap: execvp ./run: No such file or directory" } })[0]
+  check("ext: a script that couldn't run says so, with its error line", /couldn't run/.test(failed.title) && /execvp/.test(failed.subtitle), JSON.stringify(failed)) }
 
 // everywhere: the command itself
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
@@ -924,14 +928,24 @@ print(json.dumps({
   "runtime": os.path.exists(${JSON.stringify(process.env.XDG_RUNTIME_DIR || "/run/user/0")} + "/bus"),
   "net": can(net),
   "tmp": can(lambda: open("/tmp/x", "w").write("x")),
+  "loopback": can(lambda: socket.create_connection(("127.0.0.1", int(open("port").read())), 2)),
+  "resolver": os.path.exists("/etc/resolv.conf"),
+  "env_secret": "SECRET_TOKEN" in os.environ,
 }))
 `, { mode: 0o755 })
+  // A listener on the host's loopback, in a child process (these tests run synchronously).
+  const portFile = root + "/port"
+  const srv = require("child_process").spawn("python3", ["-c", "import socket,time,sys\ns=socket.socket();s.bind(('127.0.0.1',0));s.listen(8)\nopen(sys.argv[1],'w').write(str(s.getsockname()[1]))\ntime.sleep(60)", portFile], { stdio: "ignore", detached: true })
+  for (let i = 0; i < 50 && !fs.existsSync(portFile); i++) spawnSync("sleep", ["0.1"])
+  let port = fs.existsSync(portFile) ? parseInt(fs.readFileSync(portFile, "utf8"), 10) : 0
   const run = (sandbox) => {
     const m = Ext.validate({ schema: 1, id: "probe", type: "script", command: ["./probe"], mode: { pattern: "^p " }, sandbox }, ext)
-    const argv = Ext.wrap(m, m.command, home)
-    const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", timeout: 20000, env: Object.assign({}, process.env, { HOME: home }) })
+    const argv = Ext.wrap(m, m.command, home, SANDBOX)
+    const r = spawnSync(argv[0], argv.slice(1), { encoding: "utf8", timeout: 20000, env: Object.assign({}, process.env, { HOME: home, SECRET_TOKEN: "t0ken", PROBE_PORT: String(port) }) })
     try { return JSON.parse(r.stdout) } catch (e) { return { error: r.stderr || r.stdout } }
   }
+  if (!port) { srv.kill(); throw new Error("no loopback port") }
+  fs.writeFileSync(ext + "/port", String(port))   // the environment is cleared, so the probe reads it here
   const strict = run(undefined)
   // A hidden home is an empty in-memory folder: writing there works and reaches nothing.
   check("sandbox: by default no network, home hidden (writes vanish), no desktop session",
@@ -942,7 +956,35 @@ print(json.dumps({
   const hidden = run({ reads: ["~/.config/thing"] })
   check("sandbox: with home hidden, only the paths it asks to read are there", hidden.config === true && hidden.secret === false, JSON.stringify(hidden))
   const off = run(false)
-  check("sandbox: false runs it as it is (calibration: the probe sees home, the session and writes for real)", off.secret === true && off.runtime === true && fs.existsSync(home + "/new"), JSON.stringify(off))
+  check("sandbox: false runs it as it is (calibration: the probe sees home, the session, the env and writes for real)", off.secret === true && off.runtime === true && off.env_secret === true && fs.existsSync(home + "/new"), JSON.stringify(off))
+  check("sandbox: the environment is cleared (a token in it doesn't get in)", strict.env_secret === false && asked.env_secret === false)
+  const netOn = run({ network: true })
+  check("sandbox: network on reaches loopback and has the resolver; off has neither (calibrated against each other)", netOn.loopback === true && netOn.resolver === true && strict.loopback === false && strict.resolver === false, JSON.stringify([netOn.loopback, netOn.resolver, strict.loopback, strict.resolver]))
+  fs.rmSync(home + "/new", { force: true })
+  const rw = run({ home: "read-write" })
+  check("sandbox: home read-write really writes (and ?extensions calls it not a sandbox)", rw.write_home === true && fs.existsSync(home + "/new")
+    && /not a sandbox/.test(Ext.sandboxSummary(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { home: "read-write" } }, "/e"))))
+  // The escape the review found: a link planted where a writes path will be resolved.
+  fs.mkdirSync(home + "/.cache", { recursive: true })
+  fs.symlinkSync(home + "/.config", home + "/.cache/planted")
+  const viaLink = spawnSync("python3", [SANDBOX, JSON.stringify({ dir: ext, home, home_mode: "none", writes: ["~/.cache/planted"] }), "--", "true"], { encoding: "utf8" })
+  check("sandbox: a symlink at a writes path is refused when it runs", viaLink.status === 3 && /symlink/.test(viaLink.stderr), viaLink.stderr)
+  fs.mkdirSync(home + "/real", { recursive: true }); fs.symlinkSync(home + "/real", home + "/linkdir")
+  const viaParent = spawnSync("python3", [SANDBOX, JSON.stringify({ dir: ext, home, home_mode: "none", writes: ["~/linkdir/inner"] }), "--", "true"], { encoding: "utf8" })
+  check("sandbox: a symlink inside a writes path is refused too", viaParent.status === 3 && !fs.existsSync(home + "/real/inner"), viaParent.stderr)
+  const made = spawnSync("python3", [SANDBOX, JSON.stringify({ dir: ext, home, home_mode: "none", writes: ["~/.cache/fresh/deep"] }), "--", "true"], { encoding: "utf8" })
+  check("sandbox: a writes folder that doesn't exist yet is created, mode 700", made.status === 0 && (fs.statSync(home + "/.cache/fresh/deep").mode & 0o777) === 0o700, made.stderr)
+  const nested = spawnSync("python3", [SANDBOX, JSON.stringify({ dir: ext, home, home_mode: "none", writes: ["~/.cache/x", "~/.cache/x/b/.ssh"] }), "--", "true"], { encoding: "utf8" })
+  check("sandbox: the helper refuses nested paths on its own as well", nested.status === 3 && /inside/.test(nested.stderr))
+  srv.kill()
+  const v = (sb) => Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: sb }, "/e").error || ""
+  check("sandbox: nested or overlapping paths, ~/. and places that run code or hold keys are refused",
+    /overlap/.test(v({ writes: ["~/.cache/x", "~/.cache/x/b/.ssh"] })) && /overlap/.test(v({ reads: ["~/.config/a"], writes: ["~/.config/a/b"] }))
+    && /no empty/.test(v({ writes: ["~/."] })) && /may not write/.test(v({ writes: ["~/.ssh"] })) && /may not write/.test(v({ writes: ["~/.config"] }))
+    && /may not write/.test(v({ writes: ["~/.config/omarchy/commandbar/extensions"] })) && /may not write/.test(v({ writes: ["~/.bashrc"] })) && v({ writes: ["~/.cache/mine"] }) === "")
+  const items = Ext.scriptProvider(Ext.validate({ schema: 1, id: "w", type: "script", command: ["./w"], mode: { pattern: "^w " } }, "/e/w"))
+    .match("w x", { home: "/h", sandboxHelper: SANDBOX, search: { key: "x", text: JSON.stringify({ items: [{ title: "t", run: { kind: "argv", target: ["curl", "x"] } }] }) } })
+  check("sandbox: a command a sandboxed script's row runs on Enter runs in the same sandbox", items[0].run.target[1] === SANDBOX && items[0].run.target.slice(-2).join(" ") === "curl x" && /sandboxed/.test(items[0].run.label), JSON.stringify(items[0].run))
   check("sandbox: bad sandbox settings are refused",
     /sandbox/.test(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { writes: ["/etc"] } }, "/e").error || "")
     && /sandbox/.test(Ext.validate({ schema: 1, id: "x", type: "script", command: ["./a"], mode: { pattern: "^x " }, sandbox: { writes: ["~/../x"] } }, "/e").error || "")
@@ -963,7 +1005,7 @@ print(json.dumps({
   Engine.setExtensionSwitches({ bible: false })
   const after = Engine.run("?extensions", offCfg, { now }).find(r => r.title === "Bible")
   Engine.setExtensionSwitches({})
-  check("switches: switched off in the bar, it says so and offers to turn it on", /^Off/.test(after.subtitle) && /switched in the bar/.test(after.subtitle) && after.run.on === true && after.actionLabel === "Turn on", after.subtitle)
+  check("switches: switched off in the bar, it says so and offers to turn it on", /^Off: switched off in the bar/.test(after.subtitle) && after.run.on === true && after.actionLabel === "Turn on", after.subtitle)
   check("switches: and it stops answering", !Engine.run("john 3:16", offCfg, { now, apps }).some(r => r.provider === "bible"))
   check("switches: reset and settings commands are findable", q("reset extension")[0].run.kind === "reset-switches" && q("open settings")[0].run.kind === "open-settings") }
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
@@ -1011,5 +1053,28 @@ print(json.dumps({
   check("agent: >_ and > ask the default agent, with or without a space", a(">_ why is my wifi slow")[0].title === "Ask Claude Code: why is my wifi slow" && a(">_why")[0].title === "Ask Claude Code: why" && a("> fix it")[0].title === "Ask Claude Code: fix it")
   check("agent: the prefix gives the Agent chip; a > inside a sum doesn't", (Engine.mode(">_ x", config) || {}).label === "Agent" && Engine.mode("2 > 1", config) === null && !a("2 > 1").some(r => r.provider === "ai"))
   check("agent: prefixes come from the config, and letters can't be one", a("<< hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) })[0].title === "Ask Claude Code: hi" && !a("x hi", { ai: Object.assign({}, config.ai, { prefixes: ["<<", "x"] }) }).some(r => r.provider === "ai")) }
+
+// everywhere review fixes: true newest-first walks, DST-proof yesterday, strict filters, negations without words
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const EW = P + "extensions/everywhere/everywhere"
+  const home = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/everywhere-walk-")
+  const old = Date.now() / 1000 - 2 * 86400
+  for (let d = 0; d < 30; d++) { fs.mkdirSync(home + "/old" + d); for (let i = 0; i < 200; i++) { const f = home + "/old" + d + "/f" + i; fs.writeFileSync(f, ""); fs.utimesSync(f, old, old) } }
+  fs.mkdirSync(home + "/new")
+  for (let i = 0; i < 5; i++) fs.writeFileSync(home + "/new/fresh" + i, "")
+  const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
+  const tops = [1, 2, 3].map(() => spawnSync(EW, ["--limit", "5", "dm:week", "type:file"], { env, encoding: "utf8", timeout: 20000 }).stdout.split("\n").filter(Boolean))
+  check("everywhere: dm:week is newest first every time, among 6,000 older files", tops.every(t => t.length === 5 && t.every(p => /\/new\/fresh\d$/.test(p))), JSON.stringify(tops.map(t => t.map(p => p.replace(home, "~")))))
+  const bad = ["dm:2026-02-30", "dm:2026-13-01", "ext:pdf,b@d", "size:10M-1M", "size:<0"].filter(q => spawnSync(EW, ["x", q], { env, encoding: "utf8" }).status !== 2)
+  check("everywhere: impossible dates, odd extensions, inverted or negative sizes are errors", bad.length === 0, bad.join(" "))
+  fs.writeFileSync(home + "/new/readme.md", ""); fs.writeFileSync(home + "/new/notes.md", "")
+  spawnSync(EW, ["--index"], { env })
+  const neg = spawnSync(EW, ["ext:md", "!readme"], { env, encoding: "utf8" }).stdout.split("\n").filter(p => p.startsWith(home + "/"))
+  check("everywhere: !negations apply with no words too", neg.some(p => /notes\.md$/.test(p)) && !neg.some(p => /readme\.md$/.test(p)), JSON.stringify(neg))
+  // dm:yesterday the day after the November clock change, in a zone that has one.
+  const py = "import importlib.util,importlib.machinery,sys,time\nl=importlib.machinery.SourceFileLoader('ew',sys.argv[1]);s=importlib.util.spec_from_loader('ew',l);m=importlib.util.module_from_spec(s);l.exec_module(m)\nnow=time.mktime((2026,11,2,12,0,0,0,0,-1))\nlo,hi=m.parse_since('yesterday',now)\nprint(time.strftime('%Y-%m-%d %H:%M',time.localtime(lo)), time.strftime('%Y-%m-%d %H:%M',time.localtime(hi)))"
+  const dst = spawnSync("python3", ["-I", "-c", py, EW], { env: Object.assign({}, process.env, { TZ: "America/Chicago" }), encoding: "utf8" }).stdout.trim()
+  check("everywhere: dm:yesterday covers the whole day across a clock change", dst === "2026-11-01 00:00 2026-11-02 00:00", dst)
+  fs.rmSync(home, { recursive: true, force: true }) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)
