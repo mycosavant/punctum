@@ -159,6 +159,10 @@ impl Extension for Packages {
         "packages"
     }
 
+    fn forget(&self, _load: &str) {
+        LIST.forget();
+    }
+
     fn matches(&self, query: &str, ctx: &Context) -> Answer {
         let Some(m) = MODE.captures(query) else { return Answer::default() };
         let text = m.get(1).map_or("", |x| x.as_str());

@@ -192,6 +192,10 @@ impl Extension for Clipboard {
         "clipboard"
     }
 
+    fn forget(&self, _load: &str) {
+        HISTORY.forget();
+    }
+
     fn matches(&self, query: &str, ctx: &Context) -> Answer {
         let Some(m) = MODE.captures(query) else { return Answer::default() };
         let needle = m.get(1).map_or("", |x| x.as_str()).trim().to_lowercase();
@@ -286,5 +290,14 @@ mod tests {
         let long = "😀".repeat(100);
         let p = preview(&long);
         assert_eq!(p, format!("{}…", "😀".repeat(80)));
+    }
+
+    #[test]
+    fn closing_the_bar_drops_the_parsed_history_too() {
+        assert_eq!(ask("cb secret", Some(r#"[{"type": "text", "text": "secret"}]"#))[0].title, "secret");
+        assert!(HISTORY.0.lock().unwrap().is_some());
+        let mut state = crate::State::new();
+        crate::handle(r#"{"id": 1, "op": "load", "ext": "clipboard", "key": "history", "text": null}"#, &mut state);
+        assert!(HISTORY.0.lock().unwrap().is_none());
     }
 }

@@ -90,7 +90,9 @@ impl State {
 }
 
 /// A parse of a load, kept until the load's text changes, so a 1 MB package
-/// list isn't split again on every keystroke.
+/// list isn't split again on every keystroke. When the bar drops the load
+/// (it closed), the extension's `forget` must drop the parse too: it holds
+/// the same text, the clipboard history among them.
 pub struct Memo<T>(Mutex<Option<(u64, Arc<T>)>>);
 
 impl<T> Memo<T> {
@@ -108,6 +110,10 @@ impl<T> Memo<T> {
         let value = Arc::new(parse(&load.text));
         *kept = Some((load.generation, value.clone()));
         value
+    }
+
+    pub fn forget(&self) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 }
 
@@ -190,6 +196,9 @@ impl<'a> Context<'a> {
 pub trait Extension: Sync {
     fn id(&self) -> &'static str;
     fn matches(&self, query: &str, ctx: &Context) -> Answer;
+    /// The bar dropped one of this extension's loads: drop anything made
+    /// from it.
+    fn forget(&self, _load: &str) {}
 }
 
 /// Every extension this build serves.
@@ -283,15 +292,16 @@ pub fn handle(line: &str, state: &mut State) -> Value {
             serde_json::json!({ "id": req.id, "ok": true })
         }
         "load" => {
-            if !extensions().iter().any(|e| e.id() == req.ext) || !load_key(&req.key) {
+            let Some(ext) = extensions().iter().find(|e| e.id() == req.ext).filter(|_| load_key(&req.key)) else {
                 return serde_json::json!({ "id": req.id, "error": format!("no load \"{}\" for \"{}\"", req.key, req.ext) });
-            }
+            };
             match req.text {
                 Some(text) => {
                     state.generation += 1;
                     state.loads.insert((req.ext, req.key), Load { text, generation: state.generation });
                 }
                 None => {
+                    ext.forget(&req.key);
                     state.loads.remove(&(req.ext, req.key));
                 }
             }

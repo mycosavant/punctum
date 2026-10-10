@@ -201,6 +201,10 @@ impl Extension for Hotkeys {
         "hotkeys"
     }
 
+    fn forget(&self, _load: &str) {
+        BINDS.forget();
+    }
+
     fn matches(&self, query: &str, ctx: &Context) -> Answer {
         let binds = ctx.load("binds").map(|l| BINDS.get(l, parse)).unwrap_or_default();
         let mode = MODE.captures(query);
