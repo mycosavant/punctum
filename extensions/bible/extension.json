@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "bible",
+  "name": "Bible",
+  "version": "1.0.0",
+  "description": "john 3:16: scripture on Bible Gateway, your translations",
+  "icon": "󰂺",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 90,
+  "helpOrder": 120,
+  "defaults": {
+    "versions": [
+      "NASB",
+      "NASB1995",
+      "ESV",
+      "KJV"
+    ]
+  },
+  "permissions": {
+    "network": [
+      "www.biblegateway.com, on Enter, in your browser"
+    ]
+  }
+}

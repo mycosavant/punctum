@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "id": "math",
+  "name": "Calculator",
+  "version": "1.0.0",
+  "description": "12*8 + 15%: a calculator",
+  "icon": "󰃬",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 120,
+  "helpOrder": 140,
+  "hero": true,
+  "defaults": {
+    "precision": 10
+  },
+  "permissions": {}
+}

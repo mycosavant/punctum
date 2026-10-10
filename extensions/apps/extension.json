@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "id": "apps",
+  "name": "Apps",
+  "version": "1.0.0",
+  "description": "firefox: open an app or one of its actions; Alt+P pins",
+  "icon": "󰀻",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 190,
+  "helpOrder": 10,
+  "defaults": {
+    "pinned": []
+  },
+  "permissions": {
+    "runs": [
+      "gtk-launch, through uwsm-app"
+    ]
+  }
+}

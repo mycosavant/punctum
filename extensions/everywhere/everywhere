@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+"""everywhere: find files anywhere on the disk by name, as you type.
+
+    everywhere notes                 ranked paths, best first
+    everywhere report .pdf$          fzf syntax: 'exact ^start end$ !leave-out
+    everywhere -i                    pick one interactively (fzf), print it
+    everywhere -i --open             ... and open it
+    everywhere --index               refresh the index of your home folder
+    everywhere --json dwnlds         JSON for programs
+
+Names come from two plocate indexes: the system's (/var/lib/plocate, rebuilt
+nightly by plocate-updatedb.timer) for everything outside your home folder,
+and a private index of your home folder ($XDG_CACHE_HOME/everywhere/home.db,
+mode 600), which --index rebuilds in about half a second. A query runs
+plocate twice, with the words as typed and then with their letters in order,
+filters out the system index's stale copy of home and anything matching an
+exclusion, lets fzf apply the query syntax, and ranks what's left the way a
+desktop search should: a name that is the word first, then one that starts
+with it, contains it, or has its letters in order; a small lift for home and
+a small drop for hidden paths; then shallower and shorter.
+
+--commandbar speaks the Command Bar's script-extension protocol: a JSON
+request on stdin ({"text": ..., "settings": {"exclude": [...]}}) and
+{"items": [...]} on stdout.
+
+Every subprocess is an argument list, never a shell string; the query reaches
+plocate after "--" and fzf as one --filter= value.
+"""
+import argparse
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+
+SYSTEM_DB = "/var/lib/plocate/plocate.db"
+DEFAULT_EXCLUDE = ["/.cache/", "/.cargo/registry/", "/.cargo/git/", "/node_modules/", "/.local/share/Trash/", "/.git/"]
+PER_PASS = 3000      # paths kept from each index per pass, after filtering
+FZF_KEEP = 400       # paths kept after fzf, before ranking
+TIMEOUT = 3          # seconds, for each subprocess
+MIN_QUERY = 2
+MAX_QUERY = 160
+
+KIND = {}
+for kind, exts in {
+    "image": "png jpg jpeg webp gif svg avif bmp tiff heic",
+    "pdf": "pdf",
+    "archive": "zip tar gz xz zst 7z bz2 rar",
+    "audio": "mp3 flac ogg wav m4a opus",
+    "video": "mp4 mkv webm mov avi",
+    "text": "md txt json toml yaml yml conf csv ini log",
+}.items():
+    for e in exts.split():
+        KIND[e] = kind
+ICONS = {"folder": "󰉋", "image": "󰋩", "pdf": "󰈦", "archive": "󰀼", "audio": "󰈣", "video": "󰈫", "text": "󰈙", "file": "󰈔"}
+
+
+def cache_dir():
+    return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "everywhere")
+
+
+def home_db():
+    return os.path.join(cache_dir(), "home.db")
+
+
+# ---------------------------------------------------------------- the query
+
+def terms(text):
+    return [t for t in str(text or "").split() if t and t != "|"]
+
+
+def literals(ts):
+    """Plain words plocate can look for: fzf's operators stripped, negations left to fzf."""
+    out = []
+    for t in ts:
+        if t.startswith("!"):
+            continue
+        t = t.lstrip("'^").rstrip("$")
+        if t:
+            out.append(t)
+    return out
+
+
+def glob_safe(t):
+    """plocate reads an unescaped * ? or [ as a glob over the whole path."""
+    return "".join("\\" + c if c in "\\*?[]" else c for c in t)
+
+
+def fuzzies(ts):
+    """Letters in order inside one path segment, as basic regexes (letters and digits only)."""
+    out = []
+    for t in ts:
+        if t.startswith(("!", "'")):
+            continue
+        letters = "".join(c for c in t.lower() if c.isascii() and c.isalnum())
+        if len(letters) >= 3:
+            out.append("[^/]*".join(letters))
+    return out
+
+
+def fzf_query(ts):
+    """fzf anchors ^ to the whole path, and every path starts with /, so ^down
+    becomes an exact match at a segment start."""
+    return " ".join("'/" + t[1:] if t.startswith("^") and len(t) > 1 and t[1] != "/" else t for t in ts)
+
+
+def usable(text):
+    ts = terms(text)
+    lit = literals(ts)
+    return bool(lit) and len("".join(lit)) >= MIN_QUERY and len(text) <= MAX_QUERY and len(ts) <= 10 \
+        and not any(ord(c) < 32 for c in text)
+
+
+# ---------------------------------------------------------------- running it
+
+def plocate(db, patterns, regex, keep, deadline):
+    """Paths from one index matching every pattern, filtered by keep(), at most PER_PASS."""
+    argv = ["plocate", "-0", "-i", "-d", db] + (["--regexp"] if regex else []) + ["--"] + patterns
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return []
+    out, buf = [], b""
+    try:
+        while len(out) < PER_PASS and time.monotonic() < deadline:
+            chunk = proc.stdout.read1(65536)
+            if not chunk:
+                break
+            buf += chunk
+            *done, buf = buf.split(b"\0")
+            for raw in done:
+                p = raw.decode("utf-8", "surrogateescape")
+                if keep(p):
+                    out.append(p)
+                    if len(out) >= PER_PASS:
+                        break
+    finally:
+        proc.kill()
+        proc.wait()
+    return out
+
+
+def candidates(text, excludes, home):
+    ts = terms(text)
+    lit = literals(ts)
+    fz = fuzzies(ts)
+    if len(fz) != len(lit):
+        fz = []   # a fuzzy pass only helps when every word gets one
+    ex = [e.lower() for e in excludes if e]
+    own = home_db()
+    have_own = os.access(own, os.R_OK)
+    prefix = home.rstrip("/") + "/"
+
+    def keep_system(p):
+        if have_own and p.startswith(prefix):
+            return False   # the system index's copy of home is a day old
+        lp = p.lower()
+        return not any(e in lp for e in ex)
+
+    def keep_home(p):
+        lp = p.lower()
+        return not any(e in lp for e in ex)
+
+    deadline = time.monotonic() + TIMEOUT
+    found = []
+    for patterns, regex in ((list(map(glob_safe, lit)), False), (fz, True)):
+        if not patterns:
+            continue
+        found += plocate(SYSTEM_DB, patterns, regex, keep_system, deadline)
+        if have_own:
+            found += plocate(own, patterns, regex, keep_home, deadline)
+    return found
+
+
+def fzf_filter(paths, ts):
+    if not paths:
+        return []
+    try:
+        r = subprocess.run(["fzf", "--read0", "--print0", "--scheme=path", "--filter=" + fzf_query(ts)],
+                           input="\0".join(paths).encode("utf-8", "surrogateescape"),
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out, seen = [], set()
+    for raw in r.stdout.split(b"\0"):
+        p = raw.decode("utf-8", "surrogateescape")
+        if p.startswith("/") and p not in seen:
+            seen.add(p)
+            out.append(p)
+            if len(out) >= FZF_KEEP:
+                break
+    return out
+
+
+def subsequence(text, word):
+    i = 0
+    for c in text:
+        if i < len(word) and c == word[i]:
+            i += 1
+    return i == len(word)
+
+
+def rank(path, lits, home):
+    name = path.rsplit("/", 1)[-1].lower()
+    best = 0
+    for w in lits:
+        w = w.lower()
+        r = 4 if name == w else 3 if name.startswith(w) else 2 if w in name else 1 if subsequence(name, w) else 0
+        best = max(best, r)
+    in_home = bool(home) and path.startswith(home.rstrip("/") + "/")
+    hidden = "/." in (path[len(home):] if in_home else path)
+    # A hidden path loses more than home gains, so ~/.config/x/hosts sits under
+    # /etc/hosts while ~/Downloads still beats /usr/share/.../downloads.
+    return best + (0.5 if in_home else 0) - (0.6 if hidden else 0) - (path.count("/") + 1) * 0.01 - len(name) * 0.0001
+
+
+def ordered(paths, text, home):
+    lits = literals(terms(text))
+    return [p for _, _, p in sorted(((-rank(p, lits, home), i, p) for i, p in enumerate(paths)))]
+
+
+def search(text, excludes, home, limit):
+    ts = terms(text)
+    return ordered(fzf_filter(candidates(text, excludes, home), ts), text, home)[:limit]
+
+
+# ---------------------------------------------------------------- the home index
+
+def index(max_age):
+    db = home_db()
+    try:
+        if max_age is not None and time.time() - os.stat(db).st_mtime < max_age:
+            return 0
+    except FileNotFoundError:
+        pass
+    d = cache_dir()
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    os.chmod(d, 0o700)
+    tmp = db + ".tmp"
+    old = os.umask(0o077)
+    try:
+        r = subprocess.run(["updatedb", "-l", "0", "-U", os.path.expanduser("~"), "-o", tmp],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=120)
+    finally:
+        os.umask(old)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr.decode("utf-8", "replace"))
+        return 1
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, db)
+    return 0
+
+
+# ---------------------------------------------------------------- outputs
+
+def kind_of(path, is_dir):
+    if is_dir:
+        return "folder"
+    name = path.rsplit("/", 1)[-1]
+    dot = name.rfind(".")
+    return KIND.get(name[dot + 1:].lower(), "file") if dot > 0 else "file"
+
+
+def short(path, home):
+    h = home.rstrip("/")
+    return "~" + path[len(h):] if path == h or path.startswith(h + "/") else path
+
+
+def item(path, home):
+    is_dir = os.path.isdir(path)
+    slash = path.rfind("/")
+    name = path[slash + 1:] or "/"
+    folder = path[:slash] or "/"
+    k = kind_of(path, is_dir)
+    return {
+        "title": name,
+        "subtitle": short(folder, home) + (" · Folder" if is_dir else ""),
+        "icon": ICONS[k],
+        "image": path if k == "image" else "",
+        "run": {"kind": "open", "target": path, "label": "open folder" if is_dir else "open"},
+        "alt": {"kind": "argv", "target": ["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + (path if is_dir else folder)], "label": "terminal here"},
+    }
+
+
+def commandbar(home):
+    try:
+        req = json.loads(sys.stdin.read(1024 * 1024) or "{}")
+    except ValueError:
+        req = {}
+    text = str(req.get("text") or "").strip()
+    settings = req.get("settings") if isinstance(req.get("settings"), dict) else {}
+    excludes = settings.get("exclude") if isinstance(settings.get("exclude"), list) else DEFAULT_EXCLUDE
+    excludes = [str(e) for e in excludes if isinstance(e, str) and e and not any(c.isspace() for c in e)]
+    if not usable(text):
+        print(json.dumps({"items": [], "message": "Type a file or folder name · 'exact ^start end$ !leave-out"}))
+        return 0
+    paths = search(text, excludes, home, 40)
+    msg = "" if paths else "Nothing named like \"%s\" · files from today outside your home folder show up tomorrow" % text
+    print(json.dumps({"items": [item(p, home) for p in paths], "message": msg}))
+    return 0
+
+
+def interactive(args, home):
+    if not shutil.which("fzf"):
+        print("everywhere -i needs fzf", file=sys.stderr)
+        return 1
+    me = os.path.realpath(sys.argv[0])
+    reload = shlex.join([sys.executable, me, "--print0", "--limit", str(args.limit)]) + " -- {q} || true"
+    r = subprocess.run(["fzf", "--disabled", "--read0", "--prompt", "everywhere> ", "--query", " ".join(args.query),
+                        "--bind", "start:reload:" + reload, "--bind", "change:reload:" + reload,
+                        "--preview", "ls -ld -- {}", "--preview-window", "down,1"],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+    chosen = r.stdout.decode("utf-8", "surrogateescape").rstrip("\n")
+    if not chosen:
+        return 130 if r.returncode == 130 else 1
+    if args.open:
+        subprocess.Popen(["xdg-open", chosen], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    else:
+        print(chosen)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="everywhere", description="Find files anywhere on the disk by name.")
+    ap.add_argument("query", nargs="*", help="words; fzf syntax: 'exact ^start end$ !leave-out")
+    ap.add_argument("-i", "--interactive", action="store_true", help="pick one with fzf")
+    ap.add_argument("--open", action="store_true", help="with -i: open the chosen path")
+    ap.add_argument("--limit", type=int, default=40)
+    ap.add_argument("--print0", action="store_true", help="NUL-separated output")
+    ap.add_argument("--json", action="store_true", help="JSON output")
+    ap.add_argument("--exclude", action="append", help="leave out paths containing this (repeatable)")
+    ap.add_argument("--no-default-excludes", action="store_true")
+    ap.add_argument("--index", action="store_true", help="rebuild the index of your home folder")
+    ap.add_argument("--max-age", type=float, help="with --index: only if older than this many seconds")
+    ap.add_argument("--commandbar", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--rank", action="store_true", help=argparse.SUPPRESS)
+    args = ap.parse_args()
+    home = os.path.expanduser("~")
+
+    if args.index:
+        return index(args.max_age)
+    if args.commandbar:
+        return commandbar(home)
+    if args.interactive:
+        return interactive(args, home)
+    text = " ".join(args.query)
+    if args.rank:   # for the tests: NUL-separated paths on stdin, ranked for the query
+        paths = [p for p in sys.stdin.buffer.read().decode("utf-8", "surrogateescape").split("\0") if p]
+        sys.stdout.write("\n".join(ordered(paths, text, home)) + "\n")
+        return 0
+    if not usable(text):
+        print("everywhere: type at least %d letters" % MIN_QUERY, file=sys.stderr)
+        return 2
+    excludes = ([] if args.no_default_excludes else DEFAULT_EXCLUDE) + (args.exclude or [])
+    paths = search(text, excludes, home, max(1, args.limit))
+    if args.json:
+        print(json.dumps([item(p, home) for p in paths]))
+    elif args.print0:
+        sys.stdout.write("".join(p + "\0" for p in paths))
+    else:
+        sys.stdout.write("".join(p + "\n" for p in paths))
+    return 0 if paths else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        sys.exit(0)
+    except KeyboardInterrupt:
+        sys.exit(130)

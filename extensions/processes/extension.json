@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "processes",
+  "name": "Processes",
+  "version": "1.0.0",
+  "description": "kill name: quit your own processes",
+  "icon": "󰅙",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 160,
+  "helpOrder": 190,
+  "mode": {
+    "pattern": "^\\s*kill(\\s|$)",
+    "label": "Processes"
+  },
+  "permissions": {
+    "runs": [
+      "ps",
+      "kill"
+    ]
+  }
+}

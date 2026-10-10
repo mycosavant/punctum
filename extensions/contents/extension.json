@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "contents",
+  "name": "In files",
+  "version": "1.0.0",
+  "description": "rg words: lines inside your files, with ripgrep",
+  "icon": "󱎸",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 70,
+  "helpOrder": 70,
+  "mode": {
+    "pattern": "^\\s*(rg|grep)\\s",
+    "label": "In files"
+  },
+  "defaults": {
+    "hidden": false
+  },
+  "requires": [
+    "rg"
+  ],
+  "permissions": {
+    "runs": [
+      "rg"
+    ],
+    "reads": [
+      "files under ~"
+    ]
+  }
+}

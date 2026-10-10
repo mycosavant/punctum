@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "time",
+  "name": "Time",
+  "version": "1.0.0",
+  "description": "time in tokyo, days until dec 25: time zones and dates",
+  "icon": "󰥔",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 140,
+  "helpOrder": 170,
+  "hero": true,
+  "defaults": {
+    "zones": [
+      "UTC",
+      "America/New_York",
+      "Europe/London"
+    ],
+    "clock24": true
+  },
+  "permissions": {
+    "runs": [
+      "date",
+      "timedatectl"
+    ]
+  }
+}

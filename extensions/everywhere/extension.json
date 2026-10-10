@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "id": "everywhere",
+  "name": "Everywhere",
+  "version": "1.0.0",
+  "description": "/name: every file on the disk by name, as you type (plocate, ranked through fzf)",
+  "icon": "󰍉",
+  "type": "script",
+  "command": [
+    "./everywhere",
+    "--commandbar"
+  ],
+  "enabled": true,
+  "order": 60,
+  "helpOrder": 60,
+  "mode": {
+    "pattern": "^\\s*/",
+    "label": "Everywhere"
+  },
+  "minQuery": 2,
+  "placeholder": "Type a file or folder name · 'exact ^start end$ !leave-out",
+  "refresh": {
+    "command": [
+      "./everywhere",
+      "--index",
+      "--max-age",
+      "60"
+    ],
+    "every": 60
+  },
+  "defaults": {
+    "exclude": [
+      "/.cache/",
+      "/.cargo/registry/",
+      "/.cargo/git/",
+      "/node_modules/",
+      "/.local/share/Trash/",
+      "/.git/"
+    ]
+  },
+  "requires": [
+    "plocate",
+    "fzf",
+    "updatedb"
+  ],
+  "permissions": {
+    "runs": [
+      "plocate",
+      "fzf",
+      "updatedb (your home folder only)"
+    ],
+    "reads": [
+      "file names on the disk you're allowed to list"
+    ],
+    "writes": [
+      "~/.cache/everywhere/home.db (mode 600)"
+    ],
+    "network": []
+  },
+  "commands": [
+    {
+      "title": "Find files everywhere",
+      "keywords": "files everything locate find search disk system",
+      "text": "/ and a name: every file on the disk, instantly",
+      "complete": "/"
+    }
+  ],
+  "help": [
+    {
+      "id": "everywhere",
+      "title": "Find everywhere",
+      "about": "/ and a name searches every file on the disk. fzf syntax: 'exact, ^start, end$, !leave-out. Home is current; elsewhere is as of last night",
+      "examples": [
+        {
+          "q": "/",
+          "note": "Type a name after it"
+        },
+        {
+          "q": "/report .pdf$",
+          "note": "PDFs with report in the name"
+        },
+        {
+          "q": "/hosts !backup",
+          "note": "Leave out backups"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "emoji",
+  "name": "Emoji",
+  "version": "1.0.0",
+  "description": ":fire: emoji search",
+  "icon": "󰞅",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 150,
+  "helpOrder": 180,
+  "mode": {
+    "pattern": "^\\s*:",
+    "label": "Emoji"
+  },
+  "defaults": {
+    "onEnter": "paste"
+  },
+  "permissions": {
+    "reads": [
+      "Omarchy's emojis.json"
+    ],
+    "runs": [
+      "omarchy-menu-emoji-insert",
+      "wl-copy"
+    ]
+  }
+}

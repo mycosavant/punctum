@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""List the Command Bar's extensions for CommandBar.qml.
+
+    commandbar-extensions <bundled dir> <user dir>
+
+Prints a JSON list, one entry per extension folder:
+    { "dir", "manifest" (the extension.json text), "missing" (required
+      commands not on PATH), "user" (from the user dir), "error" (if refused) }
+
+lib/Extensions.js validates the manifests; this only finds and reads them.
+An extension runs as you inside the shell, so from the user dir it refuses
+anything a different user could have put there: the folder, each extension
+folder (or a symlink's target) and its extension.json must be yours and not
+writable by group or others. Manifests over 64 KiB are refused.
+"""
+import json
+import os
+import re
+import shutil
+import stat
+import sys
+
+MAX_MANIFEST = 64 * 1024
+COMMAND = re.compile(r"^[A-Za-z0-9._+-]+$")
+
+
+def private(path, kind):
+    """None if path (followed) is ours and not group/world-writable, else why not."""
+    try:
+        st = os.stat(path)
+    except OSError as e:
+        return "%s: %s" % (kind, e.strerror)
+    if st.st_uid != os.getuid():
+        return "%s isn't yours" % kind
+    if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        return "%s is writable by others" % kind
+    return None
+
+
+def read_manifest(path, strict):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise ValueError("extension.json isn't a regular file")
+        if strict and (st.st_uid != os.getuid() or st.st_mode & (stat.S_IWGRP | stat.S_IWOTH)):
+            raise ValueError("extension.json isn't yours alone")
+        if st.st_size > MAX_MANIFEST:
+            raise ValueError("extension.json is over 64 KiB")
+        return os.read(fd, MAX_MANIFEST + 1).decode("utf-8", "replace")
+    finally:
+        os.close(fd)
+
+
+def missing_commands(text):
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return []
+    req = data.get("requires") if isinstance(data, dict) else None
+    if not isinstance(req, list):
+        return []
+    return [c for c in req if isinstance(c, str) and COMMAND.match(c) and shutil.which(c) is None]
+
+
+def scan(root, user):
+    out = []
+    if not os.path.isdir(root):
+        return out
+    if user:
+        why = private(root, root)
+        if why:
+            return [{"dir": root, "user": True, "error": why}]
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if not os.path.isdir(d) or name.startswith("."):
+            continue
+        entry = {"dir": os.path.realpath(d), "user": user, "missing": []}
+        try:
+            if user:
+                why = private(d, "the folder " + name)
+                if why:
+                    raise ValueError(why)
+            text = read_manifest(os.path.join(d, "extension.json"), user)
+            entry["manifest"] = text
+            entry["missing"] = missing_commands(text)
+        except FileNotFoundError:
+            continue
+        except (OSError, ValueError) as e:
+            entry["error"] = str(e)
+        out.append(entry)
+    return out
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("usage: commandbar-extensions <bundled dir> <user dir>", file=sys.stderr)
+        return 2
+    print(json.dumps(scan(argv[0], False) + scan(argv[1], True)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

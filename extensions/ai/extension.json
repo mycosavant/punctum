@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "id": "ai",
+  "name": "Agent",
+  "version": "1.0.0",
+  "description": "ai question: ask your Omarchy default agent or a chat site",
+  "icon": "󰚩",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 210,
+  "helpOrder": 200,
+  "defaults": {
+    "keyword": "ai",
+    "fallback": false,
+    "chats": [
+      {
+        "title": "ChatGPT",
+        "open": "https://chatgpt.com/?q={q}"
+      },
+      {
+        "title": "Claude",
+        "open": "https://claude.ai/new?q={q}"
+      }
+    ]
+  },
+  "permissions": {
+    "runs": [
+      "your Omarchy default agent, in a terminal"
+    ],
+    "network": [
+      "the chat sites in ai.chats, on Enter, in your browser"
+    ]
+  }
+}

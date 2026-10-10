@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "packages",
+  "name": "Packages",
+  "version": "1.0.0",
+  "description": "pkg name: packages in your pacman repositories",
+  "icon": "󰏖",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 80,
+  "helpOrder": 80,
+  "mode": {
+    "pattern": "^\\s*(pkg|pacman)\\s",
+    "label": "Packages"
+  },
+  "requires": [
+    "expac"
+  ],
+  "permissions": {
+    "runs": [
+      "expac",
+      "sudo pacman -S in a terminal, on Enter (sudo and pacman both ask)"
+    ]
+  }
+}

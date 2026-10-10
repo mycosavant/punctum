@@ -1,50 +1,14 @@
 {
   "hotkey": "SUPER + PERIOD",
-  "providers": ["commands", "bangs", "notes", "clipboard", "files", "locate", "contents", "packages", "bible", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
-  "apps": { "pinned": [] },
-  "files": { "hidden": false },
-  "locate": { "exclude": ["/.cache/", "/.cargo/registry/", "/.cargo/git/", "/node_modules/", "/.local/share/Trash/", "/.git/"] },
-  "contents": { "hidden": false },
-  "window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 },
-  "glass": { "enabled": true, "opacity": 0.78 },
-  "bible": { "versions": ["NASB", "NASB1995", "ESV", "KJV"] },
-  "bangs": {
-    "fallback": "https://duckduckgo.com/?q={q}",
-    "engines": {
-      "nasb": { "title": "Bible (NASB)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB" },
-      "bible": { "title": "Bible (NASB)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB" },
-      "nasb95": { "title": "Bible (NASB 1995)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB1995" },
-      "esv": { "title": "Bible (ESV)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=ESV" },
-      "kjv": { "title": "Bible (KJV)", "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=KJV" },
-      "ddg": { "title": "DuckDuckGo", "open": "https://duckduckgo.com/?q={q}", "home": "https://duckduckgo.com/" },
-      "g": { "title": "Google", "open": "https://www.google.com/search?q={q}" },
-      "w": { "title": "Wikipedia", "open": "https://en.wikipedia.org/w/index.php?search={q}" },
-      "yt": { "title": "YouTube", "open": "https://www.youtube.com/results?search_query={q}" },
-      "gh": { "title": "GitHub", "open": "https://github.com/search?q={q}" },
-      "aw": { "title": "Arch Wiki", "open": "https://wiki.archlinux.org/index.php?search={q}" },
-      "ap": { "title": "Arch packages", "open": "https://archlinux.org/packages/?q={q}" },
-      "maps": { "title": "OpenStreetMap", "open": "https://www.openstreetmap.org/search?query={q}" }
-    }
+  "window": {
+    "cx": 0.5,
+    "top": 0.22,
+    "width": 640,
+    "rows": 7
   },
-  "notes": { "inbox": "", "format": "- {date} {time} {text}" },
-  "math": { "precision": 10 },
-  "currency": { "home": "USD", "favorites": ["EUR", "GBP"] },
-  "emoji": { "onEnter": "paste" },
-  "time": { "zones": ["UTC", "America/New_York", "Europe/London"], "clock24": true },
-  "ai": {
-    "keyword": "ai",
-    "fallback": false,
-    "chats": [
-      { "title": "ChatGPT", "open": "https://chatgpt.com/?q={q}" },
-      { "title": "Claude", "open": "https://claude.ai/new?q={q}" }
-    ]
+  "glass": {
+    "enabled": true,
+    "opacity": 0.78
   },
-  "commands": [
-    { "keyword": "g", "title": "Search Google", "open": "https://www.google.com/search?q={q}" },
-    { "keyword": "yt", "title": "Search YouTube", "open": "https://www.youtube.com/results?search_query={q}" },
-    { "keyword": "gh", "title": "Search GitHub", "open": "https://github.com/search?q={q}" },
-    { "keyword": "wiki", "title": "Wikipedia", "open": "https://en.wikipedia.org/w/index.php?search={q}" },
-    { "keyword": "lock", "title": "Lock screen", "run": "omarchy-system-lock" },
-    { "keyword": "syncthing", "title": "Syncthing", "keywords": "sync web ui", "icon": "󰓦", "open": "http://127.0.0.1:8384/" }
-  ]
+  "extensions": {}
 }

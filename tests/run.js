@@ -2,7 +2,11 @@
 const load = require("./loader")
 const P = require("path").join(__dirname, "..") + "/"
 const Engine = load(P + "lib/Engine.js")
-const defaults = Engine.parseJsonc(require("fs").readFileSync(P + "config.default.json", "utf8"))
+const Ext = load(P + "lib/Extensions.js")
+const Extensions = require("./extensions")
+const loaded = Extensions.install(Engine, Ext, Extensions.discover([{ dir: P + "extensions" }]))
+// The defaults every provider sees: the bar's own plus each manifest's.
+const defaults = Ext.effectiveConfig(Engine.parseJsonc(require("fs").readFileSync(P + "config.default.json", "utf8")), loaded.manifests, {})
 // Most cases run as a Sri Lanka user; the neutral defaults are checked separately below.
 const config = Engine.deepMerge(defaults, { currency: { home: "LKR", favorites: ["USD", "EUR", "INR"] }, time: { home: "Asia/Colombo" } })
 const rates = { rates: { USD: 1, LKR: 300.5, EUR: 0.9, INR: 83.2, GBP: 0.78, JPY: 150 }, updated: 1790000000, stale: false }
@@ -186,7 +190,7 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Keywords"
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Extensions|Keywords"
     && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[13].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
@@ -389,6 +393,10 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
 
 // ---------------------------------------------------------------- hypha additions
 function check(name, ok, detail) { console.log((ok ? "ok  " : "FAIL") + "  " + name + (detail && !ok ? " → " + detail : "")); if (!ok) fails++ }
+// The bar's shared background work, faked: text already loaded under a
+// provider's key, and a search that has landed.
+const loadedText = (id, key, text, onRequest) => ({ cached: k => k === id + "\n" + key ? text : null, requestLoad: (k, a, o) => onRequest && onRequest(k, a, o) })
+const landed = (id, key, text, more) => Object.assign({ search: { key: id + "\n" + key, text, chunks: [text], timedOut: false, done: true }, requestSearch: () => {} }, more || {})
 const run = (query, providers, extra) => Engine.run(query, Object.assign({}, config, { providers }), Object.assign({ now, apps, windows: [], launches: {} }, extra || {}))
 
 { const history = [
@@ -398,18 +406,22 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
     { type: "text", text: "$(touch /tmp/x) 'quoted'" }
   ]
   let asked = 0
-  const rows = run("cb ", ["clipboard"], { clipboard: history, requestClipboard: () => asked++ })
+  const hist = (h, onRequest) => loadedText("clipboard", "history", JSON.stringify(h), onRequest)
+  const rows = run("cb ", ["clipboard"], Object.assign({ home: "/h" }, hist(history, (k, a) => { asked++; check("clipboard: reads only the history file, capped", a[0] === "head" && a[a.length - 1] === "/h/.local/state/omarchy/clipboard-history.json") })))
   check("clipboard: pinned first, then newest", rows.map(r => r.title).join("|") === "secret pinned line two|first entry|Image from 10:00|$(touch /tmp/x) 'quoted'", rows.map(r => r.title).join("|"))
-  check("clipboard: asks for the history only in cb mode", asked === 1 && run("first", ["clipboard"], { clipboard: history, requestClipboard: () => asked++ }).length === 0 && asked === 1)
+  check("clipboard: asks for the history only in cb mode", asked === 1 && run("first", ["clipboard"], hist(history, () => asked++)).length === 0 && asked === 1)
   check("clipboard: Enter pastes the exact text, Shift+Enter copies it", rows[0].run.kind === "paste" && rows[0].run.target === "secret pinned\nline two" && rows[0].alt.kind === "copy" && rows[0].alt.target === rows[0].run.target)
   check("clipboard: an image pastes through Omarchy's file script as argv", rows[2].run.kind === "argv" && /omarchy-clipboard-paste-file$/.test(rows[2].run.target[0]) && rows[2].run.target.slice(1).join(" ") === "image/png /s/a.png" && rows[2].image === "/s/a.png")
-  check("clipboard: search filters", run("cb quoted", ["clipboard"], { clipboard: history }).length === 1)
-  check("clipboard: a relative image path is skipped", run("cb ", ["clipboard"], { clipboard: [{ type: "image", path: "a.png" }] })[0].run === null)
+  check("clipboard: search filters", run("cb quoted", ["clipboard"], hist(history)).length === 1)
+  check("clipboard: a relative image path is skipped", run("cb ", ["clipboard"], hist([{ type: "image", path: "a.png" }]))[0].run === null)
+  const CB = load(P + "extensions/clipboard/provider.js")
+  CB.provider.forget()
+  check("clipboard: forget drops the parsed history", CB.memo.text === null && CB.memo.list.length === 0)
   check("clipboard: mode chip", (Engine.mode("cb x", config) || {}).label === "Clipboard") }
 
-{ const F = load(P + "providers/files.js")
+{ const F = load(P + "extensions/files/provider.js")
   let req = null
-  const first = run("~-rf notes", ["files"], { home: "/h", requestFiles: (k, a) => { req = { k, a } } })
+  const first = run("~-rf notes", ["files"], { home: "/h", requestSearch: (k, a) => { req = { k, a } } })
   const lit = req.a[0], fuzzy = req.a[1]
   check("files: a literal walk, then a fuzzy one, words never read as options",
     req.a.length === 2 && lit[0] === "fd" && fuzzy[0] === "fd"
@@ -418,13 +430,16 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const out = "/h/Documents/notes.md\0/h/notes/\0/h/x/n-o-t-e-s.txt\0/h/other.md\0/h/Documents/no"
   const entries = F.parse(out, "/h")
   check("files: NUL output parsed, unterminated tail dropped", entries.length === 4 && entries[1].dir && entries[1].rel === "notes", JSON.stringify(entries))
-  const rows = run("~notes", ["files"], { home: "/h", files: { key: F.key("notes", {}), entries }, requestFiles: () => {} })
+  const rows = run("~notes", ["files"], Object.assign({ home: "/h" }, landed("files", F.key("notes", {}), out)))
   check("files: rows rank a name that starts with the word first", rows[0].title === "notes" && rows[0].subtitle === "~ · Folder" && rows.length === 3, rows.map(r => r.title).join("|"))
   check("files: Enter opens with xdg-open, Shift+Enter a terminal in the folder",
     rows[1].run.target.join(" ") === "xdg-open /h/Documents/notes.md" && rows[1].alt.target.join(" ") === "uwsm-app -- xdg-terminal-exec --dir=/h/Documents", JSON.stringify(rows[1]))
-  const tie = run("~notes", ["files"], { home: "/h", files: { key: F.key("notes", {}), entries: F.parse("/h/a/notes_tests.rs\0/h/a/notes.rs\0", "/h") }, requestFiles: () => {} })
+  const tie = run("~notes", ["files"], Object.assign({ home: "/h" }, landed("files", F.key("notes", {}), "/h/a/notes_tests.rs\0/h/a/notes.rs\0")))
+  // Two walks: the first stopped mid-path. Its tail must not join the second's first path.
+  const two = run("~notes", ["files"], { home: "/h", search: { key: "files\n" + F.key("notes", {}), text: "", chunks: ["/h/a/notes.md\0/h/a/no", "tes.rs\0/h/b/notes.txt\0"], done: true }, requestSearch: () => {} })
+  check("files: each walk parsed on its own", two.map(r => r.title).sort().join("|") === "notes.md|notes.txt", two.map(r => r.title).join("|"))
   check("files: the shorter of two equally good names first", tie.map(r => r.title).join("|") === "notes.rs|notes_tests.rs", tie.map(r => r.title).join("|"))
-  check("files: one letter asks nothing", run("~n", ["files"], { home: "/h", requestFiles: () => { throw "asked" } })[0].title === "Type a file or folder name") }
+  check("files: one letter asks nothing", run("~n", ["files"], { home: "/h", requestSearch: () => { throw "asked" } })[0].title === "Type a file or folder name") }
 
 { const text = [
     "SUPER + F                           → Full screen\tlua\thl.dsp.window.fullscreen({ mode = \"fullscreen\" })",
@@ -433,13 +448,13 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
     "SUPER + W                           → Close window\t\t",
     "SUPER + PRINT                       → Screenshot\texec\tomarchy-capture-screenshot"
   ].join("\n")
-  const rows = run("full screen", ["hotkeys"], { hotkeys: text, omarchyPath: "/o" })
+  const rows = run("full screen", ["hotkeys"], Object.assign({ omarchyPath: "/o" }, loadedText("hotkeys", "binds", text)))
   check("hotkeys: found by what they do, keys shown", rows.length === 1 && rows[0].title === "Full screen" && rows[0].subtitle === "Super + F", JSON.stringify(rows[0]))
-  check("hotkeys: found by their keys", run("super f", ["hotkeys"], { hotkeys: text })[0].title === "Full screen")
-  const all = run("keys ", ["hotkeys"], { hotkeys: text })
+  check("hotkeys: found by their keys", run("super f", ["hotkeys"], loadedText("hotkeys", "binds", text))[0].title === "Full screen")
+  const all = run("keys ", ["hotkeys"], loadedText("hotkeys", "binds", text))
   check("hotkeys: keys lists every bind once, two combos on one row",
     all.length === 4 && all[1].subtitle === "Super + Shift + ↵  ·  Super + Shift + B" && all[2].run === null && /keyboard/.test(all[2].subtitle), all.map(r => r.subtitle).join("|"))
-  check("hotkeys: a keyboard-only bind isn't mixed into ordinary results", run("close window", ["hotkeys"], { hotkeys: text }).length === 0)
+  check("hotkeys: a keyboard-only bind isn't mixed into ordinary results", run("close window", ["hotkeys"], loadedText("hotkeys", "binds", text)).length === 0)
   // Run the dispatch for real against a stub script: the argument reaches
   // dispatch_binding as one literal, and nothing in it executes.
   const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
@@ -447,7 +462,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   fs.mkdirSync(dir + "/bin")
   fs.writeFileSync(dir + "/bin/omarchy-menu-keybindings", "dispatch_binding() { printf '%s|%s' \"$1\" \"$2\" > \"" + dir + "/got\"; }\n")
   const evil = "x\"; touch " + dir + "/pwned; echo \"$(touch " + dir + "/pwned2)"
-  const r = run("keys ", ["hotkeys"], { hotkeys: "SUPER + Q → Evil\texec\t" + evil, omarchyPath: dir })[0]
+  const r = run("keys ", ["hotkeys"], Object.assign({ omarchyPath: dir }, loadedText("hotkeys", "binds", "SUPER + Q → Evil\texec\t" + evil)))[0]
   execFileSync(r.run.target[0], r.run.target.slice(1))
   const got = fs.readFileSync(dir + "/got", "utf8"), ran = fs.readdirSync(dir).filter(f => /pwned/.test(f))
   fs.rmSync(dir, { recursive: true, force: true })
@@ -569,12 +584,12 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("bangs: mode chip", (Engine.mode("!nasb x", config) || {}).label === "Bang") }
 
 // packages: one read per open, official repos, install through pacman's own prompt
-{ const Pk = load(P + "providers/packages.js")
+{ const Pk = load(P + "extensions/packages/provider.js")
   const text = "Q\tkfind\t26.07.0-1\nQ\tbash\t5.3-1\nS\textra\tkfind\t26.08.0-1\tx86_64\tFind Files/Folders\nS\tcore\tbash\t5.3-1\tx86_64\tThe GNU Bourne Again shell\n" +
                "S\textra\tkfind-extras\t1-1\tany\tMore\nS\textra\t$(touch x)\t1\tany\tevil name\nS\textra\tplocate\t1.1.25-1\tx86_64\tAlternative to locate, faster\n"
   const data = Pk.parse(text)
   let asked = 0
-  const pk = (query, d) => run(query, ["packages"], { packages: d === undefined ? data : d, requestPackages: () => asked++ })
+  const pk = (query, t) => run(query, ["packages"], loadedText("packages", "list", t === undefined ? text : t, () => asked++))
   check("packages: a bad name never makes the list", data.list.length === 4 && !data.list.some(x => /\$/.test(x.name)))
   const r = pk("pkg kfind")
   check("packages: exact name first", r[0].title === "kfind" && r[1].title === "kfind-extras", r.map(x => x.title).join(","))
@@ -583,58 +598,25 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const inst = pk("pkg kfind-extras")[0]
   check("packages: Enter on a missing package runs pacman -S in a terminal (pacman asks)", inst.run.label === "install" && /sudo pacman -S -- "\$1"/.test(inst.run.target.join(" ")) && !/--noconfirm/.test(inst.run.target.join(" ")))
   check("packages: install names the repo, so a name in two repos installs the chosen one", inst.run.target.slice(-1)[0] === "extra/kfind-extras")
-  const own = Pk.parse("S\tomarchy\tghostty\t1-1\tx86_64\tterminal\nS\textra\tghostty\t1-1\tx86_64\tterminal\n")
-  const two = run("pkg ghostty", ["packages"], { packages: own })
+  const two = pk("pkg ghostty", "S\tomarchy\tghostty\t1-1\tx86_64\tterminal\nS\textra\tghostty\t1-1\tx86_64\tterminal\n")
   check("packages: a repo that isn't Arch's shows pacman -Si, not a dead archlinux.org link", two.length === 2 && two.some(r => r.alt.kind === "argv" && r.alt.target.slice(-1)[0] === "omarchy/ghostty") && two.some(r => r.alt.kind === "open" && /packages\/extra\//.test(r.alt.target)))
-  check("packages: an empty list says expac may be missing", /expac/.test(run("pkg x", ["packages"], { packages: { list: [], installed: {} } })[0].subtitle))
+  check("packages: an empty list says expac may be missing", /expac/.test(pk("pkg x", "")[0].subtitle))
   check("packages: Shift+Enter opens archlinux.org with its arch", inst.alt.target === "https://archlinux.org/packages/extra/any/kfind-extras/", inst.alt.target)
   check("packages: description words find it", pk("pkg locate faster")[0].title === "plocate")
   check("packages: asks for the list only in pkg mode", asked > 0 && (asked = 0, pk("kfind").length === 0) && asked === 0)
   check("packages: waits for the list", pk("pkg kfind", null)[0].title === "Reading the package list…")
   check("packages: mode chip", (Engine.mode("pkg x", config) || {}).label === "Packages") }
 
-// everywhere: plocate words as arguments, fzf for the query, desktop order
-{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const Lo = load(P + "providers/locate.js")
-  const p = Lo.plan("report .pdf$ !old", null)
-  check("locate: the query is arguments, never in the script", p.argv[2] === Lo.SCRIPT && p.argv[4].indexOf("report .pdf$ !old") === 0)
-  check("locate: plocate gets plain words, fzf's operators stripped, negations left out", p.argv[5] === "2" && p.argv.slice(7).join(" ") === "report .pdf r[^/]*e[^/]*p[^/]*o[^/]*r[^/]*t p[^/]*d[^/]*f", p.argv.slice(5).join(" "))
-  check("locate: the exclusions go to the filter, one per line", p.argv[6].split("\n").indexOf("/.cache/") >= 0 && p.argv[6].split("\n").indexOf("/node_modules/") >= 0 && !/!\/\.cache/.test(p.argv[4]))
-  check("locate: an exact term gets no fuzzy pass", Lo.plan("'notes", null).argv.length === 8)
-  check("locate: * ? [ ] are escaped for plocate, not for the ranking", Lo.plan("file[1] a*b", null).argv.slice(7, 9).join(" ") === "file\\[1\\] a\\*b")
-  check("locate: ^name becomes an exact match at a segment start", Lo.plan("^down", null).argv[4] === "'/down" && Lo.plan("^/etc host", null).argv[4] === "^/etc host")
-  check("locate: one letter is not enough", Lo.plan("a", null) === null && Lo.plan("!foo", null) === null)
-  const home = "/home/u"
-  const order = Lo.ordered(["/usr/share/icons/x/stat_sys_download_done.xml", "/home/u/Downloads", "/home/u/.rustup/downloads", "/etc/hosts"], "dwnlds", home)
-  check("locate: ~/Downloads first for dwnlds, hidden after", order[0] === "/home/u/Downloads" && order.indexOf("/home/u/.rustup/downloads") > 0, order.join(","))
-  const hosts = Lo.ordered(["/home/u/.config/gh/hosts.yml", "/etc/hosts"], "hosts", home)
-  check("locate: an exact name beats the home lift", hosts[0] === "/etc/hosts", hosts.join(","))
-  check("locate: parse drops duplicates and relative junk", Lo.parse("/a\u0000/a\u0000rel\u0000/b\u0000/cut").join(",") === "/a,/b")
-  const ctxSearch = (key, text) => run("/dwnlds", ["locate"], { home, search: { key, text }, requestSearch: () => {}, requestHomeIndex: () => {} })
-  const k = Lo.plan("dwnlds", config.locate).key
-  const rows = ctxSearch(k, "/home/u/Downloads\u0000/etc/x\u0000")
-  check("locate: rows open the path, Shift+Enter opens a terminal in its folder", rows[0].title === "Downloads" && rows[0].subtitle === "~" && rows[0].run.target.join(" ") === "xdg-open /home/u/Downloads" && rows[0].alt.target.slice(-1)[0] === "--dir=/home/u")
-  check("locate: mode chip", (Engine.mode("/x", config) || {}).label === "Everywhere")
-  // Run for real: a query that would create a marker if it were ever parsed as code.
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-locate-")
-  const evil = Lo.plan("$(touch " + dir + "/pwned) `touch " + dir + "/pwned2`", null)
-  spawnSync(evil.argv[0], evil.argv.slice(1), { encoding: "utf8", timeout: 10000 })
-  check("locate: a $(…) query runs nothing (calibrated: the marker path is writable)", !fs.existsSync(dir + "/pwned") && !fs.existsSync(dir + "/pwned2") && (fs.writeFileSync(dir + "/probe", ""), fs.existsSync(dir + "/probe")))
-  const real = Lo.plan("hosts", null)
-  const out = spawnSync(real.argv[0], real.argv.slice(1), { encoding: "utf8", timeout: 10000 }).stdout
-  check("locate: a real search finds /etc/hosts", Lo.parse(out).indexOf("/etc/hosts") >= 0)
-  fs.rmSync(dir, { recursive: true }) }
-
 // inside files: ripgrep with the words as one argument
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const C = load(P + "providers/contents.js")
+  const C = load(P + "extensions/contents/provider.js")
   const p = C.plan("invoice 2024", null)
   check("contents: words are $1, fixed strings, hidden off by default", p.argv[2] === C.SCRIPT && p.argv[4] === "invoice 2024" && p.argv.length === 5 && /--fixed-strings/.test(C.SCRIPT))
   check("contents: hidden on adds the flag", C.plan("invoice", { hidden: true }).argv[5] === "1")
   check("contents: two letters is not enough", C.plan("ab", null) === null)
   const hits = C.parse("/home/u/a.md\u000012:  the   invoice\n/home/u/b.txt\u00003:x\nnot a hit\n")
   check("contents: parse keeps path, line and text", hits.length === 2 && hits[0].line === 12 && hits[0].text === "the invoice")
-  const rows = run("rg invoice", ["contents"], { home: "/home/u", search: { key: C.plan("invoice", config.contents).key, text: "/home/u/a.md\u000012:the invoice\n" }, requestSearch: () => {} })
+  const rows = run("rg invoice", ["contents"], Object.assign({ home: "/home/u" }, landed("contents", C.plan("invoice", config.contents).key, "/home/u/a.md\u000012:the invoice\n")))
   check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.kind === "edit" && rows[0].run.target === "/home/u/a.md" && rows[0].run.line === 12 && rows[0].alt.target.join(" ") === "xdg-open /home/u/a.md" && rows[0].subtitle === "~/a.md:12")
   check("contents: mode chip", (Engine.mode("rg x", config) || {}).label === "In files")
   // For real, in a scratch home: finds the line, and a $(…) query runs nothing.
@@ -659,7 +641,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // a trailing !word inside a mode belongs to the mode
 { const top = (query) => { const r = Engine.run(query, config, { now, apps, windows: [], requestSearch: () => {}, requestHomeIndex: () => {}, requestPackages: () => {} }); return r[0] ? r[0].provider : "(none)" }
-  check("bangs: /hosts !backup stays a file search", top("/hosts !backup") === "locate" && top("/x !w") === "locate", top("/hosts !backup"))
+  check("bangs: /hosts !backup stays a file search", top("/hosts !backup") === "everywhere" && top("/x !w") === "everywhere", top("/hosts !backup"))
   check("bangs: rg and pkg keep their trailing !words", top("rg TODO !x") === "contents" && top("pkg foo !bar") === "packages")
   check("bangs: outside a mode a trailing bang still works", top("john 3:16 !nasb") === "bangs")
   const t = Date.now(); Engine.run("a ".repeat(20000) + "!x", config, { now, apps, windows: [] })
@@ -668,5 +650,140 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 // syncthing: a keyword that opens the local web UI
 { const r = q("syncthing")
   check("syncthing: opens the local web UI", r[0].title === "Syncthing" && r[0].run && r[0].run.target === "http://127.0.0.1:8384/", JSON.stringify(r[0] && r[0].run)) }
+
+// ---------------------------------------------------------------- extensions
+{ const good = { schema: 1, id: "demo", name: "Demo", type: "js", entry: "provider.js", defaults: { a: 1, b: { c: 2 } }, order: 5 }
+  const v = (m, dir) => Ext.validate(m, dir || "/x/demo")
+  check("ext: a good manifest validates, defaults kept", !v(good).error && v(good).entry === "provider.js" && v(good).defaults.b.c === 2)
+  check("ext: wrong schema, bad id, bad entry are refused",
+    /schema/.test(v(Object.assign({}, good, { schema: 2 })).error) && /id/.test(v(Object.assign({}, good, { id: "Bad Id" })).error)
+    && /entry/.test(v(Object.assign({}, good, { entry: "../x.js" })).error) && /entry/.test(v(Object.assign({}, good, { entry: "a/b.js" })).error))
+  check("ext: invalid JSON text says so", /JSON/.test(v("{nope").error))
+  const sc = { schema: 1, id: "sc", type: "script", command: ["./run", "--x"], mode: { pattern: "^\\s*sc\\s" } }
+  check("ext: a script's ./command resolves inside its folder", v(sc, "/e/sc").command.join(" ") === "/e/sc/run --x")
+  check("ext: a script needs a mode", /mode/.test(v(Object.assign({}, sc, { mode: undefined })).error))
+  check("ext: ../ and shell strings are refused as commands",
+    /command/.test(v(Object.assign({}, sc, { command: ["./../evil"] })).error) && /command/.test(v(Object.assign({}, sc, { command: "rm -rf ~" })).error)
+    && /command/.test(v(Object.assign({}, sc, { command: ["sh -c x"] })).error) && /command/.test(v(Object.assign({}, sc, { command: ["./a", 3] })).error))
+  check("ext: a bad mode pattern is refused", /pattern/.test(v(Object.assign({}, good, { mode: { pattern: "(" } })).error))
+  const both = Ext.collect([{ dir: "/b/demo", manifest: good }, { dir: "/u/demo", manifest: Object.assign({}, good, { name: "Mine" }), user: true }, { dir: "/b/bad", manifest: "{" }])
+  check("ext: yours replaces a bundled one with the same id; errors are listed", both.list.length === 1 && both.list[0].name === "Mine" && both.list[0].user && both.errors.length === 1 && both.errors[0].dir === "/b/bad")
+  const m = v(good)
+  check("ext: on by default; extensions switches win; providers list decides alone",
+    Ext.isOn(m, {}) && !Ext.isOn(m, { extensions: { demo: false } }) && !Ext.isOn(m, { extensions: { demo: { enabled: false } } })
+    && !Ext.isOn(v(Object.assign({}, good, { enabled: false })), {}) && Ext.isOn(v(Object.assign({}, good, { enabled: false })), { extensions: { demo: true } })
+    && !Ext.isOn(m, { providers: ["other"] }) && Ext.isOn(m, { providers: ["demo"], extensions: { demo: false } }))
+  check("ext: a missing required command keeps it off", !Ext.isOn(Object.assign({}, m, { missing: ["fd"] }), { extensions: { demo: true } }))
+  const cfg = Ext.effectiveConfig({ hotkey: "X" }, [m], { demo: { b: { d: 3 } }, hotkey: "Y" })
+  check("ext: settings merge your section over the manifest's defaults", cfg.hotkey === "Y" && cfg.demo.a === 1 && cfg.demo.b.c === 2 && cfg.demo.b.d === 3)
+  check("ext: null removes a default key", !("a" in Ext.effectiveConfig({}, [m], { demo: { a: null } }).demo))
+  check("ext: every bundled manifest loaded, none refused", loaded.errors.length === 0 && loaded.manifests.length === 21, loaded.manifests.length + " " + JSON.stringify(loaded.errors))
+  check("ext: config.default.json holds only the bar's own settings", Object.keys(Engine.parseJsonc(require("fs").readFileSync(P + "config.default.json", "utf8"))).sort().join() === "extensions,glass,hotkey,window") }
+
+// script extensions: rows from JSON, only the bar's own actions
+{ const out = Ext.parseOutput(JSON.stringify({ items: [
+    { title: "ok", run: { kind: "open", target: "https://example.com" }, alt: { kind: "copy", target: "x" } },
+    { title: "js url", run: { kind: "open", target: "javascript:alert(1)" } },
+    { title: "shell", run: { kind: "shell", target: "rm -rf ~" } },
+    { title: "argv", run: { kind: "argv", target: ["notify-send", 3] } },
+    { title: "edit", run: { kind: "edit", target: "/a/b", line: 12 } },
+    { nope: true }
+  ], message: "hi" }))
+  check("script: rows parsed; unknown kinds, javascript: and non-string argv dropped",
+    out.items.length === 5 && out.items[0].run.kind === "open" && out.items[0].alt.kind === "copy" && out.items[1].run === null
+    && out.items[2].run === null && out.items[3].run === null && out.items[4].run.line === 12 && out.message === "hi", JSON.stringify(out.items.map(i => i.run)))
+  check("script: not JSON, or no items, says so", /JSON/.test(Ext.parseOutput("oops").error) && /items/.test(Ext.parseOutput("{}").error))
+  const m = Ext.validate({ schema: 1, id: "wx", name: "Weather", type: "script", command: ["./wx"], mode: { pattern: "^\\s*wx\\s" }, minQuery: 2, placeholder: "Type a city" }, "/e/wx")
+  const sp = Ext.scriptProvider(m)
+  let asked = null
+  const ctx = (extra) => Object.assign({ settings: { unit: "c" }, home: "/h", requestSearch: (k, a, o) => { asked = { k, a, o } } }, extra || {})
+  check("script: only in its mode; a placeholder below minQuery", sp.match("hello", ctx()).length === 0 && sp.match("wx a", ctx())[0].title === "Type a city")
+  const first = sp.match("wx paris", ctx())
+  const req = asked && JSON.parse(asked.o.stdin)
+  check("script: asks with the command and a JSON request on stdin", first[0].title === "Searching…" && asked.k === "paris" && asked.a[0].join(" ") === "/e/wx/wx"
+    && req.protocol === 1 && req.text === "paris" && req.query === "wx paris" && req.settings.unit === "c" && req.home === "/h")
+  const rows = sp.match("wx paris", ctx({ search: { key: "paris", text: '{"items":[{"title":"12°"}]}' } }))
+  check("script: the landed output becomes rows", rows.length === 1 && rows[0].title === "12°")
+  check("script: bad output is an error row; nothing found uses its message; a timeout says so",
+    /isn't JSON/.test(sp.match("wx paris", ctx({ search: { key: "paris", text: "x" } }))[0].title)
+    && sp.match("wx paris", ctx({ search: { key: "paris", text: '{"items":[],"message":"No such city"}' } }))[0].title === "No such city"
+    && sp.match("wx paris", ctx({ search: { key: "paris", text: "", timedOut: true } }))[0].title === "Stopped after 3 s") }
+
+// a real script extension, run the way the bar runs it
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-script-")
+  fs.writeFileSync(dir + "/echo", "#!/usr/bin/env python3\nimport json,sys\nr=json.load(sys.stdin)\nprint(json.dumps({'items':[{'title':'you typed '+r['text'],'copy':r['text']}]}))\n", { mode: 0o755 })
+  const m = Ext.validate({ schema: 1, id: "echo", type: "script", command: ["./echo"], mode: { pattern: "^\\s*echo\\s" } }, dir)
+  const sp = Ext.scriptProvider(m)
+  let req = null
+  const hostile = "$(touch " + dir + "/pwned) `touch " + dir + "/pwned2`"
+  sp.match("echo " + hostile, { requestSearch: (k, a, o) => { req = { k, a, o } } })
+  const r = spawnSync(req.a[0][0], req.a[0].slice(1), { input: req.o.stdin, encoding: "utf8", cwd: dir })
+  const rows = sp.match("echo " + hostile, { search: { key: req.k, text: r.stdout } })
+  check("script: a real script gets the text as data and its rows come back", rows[0].title === "you typed " + hostile && rows[0].copy === hostile && !fs.existsSync(dir + "/pwned") && !fs.existsSync(dir + "/pwned2"), rows[0] && rows[0].title)
+  fs.rmSync(dir, { recursive: true }) }
+
+// the bar's background work, seen per extension
+{ let seen = null
+  const services = { search: { key: "files\nnotes", text: "T", chunks: ["T"], done: true }, requestSearch: (k) => { seen = k }, cached: k => k === "files\nlist" ? "L" : null, requestLoad: (k) => { seen = k } }
+  const ctxFiles = Engine.contextFor({ id: "files" }, config, services), ctxOther = Engine.contextFor({ id: "other" }, config, services)
+  check("work: a search is visible only to the extension that asked", ctxFiles.search.key === "notes" && ctxFiles.search.text === "T" && ctxOther.search === null)
+  ctxOther.requestSearch("q", ["echo"])
+  check("work: keys are prefixed with the extension's id", seen === "other\nq")
+  check("work: loads read under the extension's own key", ctxFiles.load("list", ["x"]) === "L" && seen === "files\nlist" && ctxOther.load("list", ["x"]) === null) }
+
+// ?extensions
+{ const rows = q("?extensions")
+  check("ext: ?extensions lists every extension with its state and what it touches", rows.length === 21 && rows.some(r => r.title === "Everywhere" && /^On/.test(r.subtitle) && /script/.test(r.subtitle) && /runs plocate/.test(r.subtitle)), rows.length + " " + (rows[0] && rows[0].subtitle))
+  const off = Engine.run("?extensions", Object.assign({}, config, { extensions: { bible: false } }), { now })
+  check("ext: a switched-off extension says how to turn it on", off.some(r => r.title === "Bible" && /^Off: "extensions": \{ "bible": true \}/.test(r.subtitle)))
+  check("ext: switched off, it stops answering", !Engine.run("john 3:16", Object.assign({}, config, { extensions: { bible: false } }), { now, apps }).some(r => r.provider === "bible")) }
+
+// 2+2 is arithmetic, not an app
+{ const pinta = app("com.github.PintaProject.Pinta", "Pinta", "Image Editor", [], ["draw", "paint", "graphics", "2d"])
+  const rows = Engine.run("2+2", config, { now, apps: [pinta], windows: [], launches: {} })
+  check("apps: 2+2 answers 4 and doesn't offer Pinta", rows[0].title === "4" && !rows.some(r => r.title === "Pinta"), rows.map(r => r.title).join("|")) }
+
+// bin/commandbar-extensions: finds manifests, refuses what others could have planted
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const root = fs.mkdtempSync(os.tmpdir() + "/commandbar-exts-"), user = root + "/user"
+  fs.mkdirSync(user + "/ok", { recursive: true, mode: 0o700 }); fs.chmodSync(user, 0o700)
+  fs.writeFileSync(user + "/ok/extension.json", JSON.stringify({ schema: 1, id: "ok", requires: ["sh", "no-such-command-zz"] }))
+  fs.mkdirSync(user + "/linked", { mode: 0o700 }); fs.symlinkSync("/etc/hostname", user + "/linked/extension.json")
+  const list = () => JSON.parse(spawnSync("python3", [P + "bin/commandbar-extensions", P + "extensions", user], { encoding: "utf8" }).stdout)
+  const got = list().filter(e => e.user)
+  const ok = got.find(e => /\/ok$/.test(e.dir)), linked = got.find(e => /\/linked$/.test(e.dir))
+  check("ext helper: reads yours and reports missing commands", ok && JSON.parse(ok.manifest).id === "ok" && ok.missing.join() === "no-such-command-zz", JSON.stringify(ok))
+  check("ext helper: a symlinked extension.json is refused", linked && linked.error && !linked.manifest, JSON.stringify(linked))
+  fs.chmodSync(user, 0o777)
+  const open = list().filter(e => e.user)
+  check("ext helper: a user folder others can write to is refused whole", open.length === 1 && /writable by others/.test(open[0].error), JSON.stringify(open))
+  check("ext helper: the bundled ones are all found", list().filter(e => !e.user).length === 21)
+  fs.chmodSync(user, 0o700); fs.rmSync(root, { recursive: true }) }
+
+// everywhere: the command itself
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const EW = P + "extensions/everywhere/everywhere"
+  const rank = (q, paths, home) => spawnSync(EW, ["--rank", "--", q], { input: paths.join("\0"), encoding: "utf8", env: Object.assign({}, process.env, { HOME: home || "/home/u" }) }).stdout.trim().split("\n")
+  const order = rank("dwnlds", ["/usr/share/icons/x/stat_sys_download_done.xml", "/home/u/Downloads", "/home/u/.rustup/downloads", "/etc/hosts"])
+  check("everywhere: ~/Downloads first for dwnlds, hidden after", order[0] === "/home/u/Downloads" && order.indexOf("/home/u/.rustup/downloads") > 0, order.join(","))
+  check("everywhere: an exact name beats the home lift; a hidden home file loses to a visible system one",
+    rank("hosts", ["/home/u/.config/gh/hosts.yml", "/etc/hosts"])[0] === "/etc/hosts" && rank("hosts", ["/home/u/.config/pinta/x/hosts", "/etc/hosts"])[0] === "/etc/hosts")
+  // For real, with a scratch home and its own index: the home index, globs escaped, ^start, and no shell anywhere.
+  const home = fs.mkdtempSync(os.tmpdir() + "/everywhere-home-")
+  fs.mkdirSync(home + "/Docs"); fs.writeFileSync(home + "/Docs/file[1].txt", ""); fs.writeFileSync(home + "/Docs/what?.md", ""); fs.writeFileSync(home + "/Docs/downbeat.txt", "")
+  const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
+  const ew = (...a) => spawnSync(EW, a, { env, encoding: "utf8", timeout: 20000 })
+  check("everywhere: --index builds a private index", ew("--index").status === 0 && (fs.statSync(home + "/.cache/everywhere/home.db").mode & 0o777) === 0o600 && (fs.statSync(home + "/.cache/everywhere").mode & 0o777) === 0o700)
+  check("everywhere: * ? [ ] in a name are found literally (exact terms skip the fuzzy pass)", ew("'file[1]").stdout.split("\n")[0] === home + "/Docs/file[1].txt" && ew("'what?").stdout.split("\n")[0] === home + "/Docs/what?.md")
+  check("everywhere: ^name matches a name's start", ew("^downbeat").stdout.split("\n")[0] === home + "/Docs/downbeat.txt")
+  ew("$(touch " + home + "/pwned)"); ew("--", "`touch " + home + "/pwned2`")
+  check("everywhere: a $(…) query runs nothing", !fs.existsSync(home + "/pwned") && !fs.existsSync(home + "/pwned2"))
+  const cb = spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: [] } }), encoding: "utf8" })
+  const items = JSON.parse(cb.stdout).items
+  check("everywhere: --commandbar returns rows the bar accepts", items[0].title === "downbeat.txt" && Ext.parseOutput(cb.stdout).items[0].run.kind === "open" && Ext.parseOutput(cb.stdout).items[0].alt.kind === "argv", cb.stdout.slice(0, 200))
+  check("everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
+  check("everywhere: --index --max-age skips a fresh index", (() => { const t = fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs; ew("--index", "--max-age", "60"); return fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs === t })())
+  fs.rmSync(home, { recursive: true }) }
 
 console.log(fails ? fails + " FAILED" : "all passed"); process.exit(fails ? 1 : 0)

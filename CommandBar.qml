@@ -9,13 +9,11 @@ import "lib/Engine.js" as Engine
 import "lib/tzcities.js" as Tz
 import "lib/Hotkey.js" as Hotkey
 import "lib/Geometry.js" as Geometry
-import "providers/files.js" as Files
-import "providers/packages.js" as Packages
-import "providers/locate.js" as Locate
+import "lib/Extensions.js" as Ext
 
 // Spotlight-style command bar. The UI and the data it needs (config, exchange
 // rates, zone offsets) live here; what a query *means* is decided by the
-// providers in providers/, run through lib/Engine.js.
+// extensions in extensions/ (and yours), run through lib/Engine.js.
 Item {
   id: root
 
@@ -34,7 +32,10 @@ Item {
 
   property var defaultConfig: ({})
   property var userConfig: ({})
-  readonly property var config: Engine.deepMerge(defaultConfig, userConfig)
+  property var manifests: []        // the extensions found, validated (lib/Extensions.js)
+  // The bar's settings and your file, each extension's section built from its
+  // manifest's defaults and yours.
+  readonly property var config: Ext.effectiveConfig(defaultConfig, manifests, userConfig)
 
   property var rates: null          // { rates, updated, next, stale }
   property string ratesStatus: ""
@@ -179,18 +180,16 @@ Item {
   // What was read while the bar was open (clipboard history, file listings,
   // the rows built from them) goes when it closes.
   function forget() {
-    root.clipboardWanted = false
-    root.clipboard = []
-    root.files = null
-    root.filesWantKey = ""
-    root.filesWantArgv = null
-    if (filesProc.running) filesProc.signal(15)
-    root.packagesWanted = false
-    root.packages = null
     root.search = null
     root.searchWantKey = ""
-    root.searchWantArgv = null
+    root.searchQueue = []
     if (searchProc.running) searchProc.signal(15)
+    // Loads read for this open go; ones kept on a timer (keybindings) stay.
+    var kept = {}
+    for (var k in root.loadCache) if (root.loadCache[k].keep) kept[k] = root.loadCache[k]
+    root.loadCache = kept
+    root.loadGeneration++
+    Engine.forget()
     // Rows hold clipboard texts and file paths; a kept query is recomputed
     // from scratch on the next open.
     root.results = []
@@ -231,22 +230,16 @@ Item {
       windows: root.windows,
       launches: root.launches,
       agent: root.agent,
-      clipboard: root.clipboard,
-      files: root.files,
-      packages: root.packages,
       search: root.search,
-      hotkeys: root.hotkeysText,
       pinnedApps: root.pinnedApps,
       home: root.home,
       omarchyPath: root.omarchyPath,
       requestProcesses: root.requestProcesses,
       requestRates: root.refreshRates,
-      requestFiles: root.requestFiles,
-      requestPackages: root.requestPackages,
       requestSearch: root.requestSearch,
-      requestHomeIndex: root.requestHomeIndex,
-      requestHotkeys: root.requestHotkeys,
-      requestClipboard: root.requestClipboard
+      cached: root.cached,
+      requestLoad: root.requestLoad,
+      requestJob: root.requestJob
     })
     root.mode = Engine.mode(input.text, root.config)
     if (root.selectedIndex >= root.rows.length) root.selectedIndex = Math.max(0, root.rows.length - 1)
@@ -430,153 +423,48 @@ Item {
     } catch (e) {}
   }
 
-  // ---------------------------------------------------------------- clipboard history
-
-  // Read the first time a "cb " query is typed after the bar opens, once:
-  // not watched, so a copy landing while you browse can't move the rows
-  // under the selection. Dropped when the bar closes, so the history isn't
-  // held in this process the rest of the time.
   property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"   // the shell sets this too
-  readonly property string clipboardPath: root.home + "/.local/state/omarchy/clipboard-history.json"
-  property bool clipboardWanted: false
-  property var clipboard: []
 
-  function requestClipboard() { if (!root.clipboardWanted) root.clipboardWanted = true }
+  // ---------------------------------------------------------------- background work
 
-  FileView {
-    id: clipboardFile
-    path: root.clipboardWanted ? root.clipboardPath : ""
-    printErrors: false
-    onLoaded: {
-      if (!root.clipboardWanted) return
-      try {
-        var data = JSON.parse(text())
-        root.clipboard = Array.isArray(data) ? data : []
-      } catch (e) {
-        root.clipboard = []
-      }
-      if (root.opened) root.recompute()
-    }
-  }
+  // Extensions never start processes themselves; they ask for these (through
+  // ctx, with keys prefixed by their id, see lib/Engine.js), and the bar runs
+  // them as argument lists.
 
-  // ---------------------------------------------------------------- files
-
-  // One fd walk at a time. A query asks for a list of walks (literal, then
-  // fuzzy), run in turn, their results merged and shown as each lands. A
-  // newer query stops a walk still running; when it exits, the newest wanted
-  // query starts. Results are kept for one query.
-  property var files: null            // { key, entries }
-  property string filesWantKey: ""
-  property var filesWantArgv: null    // the walks still to run for filesWantKey
-  property var filesSeen: ({})        // paths already listed for this key
-
-  function requestFiles(key, argvs) {
-    if (root.filesWantKey === key) return
-    root.filesWantKey = key
-    root.filesWantArgv = argvs
-    root.filesSeen = ({})   // the old key's rows stay on screen until the first walk lands
-    if (filesProc.running) filesProc.signal(15)
-    else root.startFiles()
-  }
-
-  // The next walk starts only once the previous one has both exited and
-  // delivered its output, so old output can't be filed under a new key.
-  property bool filesStreamDone: true
-  property bool filesExited: true
-
-  function startFiles() {
-    if (!root.filesWantArgv || root.filesWantArgv.length === 0 || !root.filesStreamDone || !root.filesExited) return
-    root.filesStreamDone = false
-    root.filesExited = false
-    filesProc.forKey = root.filesWantKey
-    filesProc.command = root.filesWantArgv[0]
-    root.filesWantArgv = root.filesWantArgv.slice(1)
-    filesProc.running = true
-    filesWatchdog.restart()
-  }
-
-  Process {
-    id: filesProc
-    property string forKey: ""
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        root.filesStreamDone = true
-        if (root.opened && filesProc.forKey !== "" && filesProc.forKey === root.filesWantKey) {
-          var merged = root.files && root.files.key === filesProc.forKey ? root.files.entries.slice() : []
-          var seen = root.filesSeen
-          var found = Files.parse(text, root.home)
-          for (var i = 0; i < found.length; i++)
-            if (!seen[found[i].path]) { seen[found[i].path] = true; merged.push(found[i]) }
-          root.files = { key: filesProc.forKey, entries: merged }
-          root.recompute()
-        }
-        root.startFiles()
-      }
-    }
-    onExited: { filesWatchdog.stop(); root.filesExited = true; root.startFiles() }
-  }
-
-  // A huge home folder can take a while; fd is stopped after 3 s. Whatever it
-  // had written out by then is used (unmeasured how much that is).
-  Timer { id: filesWatchdog; interval: 3000; onTriggered: if (filesProc.running) filesProc.signal(15) }
-
-  // ---------------------------------------------------------------- packages
-
-  // The package list, read with expac the first time "pkg " is typed after
-  // the bar opens (about 0.15 s and 1.2 MB for 15,000 packages, measured
-  // 2026-10-09) and dropped when it closes, so an install shows up next time.
-  property bool packagesWanted: false
-  property var packages: null
-
-  function requestPackages() {
-    if (root.packagesWanted) return
-    root.packagesWanted = true
-    if (!packagesProc.running) packagesProc.running = true
-  }
-
-  Process {
-    id: packagesProc
-    command: ["bash", "-c", "expac -Q 'Q\\t%n\\t%v' && expac -S 'S\\t%r\\t%n\\t%v\\t%a\\t%d'"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (!root.packagesWanted) return
-        root.packages = Packages.parse(text)
-        if (root.opened) root.recompute()
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------- search (everywhere, inside files)
-
-  // One search process at a time, shared by "/" (plocate and fzf) and "rg "
-  // (ripgrep), which never run together. A newer query stops the one still
-  // running; when it exits, the newest wanted query starts, so old output is
-  // never filed under a new key. Results are kept for one query.
-  property var search: null           // { key, text }
+  // Searches: one at a time, shared by every extension (only one mode is on
+  // screen). A search is a list of argument lists run in turn, each landing
+  // as its own chunk; a newer key stops the one running, and when that has
+  // exited the newest wanted search starts, so old output is never filed
+  // under a new key. Each command is stopped after its timeout (3 s), and
+  // what it wrote by then is used, marked as cut short.
+  property var search: null           // { key, chunks, text, timedOut, done }
   property string searchWantKey: ""
-  property var searchWantArgv: null
+  property var searchQueue: []
+  property var searchOpts: ({})
   property bool searchStreamDone: true
   property bool searchExited: true
 
-  function requestSearch(key, argv) {
+  function requestSearch(key, argvs, opts) {
     if (root.searchWantKey === key) return
     root.searchWantKey = key
-    root.searchWantArgv = argv
+    root.searchQueue = (argvs || []).filter(function(a) { return Array.isArray(a) && a.length > 0 })
+    root.searchOpts = opts || {}
     if (searchProc.running) searchProc.signal(15)
     else root.startSearch()
   }
 
   function startSearch() {
-    if (!root.searchWantArgv || !root.searchStreamDone || !root.searchExited) return
+    if (root.searchQueue.length === 0 || !root.searchStreamDone || !root.searchExited) return
     root.searchStreamDone = false
     root.searchExited = false
     searchProc.forKey = root.searchWantKey
     searchProc.timedOut = false
-    searchProc.command = root.searchWantArgv
-    root.searchWantArgv = null
+    searchProc.input = typeof root.searchOpts.stdin === "string" ? root.searchOpts.stdin : null
+    searchProc.command = root.searchQueue[0].map(String)
+    root.searchQueue = root.searchQueue.slice(1)
+    searchProc.stdinEnabled = searchProc.input !== null
     searchProc.running = true
+    searchWatchdog.interval = Math.max(500, Math.min(30000, Number(root.searchOpts.timeout) || 3000))
     searchWatchdog.restart()
   }
 
@@ -584,12 +472,22 @@ Item {
     id: searchProc
     property string forKey: ""
     property bool timedOut: false
+    property var input: null
+    onStarted: {
+      if (searchProc.input === null) return
+      searchProc.write(searchProc.input)
+      searchProc.input = null
+      searchProc.stdinEnabled = false   // closing stdin lets the command see the end
+    }
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         root.searchStreamDone = true
         if (root.opened && searchProc.forKey !== "" && searchProc.forKey === root.searchWantKey) {
-          root.search = { key: searchProc.forKey, text: String(text || ""), timedOut: searchProc.timedOut }
+          var prev = root.search && root.search.key === searchProc.forKey ? root.search : null
+          var chunks = (prev ? prev.chunks : []).concat([String(text || "")])
+          root.search = { key: searchProc.forKey, chunks: chunks, text: chunks.join(""),
+                          timedOut: (prev && prev.timedOut) || searchProc.timedOut, done: root.searchQueue.length === 0 }
           root.recompute()
         }
         root.startSearch()
@@ -598,65 +496,180 @@ Item {
     onExited: { searchWatchdog.stop(); root.searchExited = true; root.startSearch() }
   }
 
-  // Whatever a search had written out after 3 s is used, marked as cut
-  // short. The scripts bound their own commands with timeout(1) too, since
-  // stopping bash doesn't stop the pipeline under it.
   Timer { id: searchWatchdog; interval: 3000; onTriggered: if (searchProc.running) { searchProc.timedOut = true; searchProc.signal(15) } }
 
-  // The private index of home that "/" searches, rebuilt (about 0.5 s) at
-  // most once a minute, on the first "/" query after the bar opens. When it
-  // lands, the query runs again against it.
-  property real homeIndexAt: 0
+  // Loads: text read once per open (the package list, clipboard history), or
+  // kept and re-read every ttl ms (keybindings). One at a time. A load that
+  // lands after the bar closed is dropped unless it is kept, so what was read
+  // for one open isn't held until the next.
+  property var loadCache: ({})        // key -> { text, at, keep }
+  property var loadQueue: []
+  property var loading: ({})
+  property int loadGeneration: 0
 
-  function requestHomeIndex() {
-    if (homeIndexProc.running || Date.now() - root.homeIndexAt < 60000) return
-    root.homeIndexAt = Date.now()
-    homeIndexProc.running = true
+  function cached(key) {
+    var e = root.loadCache[key]
+    return e ? e.text : null
+  }
+
+  function requestLoad(key, argv, opts) {
+    if (!Array.isArray(argv) || argv.length === 0 || root.loading[key]) return
+    var ttl = Number(opts && opts.ttl) || 0
+    var e = root.loadCache[key]
+    if (e && (ttl <= 0 || Date.now() - e.at < ttl)) return
+    root.loading[key] = true
+    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, generation: root.loadGeneration })
+    if (!loadProc.running) root.loadNext()
+  }
+
+  property var loadCurrent: null
+
+  function loadNext() {
+    if (root.loadQueue.length === 0) return
+    root.loadCurrent = root.loadQueue.shift()
+    loadProc.command = root.loadCurrent.argv
+    loadProc.running = true
+    loadWatchdog.restart()
   }
 
   Process {
-    id: homeIndexProc
-    command: ["bash", "-c", Locate.INDEX_SCRIPT]
+    id: loadProc
+    stdout: StdioCollector {
+      id: loadOut
+      waitForEnd: true
+    }
     onExited: {
-      root.homeIndexAt = Date.now()   // a slow rebuild doesn't start another straight away
-      if (!root.opened || root.searchWantKey.indexOf("locate\n") !== 0) return
-      // The search usually landed first; dropping it makes the same query ask
-      // again, against the new index.
-      root.searchWantKey = ""
-      root.search = null
-      root.recompute()
+      loadWatchdog.stop()
+      var job = root.loadCurrent
+      root.loadCurrent = null
+      if (job) {
+        delete root.loading[job.key]
+        var text = String(loadOut.text || "")
+        var old = root.loadCache[job.key]
+        // A failed re-read of something kept (empty output) keeps the old text.
+        if (job.keep || job.generation === root.loadGeneration) {
+          var next = Object.assign({}, root.loadCache)
+          next[job.key] = { text: (!text.trim() && old && job.keep) ? old.text : text, at: Date.now(), keep: job.keep }
+          root.loadCache = next
+          if (root.opened) root.recompute()
+        }
+      }
+      root.loadNext()
     }
   }
 
-  // ---------------------------------------------------------------- hotkeys
+  Timer { id: loadWatchdog; interval: 5000; onTriggered: if (loadProc.running) loadProc.signal(15) }
 
-  // omarchy-menu-keybindings keeps its own cache keyed on `hyprctl binds`,
-  // so this is cheap. Bindings mix into ordinary results, so any typed query
-  // asks; it runs at most every 30 s. It depends on the script's top level
-  // doing nothing but define functions under --print: if an Omarchy update
-  // changes that, the keybinding rows go empty.
-  property string hotkeysText: ""
-  property real hotkeysAt: 0
+  // Jobs: background work an extension needs now and then (Everywhere's index
+  // of your home folder), at most every `every` seconds, one at a time. With
+  // rerun, the extension's search runs again when the job finishes.
+  property var jobAt: ({})
+  property var jobQueue: []
+  property var jobCurrent: null
 
-  function requestHotkeys() {
-    if (hotkeysProc.running || Date.now() - root.hotkeysAt < 30000) return
-    root.hotkeysAt = Date.now()
-    hotkeysProc.running = true
+  function requestJob(key, argv, opts, prefix) {
+    if (!Array.isArray(argv) || argv.length === 0) return
+    var every = Math.max(5, Number(opts && opts.every) || 60) * 1000
+    if (Date.now() - (root.jobAt[key] || 0) < every) return
+    root.jobAt[key] = Date.now()
+    root.jobQueue.push({ key: key, argv: argv.map(String), rerun: !!(opts && opts.rerun), prefix: String(prefix || "") })
+    if (!jobProc.running) root.jobNext()
+  }
+
+  function jobNext() {
+    if (root.jobQueue.length === 0) return
+    root.jobCurrent = root.jobQueue.shift()
+    jobProc.command = root.jobCurrent.argv
+    jobProc.running = true
   }
 
   Process {
-    id: hotkeysProc
-    command: ["bash", "-c", "source \"$0\" --print >/dev/null && output_binding_records",
-              root.omarchyPath + "/bin/omarchy-menu-keybindings"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        // A failed run prints nothing: keep the list we had.
-        if (String(text || "").trim()) root.hotkeysText = String(text)
-        if (root.opened) root.recompute()
+    id: jobProc
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: job: " + text.trim().slice(0, 300))
+    }
+    onExited: {
+      var job = root.jobCurrent
+      root.jobCurrent = null
+      if (job) {
+        root.jobAt[job.key] = Date.now()   // a slow job doesn't start again straight away
+        // The search usually landed first; dropping it makes the same query
+        // ask again, against what the job produced.
+        if (job.rerun && root.opened && job.prefix && root.searchWantKey.indexOf(job.prefix) === 0) {
+          root.searchWantKey = ""
+          root.search = null
+          root.recompute()
+        }
+      }
+      root.jobNext()
+    }
+  }
+
+  // ---------------------------------------------------------------- extensions
+
+  // Found by bin/commandbar-extensions (bundled ones, then yours from
+  // ~/.config/omarchy/commandbar/extensions/), validated by lib/Extensions.js,
+  // and loaded: a js extension's provider file through a small QML object
+  // made at run time (QML can't import a path chosen at run time any other
+  // way), a script extension wrapped by Ext.scriptProvider. Found again at
+  // startup and whenever your config changes.
+  readonly property string userExtensionsDir: root.home + "/.config/omarchy/commandbar/extensions"
+  property var extensionObjects: []
+
+  function discoverExtensions() {
+    if (!extensionsProc.running) extensionsProc.running = true
+  }
+
+  function fileUrl(path) {
+    return "file://" + String(path).split("/").map(encodeURIComponent).join("/")
+  }
+
+  function installExtensions(text) {
+    var found = []
+    try { found = JSON.parse(text) } catch (e) { console.warn("commandbar: couldn't list extensions: " + e) }
+    var refused = []
+    found = (Array.isArray(found) ? found : []).filter(function(f) {
+      if (f && f.error) { refused.push({ dir: String(f.dir || ""), error: String(f.error) }); return false }
+      return f && typeof f.manifest === "string"
+    })
+    var got = Ext.collect(found)
+    for (var o = 0; o < root.extensionObjects.length; o++) root.extensionObjects[o].destroy()
+    var objects = [], entries = [], errors = refused.concat(got.errors)
+    for (var i = 0; i < got.list.length; i++) {
+      var m = got.list[i]
+      if (m.type === "script") { entries.push({ provider: Ext.scriptProvider(m), manifest: m }); continue }
+      try {
+        // m.entry is checked to be a plain file name ending in .js.
+        var obj = Qt.createQmlObject('import QtQuick\nimport "' + m.entry + '" as Impl\nQtObject { readonly property var provider: Impl.provider }',
+                                     root, root.fileUrl(m.dir + "/Extension.qml"))
+        objects.push(obj)
+        if (!obj.provider || obj.provider.id !== m.id) { errors.push({ dir: m.dir, error: "its provider's id isn't \"" + m.id + "\"" }); continue }
+        entries.push({ provider: obj.provider, manifest: m })
+      } catch (e) {
+        errors.push({ dir: m.dir, error: "didn't load: " + String(e && e.qmlErrors ? e.qmlErrors.map(function(q) { return q.message }).join("; ") : e) })
       }
     }
+    for (var j = 0; j < errors.length; j++) console.warn("commandbar: extension " + errors[j].dir + ": " + errors[j].error)
+    root.extensionObjects = objects
+    Engine.setProviders(entries)
+    Engine.setExtensionErrors(errors)
+    root.manifests = got.list
+    if (root.opened) root.recompute()
   }
+
+  Process {
+    id: extensionsProc
+    command: ["python3", root.pluginDir + "/bin/commandbar-extensions", root.pluginDir + "/extensions", root.userExtensionsDir]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.installExtensions(String(text || ""))
+    }
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: extensions: " + text.trim().slice(0, 300))
+    }
+  }
+
+  onUserConfigChanged: root.discoverExtensions()
 
   // What Enter does to a row, for the footer: "Open", "Switch", "Copy"…
   function actionLabel(row) {
@@ -1101,6 +1114,7 @@ Item {
   }
 
   Component.onCompleted: {
+    root.discoverExtensions()
     appsDebounce.restart()
     root.cacheRead("last-query", root.loadLastQuery)
     root.cacheRead("launches.json", root.loadLaunches)

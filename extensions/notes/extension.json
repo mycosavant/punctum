@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "notes",
+  "name": "Note",
+  "version": "1.0.0",
+  "description": "n call the dentist: append a line to your inbox note",
+  "icon": "󰎞",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 30,
+  "helpOrder": 30,
+  "mode": {
+    "pattern": "^\\s*(n|note)\\s",
+    "label": "Note"
+  },
+  "defaults": {
+    "inbox": "",
+    "format": "- {date} {time} {text}"
+  },
+  "permissions": {
+    "runs": [
+      "bin/commandbar-note"
+    ],
+    "writes": [
+      "the note named in notes.inbox (appends only)"
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "colors",
+  "name": "Colour",
+  "version": "1.0.0",
+  "description": "#ff6644: a colour swatch with HEX, RGB and HSL",
+  "icon": "󰏘",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 110,
+  "helpOrder": 130,
+  "hero": true,
+  "permissions": {}
+}

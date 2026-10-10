@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "id": "url",
+  "name": "Web address",
+  "version": "1.0.0",
+  "description": "example.com: open a web address",
+  "icon": "󰖟",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 100,
+  "helpOrder": 100,
+  "permissions": {
+    "network": [
+      "the address you typed, on Enter, in your browser"
+    ]
+  }
+}

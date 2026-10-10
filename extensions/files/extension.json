@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "id": "files",
+  "name": "Files",
+  "version": "1.0.0",
+  "description": "~name: files and folders under your home folder, found live with fd",
+  "icon": "󰈞",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 50,
+  "helpOrder": 50,
+  "mode": {
+    "pattern": "^\\s*~",
+    "label": "Files"
+  },
+  "defaults": {
+    "hidden": false
+  },
+  "requires": [
+    "fd"
+  ],
+  "permissions": {
+    "runs": [
+      "fd"
+    ],
+    "reads": [
+      "file names under ~"
+    ]
+  }
+}

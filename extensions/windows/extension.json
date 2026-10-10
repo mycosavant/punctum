@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "windows",
+  "name": "Windows",
+  "version": "1.0.0",
+  "description": "w name: switch to an open window",
+  "icon": "󰖯",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 180,
+  "helpOrder": 20,
+  "mode": {
+    "pattern": "^\\s*w\\s",
+    "label": "Windows"
+  },
+  "permissions": {
+    "runs": [
+      "hyprctl"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "hotkeys",
+  "name": "Hotkeys",
+  "version": "1.0.0",
+  "description": "full screen, keys: your keybindings, by what they do",
+  "icon": "󰌌",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 200,
+  "helpOrder": 90,
+  "mode": {
+    "pattern": "^\\s*keys\\s",
+    "label": "Keybindings"
+  },
+  "permissions": {
+    "runs": [
+      "omarchy-menu-keybindings",
+      "hyprctl"
+    ]
+  }
+}

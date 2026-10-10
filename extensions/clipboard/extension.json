@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "clipboard",
+  "name": "Clipboard",
+  "version": "1.0.0",
+  "description": "cb: clipboard history from the hypha.clipboard plugin, pinned first",
+  "icon": "󰅍",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 40,
+  "helpOrder": 40,
+  "mode": {
+    "pattern": "^\\s*(cb|clip)\\s",
+    "label": "Clipboard"
+  },
+  "permissions": {
+    "reads": [
+      "~/.local/state/omarchy/clipboard-history.json"
+    ],
+    "runs": [
+      "wl-copy",
+      "wtype (to paste)"
+    ]
+  }
+}

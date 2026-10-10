@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "id": "commands",
+  "name": "Commands",
+  "version": "1.0.0",
+  "description": "Your own keyword commands and web searches, set in the config",
+  "icon": "󰘳",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 10,
+  "helpOrder": 1000,
+  "defaults": [
+    {
+      "keyword": "g",
+      "title": "Search Google",
+      "open": "https://www.google.com/search?q={q}"
+    },
+    {
+      "keyword": "yt",
+      "title": "Search YouTube",
+      "open": "https://www.youtube.com/results?search_query={q}"
+    },
+    {
+      "keyword": "gh",
+      "title": "Search GitHub",
+      "open": "https://github.com/search?q={q}"
+    },
+    {
+      "keyword": "wiki",
+      "title": "Wikipedia",
+      "open": "https://en.wikipedia.org/w/index.php?search={q}"
+    },
+    {
+      "keyword": "lock",
+      "title": "Lock screen",
+      "run": "omarchy-system-lock"
+    },
+    {
+      "keyword": "syncthing",
+      "title": "Syncthing",
+      "keywords": "sync web ui",
+      "icon": "󰓦",
+      "open": "http://127.0.0.1:8384/"
+    }
+  ],
+  "permissions": {
+    "runs": [
+      "your keyword commands' run templates (bash, the typed text as $1)"
+    ],
+    "network": [
+      "the sites in your keyword commands, on Enter, in your browser"
+    ]
+  }
+}

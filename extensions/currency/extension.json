@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "currency",
+  "name": "Currency",
+  "version": "1.0.0",
+  "description": "100 usd to eur: currency conversion",
+  "icon": "󰁰",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 130,
+  "helpOrder": 160,
+  "hero": true,
+  "defaults": {
+    "home": "USD",
+    "favorites": [
+      "EUR",
+      "GBP"
+    ]
+  },
+  "permissions": {
+    "network": [
+      "open.er-api.com, when a currency query needs fresh rates"
+    ]
+  }
+}

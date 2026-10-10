@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "units",
+  "name": "Units",
+  "version": "1.0.0",
+  "description": "5 km to mi: unit conversion, offline",
+  "icon": "󰭍",
+  "type": "js",
+  "entry": "provider.js",
+  "enabled": true,
+  "order": 170,
+  "helpOrder": 150,
+  "hero": true,
+  "permissions": {}
+}
