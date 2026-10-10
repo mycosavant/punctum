@@ -355,9 +355,16 @@ fn load_key(key: &str) -> bool {
 /// The reply to one request line. A request that can't be read gets an
 /// `error`, with its id when there was one, so the bar never waits on it.
 pub fn handle(line: &str, state: &mut State) -> Value {
-    let req: Request = match serde_json::from_str(line) {
-        Ok(r) => r,
+    // Its id first, so even a request that doesn't read is answered under it
+    // and the bar stops waiting for it.
+    let raw: Value = match serde_json::from_str(line) {
+        Ok(v) => v,
         Err(e) => return serde_json::json!({ "id": Value::Null, "error": format!("unreadable request: {e}") }),
+    };
+    let id = raw.get("id").cloned().unwrap_or(Value::Null);
+    let req: Request = match serde_json::from_value(raw) {
+        Ok(r) => r,
+        Err(e) => return serde_json::json!({ "id": id, "error": format!("unreadable request: {e}") }),
     };
     match req.op.as_deref().unwrap_or("match") {
         "hello" => serde_json::json!({
@@ -378,7 +385,10 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                 return serde_json::json!({ "id": req.id, "error": "an extension id is lower-case letters, digits, - or _" });
             }
             let Some(module) = req.module else {
+                // Gone, and everything the bar gave it with it.
                 state.wasm.remove(&req.ext);
+                state.loads.retain(|(ext, _), _| *ext != req.ext);
+                state.searches.remove(&req.ext);
                 return serde_json::json!({ "id": req.id, "ok": true });
             };
             match wasm::compile(&module, &req.sha256) {
@@ -389,6 +399,13 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                 }
                 Err(e) => serde_json::json!({ "id": req.id, "error": e }),
             }
+        }
+        // The bar closed: a module starts afresh, keeping nothing it saw.
+        "reset" => {
+            if let Some(m) = state.wasm.get_mut(&req.ext) {
+                m.reset();
+            }
+            serde_json::json!({ "id": req.id, "ok": true })
         }
         "search" => {
             if !extension_id(&req.ext) {
@@ -414,7 +431,9 @@ pub fn handle(line: &str, state: &mut State) -> Value {
         }
         "load" => {
             let builtin = extensions().iter().find(|e| e.id() == req.ext);
-            if !load_key(&req.key) || (builtin.is_none() && !state.wasm.contains_key(&req.ext)) {
+            // Dropping one is always allowed: its extension may be gone.
+            let known = builtin.is_some() || state.wasm.contains_key(&req.ext) || req.text.is_none();
+            if !load_key(&req.key) || !known {
                 return serde_json::json!({ "id": req.id, "error": format!("no load \"{}\" for \"{}\"", req.key, req.ext) });
             }
             match req.text {
@@ -427,7 +446,8 @@ pub fn handle(line: &str, state: &mut State) -> Value {
                     // module's whole instance.
                     if let Some(m) = state.wasm.get_mut(&req.ext) {
                         m.reset();
-                    } else if let Some(ext) = builtin {
+                    }
+                    if let Some(ext) = builtin {
                         ext.forget(&req.key);
                     }
                     state.loads.remove(&(req.ext, req.key));

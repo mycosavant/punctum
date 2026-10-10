@@ -204,7 +204,12 @@ fn candidates(t: &str, now: &Zoned, tz: &TimeZone) -> Vec<Candidate> {
             out.push(Candidate {
                 index: whole.start(),
                 length: whole.end() - whole.start(),
-                at: now.timestamp().checked_add((secs * 1000).milliseconds()).ok().map(|ts| ts.to_zoned(tz.clone())),
+                // A duration too long to add is no time at all (and past the
+                // year a reminder may be anyway).
+                at: secs
+                    .checked_mul(1000)
+                    .and_then(|ms| now.timestamp().checked_add(ms.milliseconds()).ok())
+                    .map(|ts| ts.to_zoned(tz.clone())),
                 seconds: Some(secs),
                 past: false,
                 marked: m.get(2).is_some() || whole.start() == 0,
@@ -513,5 +518,12 @@ mod tests {
             at("America/New_York", 2026, 3, 7, 22, 0, "remind tomorrow 2:30am x")[0].title,
             "Remind me at 3:30 tomorrow: x"
         );
+    }
+
+    #[test]
+    fn durations_too_long_to_count() {
+        for q in ["remind 3000000000000000h x", "remind 18446744073709552s x", "remind 400d x"] {
+            assert!(colombo(q).first().is_none_or(|r| r.run.is_none()), "{q}");
+        }
     }
 }

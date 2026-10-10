@@ -180,8 +180,7 @@ impl Extension for Packages {
         let mut hits: Vec<(f64, &Package)> =
             data.list.iter().map(|p| (rank(p, &ws), p)).filter(|(r, _)| *r > 0.0).collect();
         hits.sort_by(|a, b| {
-            b.0.partial_cmp(&a.0)
-                .unwrap()
+            b.0.total_cmp(&a.0)
                 .then_with(|| if a.1.name < b.1.name { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater })
         });
         if hits.is_empty() {

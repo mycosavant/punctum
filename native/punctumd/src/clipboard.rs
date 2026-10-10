@@ -82,7 +82,7 @@ fn truthy(v: &Value) -> bool {
 /// The entries the bar can show: text with its text, an image with an
 /// absolute path. Others, and a file that isn't a list, are left out.
 pub fn parse(text: &str) -> Vec<Entry> {
-    let Ok(list) = serde_json::from_str::<Value>(text) else { return Vec::new() };
+    let Ok(list) = serde_json::from_str::<Value>(&mend_surrogates(text)) else { return Vec::new() };
     each::<Entry>(&list)
         .into_iter()
         .filter(|e| match e.kind.as_str() {
@@ -91,6 +91,44 @@ pub fn parse(text: &str) -> Vec<Entry> {
             _ => false,
         })
         .collect()
+}
+
+/// The JSON with each half of a surrogate pair that has no other half
+/// (\ud83d alone, which JavaScript's JSON.parse reads and serde_json
+/// refuses) made U+FFFD, so one odd entry can't hide the whole history.
+fn mend_surrogates(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains("\\u") {
+        return text.into();
+    }
+    let unit = |s: &str| u16::from_str_radix(s.get(2..6)?, 16).ok().filter(|_| s.starts_with("\\u"));
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < text.len() {
+        let rest = &text[i..];
+        if !rest.starts_with('\\') {
+            let c = rest.chars().next().expect("not at the end");
+            out.push(c);
+            i += c.len_utf8();
+            continue;
+        }
+        match unit(rest) {
+            Some(0xD800..=0xDBFF) if unit(&rest[6..]).is_some_and(|lo| (0xDC00..=0xDFFF).contains(&lo)) => {
+                out.push_str(&rest[..12]);
+                i += 12;
+            }
+            Some(0xD800..=0xDFFF) => {
+                out.push_str("\\ufffd");
+                i += 6;
+            }
+            _ => {
+                // Any other escape, as it is: the backslash and what it escapes.
+                let next = rest[1..].chars().next().map_or(0, char::len_utf8);
+                out.push_str(&rest[..1 + next]);
+                i += 1 + next;
+            }
+        }
+    }
+    out.into()
 }
 
 /// The start of a text, at most `units` UTF-16 code units (as JavaScript's
@@ -299,5 +337,12 @@ mod tests {
         let mut state = crate::State::new();
         crate::handle(r#"{"id": 1, "op": "load", "ext": "clipboard", "key": "history", "text": null}"#, &mut state);
         assert!(HISTORY.0.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn a_lone_surrogate_leaves_the_rest_of_the_history() {
+        let text = r#"[{"type":"text","text":"ok entry","addedAt":1},{"type":"text","text":"bad \ud83d end \\ud800 \ud83d\ude00","addedAt":1}]"#;
+        let titles: Vec<_> = ask("cb ", Some(text)).into_iter().map(|r| r.title).collect();
+        assert_eq!(titles, ["ok entry", "bad \u{fffd} end \\ud800 😀"]);
     }
 }

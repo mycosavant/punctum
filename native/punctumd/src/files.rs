@@ -135,17 +135,13 @@ fn segment_subsequence(text: &str, word: &str) -> bool {
 /// Whether `w` (lower case) starts a word in `name` past its first letter:
 /// after a separator, or at a capital after a small letter.
 fn starts_a_word(name: &str, w: &str) -> bool {
-    let lower = name.to_lowercase();
-    if lower.len() != name.len() {
-        return false; // case folding moved the bytes; the plainer tiers still apply
-    }
-    let bytes: Vec<char> = name.chars().collect();
-    lower.match_indices(w).any(|(i, _)| {
-        let at = name[..i].chars().count();
-        at > 0 && {
-            let (prev, here) = (bytes[at - 1], bytes[at]);
-            !prev.is_alphanumeric() || (prev.is_lowercase() && here.is_uppercase())
-        }
+    // By characters, not bytes: lower-casing can change a character's
+    // length (İ, ẞ), so a byte offset in one isn't one in the other.
+    let chars: Vec<char> = name.chars().collect();
+    (1..chars.len()).any(|at| {
+        let (prev, here) = (chars[at - 1], chars[at]);
+        (!prev.is_alphanumeric() || (prev.is_lowercase() && here.is_uppercase()))
+            && chars[at..].iter().collect::<String>().to_lowercase().starts_with(w)
     })
 }
 
@@ -268,7 +264,7 @@ fn note(title: String) -> Answer {
 pub fn rows(q: &str, entries: &[Entry]) -> Vec<Row> {
     let ws = words(q);
     let mut hits: Vec<(f64, &Entry)> = entries.iter().filter_map(|e| score(e, &ws).map(|s| (s, e))).collect();
-    hits.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    hits.sort_by(|a, b| b.0.total_cmp(&a.0));
     hits.iter().take(LIMIT).enumerate().map(|(n, (_, e))| row(e, n)).collect()
 }
 
@@ -356,5 +352,12 @@ mod tests {
             entries(&["/home/u/a.txt\0/home/u/Docs/\0/etc/x\0/home/u/cut".into(), "/home/u/a.txt\0".into()], "/home/u");
         let rels: Vec<_> = found.iter().map(|e| (e.rel.as_str(), e.dir)).collect();
         assert_eq!(rels, [("a.txt", false), ("Docs", true)]);
+    }
+
+    #[test]
+    fn letters_that_change_length_in_lower_case() {
+        let rels = ["İẞx", "a-ẞx", "x/İnfo.md"];
+        assert_eq!(top("ßx", &rels).len(), 2);
+        assert_eq!(top("info", &rels)[0], "İnfo.md");
     }
 }

@@ -312,8 +312,7 @@ impl Extension for Apps {
 
         hits.sort_by(|x, y| {
             (y.r + y.h)
-                .partial_cmp(&(x.r + x.h))
-                .unwrap_or(Ordering::Equal)
+                .total_cmp(&(x.r + x.h))
                 .then(y.fuzzy.cmp(&x.fuzzy))
                 .then_with(|| locale_cmp(&x.app.name, &y.app.name))
         });

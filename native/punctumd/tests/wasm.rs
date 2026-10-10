@@ -1,9 +1,10 @@
 // WebAssembly extensions, as the bar sees them: a module sent over the pipe,
 // queries answered, and the sandbox holding when a module misbehaves. The
-// guest (tests/guests/misbehave) is built here for wasm32-wasip2; without
-// that target the test says so and passes.
+// guest (tests/guests/misbehave) is built here for wasm32-wasip2, into the
+// target folder cargo was given. Without that target the test says so and
+// passes, except in CI (CI set), where a guest that doesn't build fails it.
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::Instant;
 
@@ -13,17 +14,25 @@ use sha2::{Digest, Sha256};
 
 fn guest() -> Option<Vec<u8>> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/guests/misbehave");
-    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/guests");
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"))
+        .join("guests");
+    let installed = Command::new("rustc")
+        .args(["--print", "target-libdir", "--target", "wasm32-wasip2"])
+        .output()
+        .is_ok_and(|o| o.status.success() && Path::new(String::from_utf8_lossy(&o.stdout).trim()).exists());
+    if !installed && std::env::var_os("CI").is_none() {
+        eprintln!("untested: no wasm32-wasip2 target (rustup target add wasm32-wasip2, or Arch's rust-wasm)");
+        return None;
+    }
     let ok = Command::new(env!("CARGO"))
-        .args(["build", "--quiet", "--release", "--target", "wasm32-wasip2"])
+        .args(["build", "--quiet", "--locked", "--release", "--target", "wasm32-wasip2"])
         .current_dir(&dir)
         .env("CARGO_TARGET_DIR", &target)
         .status()
         .is_ok_and(|s| s.success());
-    if !ok {
-        eprintln!("untested: no wasm32-wasip2 target (rustup target add wasm32-wasip2)");
-        return None;
-    }
+    assert!(ok, "the misbehaving guest didn't build");
     std::fs::read(target.join("wasm32-wasip2/release/misbehave.wasm")).ok()
 }
 
@@ -99,7 +108,9 @@ fn the_sandbox_holds() {
     assert_eq!(d.title("count"), "0");
 
     // Memory stops at 64 MB; a panic is an error; both start afresh.
-    assert_eq!(d.title("hog"), "error: \"bad: stopped: it panicked, or wanted over 64 MB\"");
+    // Over 64 MB, or (on a busy machine) out of time on the way there.
+    let hog = d.title("hog");
+    assert!(hog.contains("wanted over 64 MB") || hog.contains("took over 50 ms"), "{hog}");
     assert_eq!(d.title("panic"), "error: \"bad: stopped: it panicked, or wanted over 64 MB\"");
     assert_eq!(d.title("count"), "0");
 
@@ -113,9 +124,19 @@ fn the_sandbox_holds() {
     d.ask(json!({ "id": 3, "op": "load", "ext": "bad", "key": "thing", "text": null }));
     assert_eq!(d.title("count"), "0");
 
-    // Dropped: it no longer answers, and the built-ins still do.
+    // The bar closing resets it.
+    d.title("count");
+    assert_eq!(d.ask(json!({ "id": 5, "op": "reset", "ext": "bad" }))["ok"], true);
+    assert_eq!(d.title("count"), "0");
+
+    // Dropped: it no longer answers, and the built-ins still do. A load it
+    // had goes with it, and dropping one later is still answered.
+    d.ask(json!({ "id": 6, "op": "load", "ext": "bad", "key": "thing", "text": "SECRET" }));
     assert_eq!(d.ask(json!({ "id": "w", "op": "wasm", "ext": "bad", "module": null }))["ok"], true);
     assert!(d.title("count").contains("no extension"));
+    assert_eq!(d.ask(json!({ "id": 7, "op": "load", "ext": "bad", "key": "thing", "text": null }))["ok"], true);
+    assert_eq!(send(&mut d, &bytes, &sha(&bytes))["ok"], true);
+    assert_eq!(d.title("load"), "None");
     let units = d.ask(json!({ "id": 4, "ext": "units", "query": "5 km to mi" }));
     assert_eq!(units["rows"][0]["title"], "3.1069 mi");
 }

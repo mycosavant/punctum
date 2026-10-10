@@ -6,11 +6,19 @@ fn main() {
     // Panics are caught per request and reported in the reply; keep them off
     // stderr, which the bar logs.
     std::panic::set_hook(Box::new(|_| {}));
-    let stdin = io::stdin().lock();
+    let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     let mut state = punctumd::State::new();
-    for line in stdin.lines() {
-        let Ok(line) = line else { break };
+    let mut raw = Vec::new();
+    loop {
+        raw.clear();
+        match stdin.read_until(b'\n', &mut raw) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        // A line that isn't UTF-8 is answered (with an error, as JSON can't
+        // hold it), not the end of the daemon.
+        let line = String::from_utf8_lossy(&raw);
         if line.trim().is_empty() {
             continue;
         }

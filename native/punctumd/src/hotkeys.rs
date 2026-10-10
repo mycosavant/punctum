@@ -249,7 +249,7 @@ impl Extension for Hotkeys {
             .map(|b| (rank(b, &q, &qw), b))
             .filter(|(r, _)| *r >= 2.0)
             .collect();
-        hits.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap().then(a.1.order.cmp(&b.1.order)));
+        hits.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.order.cmp(&b.1.order)));
         hits.iter()
             .take(ROOT_LIMIT)
             .enumerate()

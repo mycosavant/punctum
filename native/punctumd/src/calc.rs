@@ -415,7 +415,10 @@ pub fn evaluate(src: &str) -> Option<(f64, bool)> {
         return None;
     }
     let tokens = tokenize(&text)?;
-    if tokens.is_empty() {
+    // The parser recurses about once a token; past this, a pasted wall of
+    // brackets or minus signs would overflow the stack and take the whole
+    // daemon with it. No sum anyone types is this long.
+    if tokens.is_empty() || tokens.len() > MAX_TOKENS {
         return None;
     }
     let mut p = Parser { tokens, pos: 0, saw_operation: false };
@@ -426,10 +429,34 @@ pub fn evaluate(src: &str) -> Option<(f64, bool)> {
     Some((result.v, !p.saw_operation))
 }
 
+const MAX_TOKENS: usize = 512;
+/// fend recurses without a limit and reads a long number without checking
+/// its deadline, so it's only given what a person would type.
+const FEND_MAX_CHARS: usize = 160;
+const FEND_MAX_DEPTH: usize = 32;
+
+fn nesting(text: &str) -> usize {
+    let (mut depth, mut most) = (0usize, 0usize);
+    for c in text.chars() {
+        match c {
+            '(' | '[' | '{' => {
+                depth += 1;
+                most = most.max(depth);
+            }
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    most
+}
+
 /// What fend makes of a text the parser can't read: a plain number, or None.
 /// Given 50 ms, so `9^9^9` can't hold up the keystroke.
 fn fend(text: &str) -> Option<String> {
-    if !text.bytes().any(|b| b.is_ascii_digit()) {
+    if !text.bytes().any(|b| b.is_ascii_digit())
+        || text.chars().count() > FEND_MAX_CHARS
+        || nesting(text) > FEND_MAX_DEPTH
+    {
         return None;
     }
     struct Deadline(Instant);
@@ -560,5 +587,16 @@ mod tests {
         assert!(ask("5 km to mi").is_empty());
         assert!(ask("100 usd to eur").is_empty());
         assert!(ask("today").is_empty());
+    }
+
+    #[test]
+    fn walls_of_brackets_and_long_numbers_answer_nothing_quickly() {
+        let t = std::time::Instant::now();
+        assert!(ask(&"(".repeat(3500)).is_empty());
+        assert!(ask(&format!("{}1+1{}", "(".repeat(50_000), ")".repeat(50_000))).is_empty());
+        assert!(ask(&format!("{}1", "-".repeat(100_000))).is_empty());
+        assert!(ask(&format!("{} + 1x", "1".repeat(100_000))).is_empty());
+        assert!(t.elapsed().as_secs() < 2, "{:?}", t.elapsed());
+        assert_eq!(title("((((1+2))))"), "3");
     }
 }

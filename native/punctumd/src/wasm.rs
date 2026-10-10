@@ -88,7 +88,13 @@ fn host() -> Host {
         // arguments, no sockets; stdin empty, stdout and stderr discarded.
         wasi: WasiCtx::builder().build(),
         table: ResourceTable::new(),
-        limits: StoreLimitsBuilder::new().memory_size(MEMORY).instances(16).tables(16).memories(4).build(),
+        limits: StoreLimitsBuilder::new()
+            .memory_size(MEMORY)
+            .memories(1)
+            .table_elements(100_000)
+            .tables(16)
+            .instances(16)
+            .build(),
         loads: HashMap::new(),
         needs: Vec::new(),
     }
@@ -192,31 +198,42 @@ impl Module {
 
 fn action(a: Action) -> Value {
     match a {
-        Action::Open(t) => json!({ "kind": "open", "target": t, "label": "open" }),
-        Action::Copy(t) => json!({ "kind": "copy", "target": t, "label": "copy" }),
-        Action::Paste(t) => json!({ "kind": "paste", "target": t, "label": "paste" }),
+        Action::Open(t) => json!({ "kind": "open", "target": cap(t, 8192), "label": "open" }),
+        Action::Copy(t) => json!({ "kind": "copy", "target": cap(t, TEXT), "label": "copy" }),
+        Action::Paste(t) => json!({ "kind": "paste", "target": cap(t, TEXT), "label": "paste" }),
         Action::Run(n) => {
-            let mut v = json!({ "kind": "action", "name": n.name, "args": n.args });
+            let args: Vec<String> = n.args.into_iter().take(64).map(|a| cap(a, 8192)).collect();
+            let mut v = json!({ "kind": "action", "name": cap(n.name, 32), "args": args });
             if let Some(input) = n.input {
-                v["input"] = input.into();
+                v["input"] = cap(input, 65536).into();
             }
             v
         }
     }
 }
 
+/// A string cut to `n` characters: a module's rows are shown, not trusted
+/// to be small.
+fn cap(s: String, n: usize) -> String {
+    if s.chars().count() <= n { s } else { s.chars().take(n).collect() }
+}
+
+/// What a row's action may carry: the bar's own limit for copied and pasted
+/// text, and less for anything else.
+const TEXT: usize = 1 << 20;
+
 fn row(r: punctum::extension::types::Row) -> Row {
     Row {
-        title: r.title,
-        subtitle: r.subtitle,
-        icon: r.icon,
+        title: cap(r.title, 500),
+        subtitle: cap(r.subtitle, 500),
+        icon: cap(r.icon, 8),
         score: r.score,
-        copy: r.copy,
+        copy: cap(r.copy, TEXT),
         run: r.run.map(action),
         alt: r.alt.map(action),
-        swatch: r.swatch,
-        group: r.group,
-        complete: r.complete,
+        swatch: r.swatch.map(|s| cap(s, 16)),
+        group: r.group.map(|s| cap(s, 60)),
+        complete: r.complete.map(|s| cap(s, 500)),
         ..Default::default()
     }
 }

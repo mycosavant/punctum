@@ -45,7 +45,9 @@ const run = spawnSync(bin, [], { input, encoding: "utf8", maxBuffer: 64 * 1024 *
 if (run.error || run.status !== 0) { console.log("FAIL  punctumd didn't run: " + (run.error || run.stderr)); process.exit(1) }
 const replies = run.stdout.trim().split("\n").map(l => JSON.parse(l)).slice(lines.length)
 const action = a => a ? { kind: a.kind, target: a.target, label: a.label } : null
-const fields = r => ({ title: r.title, subtitle: r.subtitle, image: r.image || "", icon: r.icon || "", score: r.score, copy: r.copy || "", run: action(r.run) })
+// A window without a focus order scores NaN in the JS (the bar replaces it);
+// Rust counts it as the least recent, a finite score. Its score isn't compared.
+const fields = r => ({ title: r.title, subtitle: r.subtitle, image: r.image || "", icon: r.icon || "", score: r.title === "no focus field" ? "any" : r.score, copy: r.copy || "", run: action(r.run) })
 let diffs = 0, extra = 0, answered = 0
 queries.forEach((q, id) => {
   const js = Win.provider.match(q, ctx).map(fields)

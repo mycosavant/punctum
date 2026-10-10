@@ -80,8 +80,11 @@ fn zone(name: &str) -> Option<Zone> {
     TimeZone::get(name).ok().map(|tz| Zone { name: name.to_string(), tz })
 }
 
+/// The system's zone. One with no IANA name (a copied /etc/localtime, TZ as
+/// a file or a POSIX rule) keeps its rules and is called Local, rather than
+/// being taken for UTC.
 fn local(ctx: &Context) -> Zone {
-    Zone { name: ctx.local_zone.iana_name().unwrap_or("UTC").to_string(), tz: ctx.local_zone.clone() }
+    Zone { name: ctx.local_zone.iana_name().unwrap_or("Local").to_string(), tz: ctx.local_zone.clone() }
 }
 
 /// Your zone: "home" in the config, else the system's.
@@ -186,17 +189,22 @@ fn zone_row(z: &Zone, now: Timestamp, ctx: &Context, score: f64) -> Row {
 fn match_zones(q: &str, ctx: &Context) -> Option<Vec<Row>> {
     let now = ctx.now;
     if CLOCK_WORDS.is_match(q) {
-        let home = ctx.str_setting("home").map(str::to_string).unwrap_or_else(|| local(ctx).name);
+        let home = match ctx.str_setting("home") {
+            Some(name) => zone(name),
+            None => Some(local(ctx)),
+        };
+        let home_name = ctx.str_setting("home").map(str::to_string).unwrap_or_else(|| local(ctx).name);
         let extra = ctx.settings.get("zones").and_then(|z| z.as_array()).cloned().unwrap_or_default();
-        let names: Vec<String> =
-            std::iter::once(home).chain(extra.iter().filter_map(|z| z.as_str().map(str::to_string))).collect();
         let mut rows = Vec::new();
-        for (i, name) in names.iter().enumerate() {
-            if i > 0 && *name == names[0] {
+        if let Some(z) = home {
+            rows.push(zone_row(&z, now, ctx, 85.0));
+        }
+        for (i, name) in extra.iter().filter_map(|z| z.as_str()).enumerate() {
+            if name == home_name {
                 continue;
             }
             if let Some(z) = zone(name) {
-                rows.push(zone_row(&z, now, ctx, 85.0 - i as f64));
+                rows.push(zone_row(&z, now, ctx, 85.0 - (i + 1) as f64));
             }
         }
         return Some(rows);

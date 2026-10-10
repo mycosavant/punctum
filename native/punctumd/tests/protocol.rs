@@ -96,3 +96,23 @@ fn an_answer_says_which_loads_it_needs_and_uses_them_once_sent() {
     assert!(r[5]["error"].is_string() && r[6]["error"].is_string());
     assert!(r[7].get("needs").is_none());
 }
+
+#[test]
+fn a_line_that_is_not_utf8_or_not_a_request_is_answered_and_the_daemon_goes_on() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_punctumd"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("punctumd starts");
+    let mut input = b"{\"id\":1,\"ext\":\"math\",\"query\":\"1+\xff\"}\n".to_vec();
+    input
+        .extend_from_slice(b"{\"id\":7,\"ext\":\"math\",\"query\":5}\n{\"id\":8,\"ext\":\"math\",\"query\":\"2+2\"}\n");
+    child.stdin.take().unwrap().write_all(&input).unwrap();
+    let out = child.wait_with_output().unwrap();
+    let r: Vec<Value> =
+        String::from_utf8(out.stdout).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(r.len(), 3);
+    assert_eq!(r[1]["id"], 7);
+    assert!(r[1]["error"].is_string());
+    assert_eq!(r[2]["rows"][0]["title"], "4");
+}

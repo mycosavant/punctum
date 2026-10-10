@@ -119,12 +119,7 @@ impl Extension for Processes {
                 format!("No process matches \"{needle}\"")
             });
         }
-        hits.sort_by(|a, b| {
-            b.0.partial_cmp(&a.0)
-                .unwrap()
-                .then(b.1.cpu.partial_cmp(&a.1.cpu).unwrap_or(std::cmp::Ordering::Equal))
-                .then(b.1.rss.partial_cmp(&a.1.rss).unwrap_or(std::cmp::Ordering::Equal))
-        });
+        hits.sort_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cpu.total_cmp(&a.1.cpu)).then(b.1.rss.total_cmp(&a.1.rss)));
 
         let mut out = Vec::new();
         // Several processes with the name you typed (browsers, electron

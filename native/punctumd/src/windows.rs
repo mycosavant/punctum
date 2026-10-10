@@ -42,7 +42,9 @@ struct Window {
 
 impl Window {
     fn focus(&self) -> f64 {
-        self.focus.unwrap_or(f64::NAN)
+        // A window the bar sent without a focus order counts as the least
+        // recent: finite, so sorting and scores stay well-defined.
+        self.focus.filter(|f| f.is_finite()).unwrap_or(1e6)
     }
 }
 
@@ -138,9 +140,7 @@ impl Extension for Windows {
                     fuzzy.push((w, d));
                 }
             }
-            let by_focus = |a: &(&Window, Described), b: &(&Window, Described)| {
-                (a.0.focus() - b.0.focus()).partial_cmp(&0.0).unwrap_or(std::cmp::Ordering::Equal)
-            };
+            let by_focus = |a: &(&Window, Described), b: &(&Window, Described)| a.0.focus().total_cmp(&b.0.focus());
             picked.sort_by(by_focus);
             fuzzy.sort_by(by_focus);
             picked.extend(fuzzy);
@@ -184,7 +184,7 @@ impl Extension for Windows {
                 out.push(row(w, &info, score - w.focus() * 0.001));
             }
         }
-        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| b.score.total_cmp(&a.score));
         out.truncate(LIMIT);
         out.into()
     }
