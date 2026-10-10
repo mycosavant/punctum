@@ -74,7 +74,7 @@ var provider = {
   match: function(query, ctx) {
     // "pick ": just the picker; what was picked before is listed by the Rust one.
     if (/^\s*pick\s/i.test(query)) return [{ title: "Pick a colour from the screen", subtitle: "Click any pixel; its hex is copied", icon: "󰈊", score: 97, copy: "",
-      run: { kind: "argv", target: [(ctx.dir || "") + "/pick", "--copy"], label: "pick" } }]
+      run: { kind: "argv", target: [(ctx.dir || "") + "/pick", "--then", "copy+show"], label: "pick" } }]
     var c = parse(query)
     if (!c) return []
     return c.values.map(function(v, i) {

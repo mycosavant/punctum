@@ -47,8 +47,8 @@ Saikomantisu.
 | `full screen`, `super f`, `keys `, `keys screenshot` | Your keybindings, with their keys. Enter runs one, as pressing the keys would. With [native extensions](docs/native.md), also by letters in order: `keys fllscrn` |
 | `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
 | `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one. With [native extensions](docs/native.md), also `hsl()`, `oklch()` and the other CSS colour functions, an OKLCH row, and more forms if you list them in `"colors": {"formats": [...]}` |
-| `pick`, `pick ` | Pick a colour from the screen. With native extensions its hex is copied, the bar opens on it with its forms, and `pick ` lists what you picked |
-| `#fff on #333`, `contrast #777 #fff` | With native extensions, the WCAG contrast ratio of two colours and whether text and large text pass |
+| `pick`, `contrast picker`, `pick ` | Pick a colour from the screen. With native extensions, Enter and Shift+Enter each copy it (in the form you choose), open the bar on its forms and contrast, or both; the contrast picker takes a text colour and a background. `pick ` lists what you picked and copies it as CSS, SCSS, JSON, Tailwind or a GIMP palette |
+| `#fff on #333`, `contrast #777 #fff` | With native extensions, the WCAG contrast ratio of two colours and whether text and large text pass. A single colour shows its contrast on white and black |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
 | `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
 | `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
@@ -151,7 +151,7 @@ off, and `?extensions` says which command it needs.
 - `systemd-run` and `omarchy-reminder`: reminders and alarms
 - `omarchy-menu-keybindings`: the keybinding list and running a binding
 - `omarchy-clipboard-paste-file` and `wtype`: pasting clipboard images and text
-- `hyprpicker`: Pick a colour from the screen (with native extensions, `extensions/colors/pick` runs it and keeps the last 30 colours in `~/.local/state/punctum/colors`)
+- `hyprpicker`: Pick a colour from the screen (with native extensions, `extensions/colors/pick` runs it, keeps the last 30 colours in `~/.local/state/punctum/colors`, and copies with `wl-copy`, saying so with `notify-send`)
 
 ### Network, files and processes
 

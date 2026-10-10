@@ -1,48 +1,101 @@
 #!/bin/bash
 # Pick a colour from the screen, for Punctum's colour extension: its
-# manifest's "pick" and "pick_only" actions and its "picks" load.
+# manifest's "pick" and "pick_contrast" actions and its "picks" load.
 #
-#   pick [--copy]     hyprpicker; the colour goes into the history (and with
-#                     --copy the clipboard), then the bar opens on it, showing
-#                     its forms
+#   pick --then copy|show|copy+show [--format <form>]
+#                     hyprpicker, then copy the colour (in that form: hex,
+#                     rgb, hsl, oklch, … as the bar names them), open the bar
+#                     on it, or both
+#   pick --contrast   pick the text colour, then the background, and open
+#                     the bar on their contrast
 #   pick --history    the history, newest first: "<unix time> #rrggbb" lines
 #
-# The history is ${XDG_STATE_HOME:-~/.local/state}/punctum/colors, the last
-# 30 colours picked, each once. Esc in hyprpicker picks nothing.
+# Every colour picked goes into ${XDG_STATE_HOME:-~/.local/state}/punctum/colors,
+# the last 30, each once. Esc in hyprpicker picks nothing and does nothing.
 set -u
 
 state="${XDG_STATE_HOME:-$HOME/.local/state}/punctum"
 file="$state/colors"
+plugin=$(cd -- "$(dirname -- "$0")/../.." && pwd)
 
-case "${1:-}" in
-  --history)
-    [ -f "$file" ] && head -c 65536 -- "$file"
-    exit 0
-    ;;
-  "" | --copy) ;;
-  *)
-    echo "usage: pick [--copy] | pick --history" >&2
-    exit 2
-    ;;
-esac
+then=copy+show
+format=hex
+contrast=0
+while (($#)); do
+  case "$1" in
+    --history)
+      [ -f "$file" ] && head -c 65536 -- "$file"
+      exit 0
+      ;;
+    --then) then=${2:-}; shift ;;
+    --format) format=${2:-}; shift ;;
+    --contrast) contrast=1 ;;
+    *) echo "usage: pick --then copy|show|copy+show [--format <form>] | --contrast | --history" >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$then" in copy | show | copy+show) ;; *) then=copy+show ;; esac
+[[ $format =~ ^[a-z0-9]{1,8}$ ]] || format=hex
+
+# One colour from the screen as #rrggbb, or nothing. hyprpicker prints it
+# through its log, which --quiet silences, so it isn't passed.
+pick_one() {
+  hyprpicker --format=hex --lowercase-hex --no-fancy 2>/dev/null | grep -oiE '#[0-9a-f]{6}' | tail -n 1 | tr 'A-F' 'a-f'
+}
+
+remember() {
+  mkdir -p -- "$state"
+  {
+    printf '%s %s\n' "$(date +%s)" "$1"
+    [ -f "$file" ] && grep -v -- " $1\$" "$file"
+  } | head -n 30 >"$file.tmp" && mv -f -- "$file.tmp" "$file"
+}
+
+# The bar, opened on a query. Its id is the plugin's own.
+show() {
+  local id
+  id=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$plugin/manifest.json" 2>/dev/null)
+  [[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || id=io.github.mycosavant.punctum
+  omarchy-shell -q shell summon "$id" "{\"query\": \"$1\"}"
+}
+
+# The colour in the form the bar would show, from punctumd (found where the
+# bar looks for it); the hex if it isn't there or doesn't know the form.
+in_form() {
+  local bin text=""
+  [ "$format" = hex ] && { printf '%s' "$1"; return; }
+  for bin in "$plugin/bin/punctumd" "$plugin/target/release/punctumd" "$(command -v punctumd)"; do
+    [ -x "$bin" ] || continue
+    text=$(printf '{"id":1,"ext":"colors","query":"%s","settings":{"formats":["%s"],"contrast":false}}\n' "$1" "$format" | "$bin" 2>/dev/null |
+      python3 -I -c 'import json, sys; r = json.loads(sys.stdin.readline()); print(r["rows"][0]["copy"] if r.get("rows") else "")' 2>/dev/null)
+    break
+  done
+  printf '%s' "${text:-$1}"
+}
 
 # The bar's card closes as Enter runs this; let it go before the screen is
 # frozen for picking.
 sleep 0.2
-color=$(hyprpicker --format=hex --lowercase-hex --quiet --no-fancy 2>/dev/null | tail -n 1)
-color=${color,,}
-[[ $color =~ ^#[0-9a-f]{6}$ ]] || exit 0
 
-mkdir -p -- "$state"
-{
-  printf '%s %s\n' "$(date +%s)" "$color"
-  [ -f "$file" ] && grep -v -- " $color\$" "$file"
-} | head -n 30 >"$file.tmp" && mv -f -- "$file.tmp" "$file"
+if ((contrast)); then
+  fg=$(pick_one)
+  [ -n "$fg" ] || exit 0
+  remember "$fg"
+  notify-send -a Punctum -t 2500 "Text colour $fg" "Now click the background" 2>/dev/null
+  bg=$(pick_one)
+  [ -n "$bg" ] || exit 0
+  remember "$bg"
+  show "$fg on $bg"
+  exit 0
+fi
 
-[ "${1:-}" = --copy ] && printf '%s' "$color" | wl-copy
-
-# Back to the bar, on the colour. Its id is the plugin's own.
-plugin=$(cd -- "$(dirname -- "$0")/../.." && pwd)
-id=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$plugin/manifest.json" 2>/dev/null)
-[[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || id=io.github.mycosavant.punctum
-omarchy-shell -q shell summon "$id" "{\"query\": \"$color\"}"
+color=$(pick_one)
+[ -n "$color" ] || exit 0
+remember "$color"
+if [ "$then" != show ]; then
+  copied=$(in_form "$color")
+  printf '%s' "$copied" | wl-copy
+  [ "$then" = copy ] && notify-send -a Punctum -t 2500 "Copied $copied" 2>/dev/null
+fi
+[ "$then" != copy ] && show "$color"
+exit 0

@@ -2,8 +2,8 @@
   "schema": 1,
   "id": "colors",
   "name": "Colour",
-  "version": "1.1.0",
-  "description": "#ff6644, #fff on #333, pick: a colour's forms, contrast, and a screen colour picker",
+  "version": "1.2.0",
+  "description": "#ff6644, #fff on #333, pick: a colour's forms and contrast, a screen colour picker, palette exports",
   "icon": "󰏘",
   "type": "native",
   "entry": "provider.js",
@@ -17,28 +17,112 @@
     "icon": "󰈊"
   },
   "defaults": {
-    "formats": ["hex", "rgb", "hsl", "oklch"],
-    "copyOnPick": true
+    "formats": [
+      "hex",
+      "rgb",
+      "hsl",
+      "oklch"
+    ],
+    "contrast": true,
+    "afterPick": "copy+show",
+    "afterPickAlt": "copy",
+    "copyFormat": "hex",
+    "exports": [
+      "css",
+      "scss",
+      "json",
+      "tailwind",
+      "gpl"
+    ]
   },
   "help": [
-    {"id": "colors", "title": "Colours", "about": "A hex, rgb(), hsl() or oklch() colour shows a swatch and its other forms; \"formats\" picks which (hex, rgb, hsl, oklch, hsv, hwb, lab, lch, oklab, cmyk, vec4, decimal, 0x)", "examples": ["#ff6644", "rgb(40, 120, 200)", "hsl(210 70% 50%)"]},
-    {"id": "contrast", "title": "Contrast", "about": "Two colours on each other: their WCAG contrast ratio, and whether text and large text pass", "examples": ["#fff on #333", "contrast #777 #fff"]},
-    {"id": "picker", "title": "Colour picker", "about": "Click any pixel on screen; its hex is copied and the bar opens on it. pick and a space lists what you picked",
-     "examples": [{"q": "pick", "note": "Pick a colour from the screen"}, {"q": "pick ", "note": "What you picked, newest first; Tab shows a colour's forms"}]}
+    {
+      "id": "colors",
+      "title": "Colours",
+      "about": "A hex, rgb(), hsl() or oklch() colour shows a swatch, its forms and its contrast on white and black. \"formats\" picks the forms (hex, rgb, hsl, oklch, hsv, hwb, lab, lch, oklab, cmyk, vec4, decimal, 0x); \"contrast\": false leaves out the contrast",
+      "examples": [
+        "#ff6644",
+        "rgb(40, 120, 200)",
+        "hsl(210 70% 50%)"
+      ]
+    },
+    {
+      "id": "contrast",
+      "title": "Contrast",
+      "about": "Two colours on each other: their WCAG contrast ratio, and whether text and large text pass",
+      "examples": [
+        "#fff on #333",
+        "contrast #777 #fff"
+      ]
+    },
+    {
+      "id": "picker",
+      "title": "Colour picker",
+      "about": "Click any pixel on screen. Enter does \"afterPick\" (copy+show), Shift+Enter \"afterPickAlt\" (copy): copy it in \"copyFormat\", open the bar on it, or both. pick and a space lists what you picked and copies it as CSS, SCSS, JSON, Tailwind or a GIMP palette (\"exports\")",
+      "examples": [
+        {
+          "q": "pick",
+          "note": "Pick a colour from the screen"
+        },
+        {
+          "q": "contrast picker",
+          "note": "Pick a text colour and a background"
+        },
+        {
+          "q": "pick ",
+          "note": "What you picked, and exports"
+        }
+      ]
+    }
   ],
   "commands": [
-    {"title": "Pick a colour from the screen", "keywords": "color colour picker eyedropper hex hyprpicker", "text": "Click any pixel; its hex is copied", "icon": "󰈊", "complete": "pick "}
+    {
+      "title": "Pick a colour from the screen",
+      "keywords": "color colour picker eyedropper hex hyprpicker",
+      "text": "Click any pixel",
+      "icon": "󰈊",
+      "complete": "pick "
+    }
   ],
   "loads": {
-    "picks": {"command": ["{dir}/pick", "--history"]}
+    "picks": {
+      "command": [
+        "{dir}/pick",
+        "--history"
+      ]
+    }
   },
   "actions": {
-    "pick": {"command": ["{dir}/pick", "--copy"], "label": "pick"},
-    "pick_only": {"command": ["{dir}/pick"], "label": "pick"}
+    "pick": {
+      "command": [
+        "{dir}/pick",
+        "--then",
+        "{1}",
+        "--format",
+        "{2}"
+      ],
+      "label": "pick"
+    },
+    "pick_contrast": {
+      "command": [
+        "{dir}/pick",
+        "--contrast"
+      ],
+      "label": "pick two"
+    }
   },
   "permissions": {
-    "runs": ["hyprpicker, on Enter", "wl-copy (with \"copyOnPick\")", "omarchy-shell, to open the bar on the colour"],
-    "writes": ["~/.local/state/punctum/colors (the last 30 colours picked)"],
-    "reads": ["~/.local/state/punctum/colors"]
+    "runs": [
+      "hyprpicker, on Enter",
+      "wl-copy and notify-send (when a pick copies)",
+      "omarchy-shell, to open the bar on the colour",
+      "punctumd, to put a pick in a form other than hex"
+    ],
+    "writes": [
+      "~/.local/state/punctum/colors (the last 30 colours picked)"
+    ],
+    "reads": [
+      "~/.local/state/punctum/colors"
+    ]
   }
 }

@@ -18,11 +18,18 @@
 //! Two colours "on" (or "vs") each other give their WCAG contrast ratio and
 //! the levels it passes: `#fff on #333`, `contrast #777 #fff`.
 //!
+//! A colour also shows its contrast on white and on black ("contrast": false
+//! leaves them out).
+//!
 //! "pick" finds the screen colour picker, PowerToys-style: Enter runs the
 //! manifest's "pick" action (the `pick` script beside the manifest), which
-//! runs hyprpicker, copies the hex (unless "copyOnPick" is false), keeps it
-//! in a short history and opens the bar on it, showing these forms. `pick `
-//! lists that history, the manifest's "picks" load.
+//! runs hyprpicker, keeps the colour in a short history, and then does what
+//! "afterPick" says: "copy" (in the "copyFormat" form), "show" (the bar
+//! opens on it) or "copy+show". Shift+Enter does "afterPickAlt". "Pick two
+//! colours for contrast" picks a text colour and a background and opens the
+//! bar on their contrast. `pick ` lists the history (the manifest's "picks"
+//! load) and copies it as the "exports" you keep: CSS or SCSS variables,
+//! JSON, Tailwind colours, a GIMP palette.
 
 use std::sync::LazyLock;
 
@@ -221,23 +228,29 @@ fn luminance([r, g, b]: [u8; 3]) -> f64 {
     0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 }
 
-/// "#fff on #333": the contrast ratio and the WCAG 2 levels it passes. The
-/// ratio is shown cut, not rounded, so 4.499 never reads as 4.5.
+/// The WCAG contrast ratio of two colours, and as shown: cut, not rounded,
+/// so 4.499 never reads as 4.5.
+fn ratio(fg: [u8; 3], bg: [u8; 3]) -> (f64, String) {
+    let (a, b) = (luminance(fg), luminance(bg));
+    let r = (a.max(b) + 0.05) / (a.min(b) + 0.05);
+    (r, fixed((r * 100.0).floor() / 100.0, 2))
+}
+
+fn level(ratio: f64, aaa: f64, aa: f64) -> &'static str {
+    if ratio >= aaa {
+        "AAA"
+    } else if ratio >= aa {
+        "AA"
+    } else {
+        "fails"
+    }
+}
+
+/// "#fff on #333": the contrast ratio and the WCAG 2 levels it passes.
 fn contrast(query: &str) -> Option<Row> {
     let m = CONTRAST.captures(query).or_else(|| CONTRAST_PAIR.captures(query))?;
     let (fg, bg) = (parse(&m[1])?.0, parse(&m[2])?.0);
-    let (a, b) = (luminance(fg), luminance(bg));
-    let ratio = (a.max(b) + 0.05) / (a.min(b) + 0.05);
-    let shown = fixed((ratio * 100.0).floor() / 100.0, 2);
-    let level = |aaa: f64, aa: f64| {
-        if ratio >= aaa {
-            "AAA"
-        } else if ratio >= aa {
-            "AA"
-        } else {
-            "fails"
-        }
-    };
+    let (r, shown) = ratio(fg, bg);
     let hex = |c: [u8; 3]| format!("#{}{}{}", hex2(c[0]), hex2(c[1]), hex2(c[2]));
     Some(Row {
         title: format!("{shown}:1"),
@@ -245,8 +258,8 @@ fn contrast(query: &str) -> Option<Row> {
             "Contrast of {} on {} · text {} · large text {}",
             hex(fg).to_uppercase(),
             hex(bg).to_uppercase(),
-            level(7.0, 4.5),
-            level(4.5, 3.0)
+            level(r, 7.0, 4.5),
+            level(r, 4.5, 3.0)
         ),
         score: 92.0,
         copy: shown,
@@ -257,42 +270,116 @@ fn contrast(query: &str) -> Option<Row> {
 
 const PICK_TITLE: &str = "Pick a colour from the screen";
 const PICK_WORDS: &str = "color colour picker eyedropper hex hyprpicker";
+const CONTRAST_TITLE: &str = "Pick two colours for contrast";
+const CONTRAST_WORDS: &str = "color colour picker contrast accessibility wcag a11y";
+
+/// What happens after a pick: "copy", "show" (the bar opens on the colour)
+/// or "copy+show". Enter does "afterPick", Shift+Enter "afterPickAlt".
+fn after(ctx: &Context, key: &str, default: &'static str) -> &'static str {
+    match ctx.str_setting(key) {
+        Some("copy") => "copy",
+        Some("show") => "show",
+        Some("copy+show") => "copy+show",
+        _ => default,
+    }
+}
+
+fn after_words(then: &str, format: &str) -> String {
+    match then {
+        "copy" => format!("copies its {format}"),
+        "show" => "shows its forms".into(),
+        _ => format!("copies its {format} and shows its forms"),
+    }
+}
+
+/// The form a pick copies: one of "formats"' names; hex unless you say.
+fn copy_format(ctx: &Context) -> String {
+    let f = ctx.str_setting("copyFormat").unwrap_or("hex").to_lowercase();
+    if form(&f, [0, 0, 0], &csscolorparser::Color::from_rgba8(0, 0, 0, 255)).is_some() { f } else { "hex".into() }
+}
 
 fn picker(ctx: &Context, score: f64) -> Row {
-    let copies = ctx.settings.get("copyOnPick").and_then(Value::as_bool) != Some(false);
+    let (main, alt) = (after(ctx, "afterPick", "copy+show"), after(ctx, "afterPickAlt", "copy"));
+    let format = copy_format(ctx);
+    let action = |then: &str| json!({ "kind": "action", "name": "pick", "args": [then, format] });
     Row {
         title: PICK_TITLE.into(),
-        subtitle: if copies {
-            "Click any pixel; its hex is copied and its forms shown".into()
-        } else {
-            "Click any pixel to see its forms".into()
-        },
+        subtitle: format!(
+            "Click any pixel: Enter {} · Shift+Enter {}",
+            after_words(main, &format),
+            after_words(alt, &format)
+        ),
         icon: "󰈊".into(),
         score,
         group: Some("Commands".into()),
-        run: Some(json!({ "kind": "action", "name": if copies { "pick" } else { "pick_only" } })),
+        run: Some(action(main)),
+        alt: (alt != main).then(|| action(alt)),
         ..Default::default()
     }
 }
 
-/// "pick ": the picker, then the colours picked before, newest first.
+fn contrast_picker(score: f64) -> Row {
+    Row {
+        title: CONTRAST_TITLE.into(),
+        subtitle: "Click the text colour, then the background: their WCAG contrast".into(),
+        icon: "󰈊".into(),
+        score,
+        group: Some("Commands".into()),
+        run: Some(json!({ "kind": "action", "name": "pick_contrast" })),
+        ..Default::default()
+    }
+}
+
+/// The picked colours, copied as one of the "exports".
+fn export(kind: &str, colors: &[[u8; 3]]) -> Option<(&'static str, String)> {
+    let hex = |c: &[u8; 3]| format!("#{}{}{}", hex2(c[0]), hex2(c[1]), hex2(c[2]));
+    let each =
+        |f: &dyn Fn(usize, &[u8; 3]) -> String| colors.iter().enumerate().map(|(i, c)| f(i + 1, c)).collect::<Vec<_>>();
+    Some(match kind {
+        "css" => (
+            "CSS variables",
+            format!(":root {{\n{}\n}}\n", each(&|i, c| format!("  --picked-{i}: {};", hex(c))).join("\n")),
+        ),
+        "scss" => ("SCSS variables", each(&|i, c| format!("$picked-{i}: {};", hex(c))).join("\n") + "\n"),
+        "json" => ("JSON", serde_json::to_string_pretty(&colors.iter().map(hex).collect::<Vec<_>>()).ok()? + "\n"),
+        "tailwind" => (
+            "Tailwind colours",
+            format!("colors: {{\n{}\n}}\n", each(&|i, c| format!("  'picked-{i}': '{}',", hex(c))).join("\n")),
+        ),
+        "gpl" => (
+            "a GIMP / Inkscape palette",
+            format!(
+                "GIMP Palette\nName: Punctum picks\n#\n{}\n",
+                each(&|i, c| format!("{:3} {:3} {:3}\tpicked-{i} {}", c[0], c[1], c[2], hex(c))).join("\n")
+            ),
+        ),
+        _ => return None,
+    })
+}
+
+const DEFAULT_EXPORTS: [&str; 5] = ["css", "scss", "json", "tailwind", "gpl"];
+
+/// "pick ": the pickers, the colours picked before (newest first), and
+/// those colours as the "exports" you keep.
 fn picked(ctx: &Context, filter: &str) -> Answer {
-    let mut rows = vec![picker(ctx, 97.0)];
+    let mut rows = vec![picker(ctx, 97.0), contrast_picker(96.9)];
     let text = ctx.load("picks").map_or("", |l| l.text.as_str());
     let now = ctx.now.as_millisecond() as f64;
     let filter = filter.trim().trim_start_matches('#').to_lowercase();
+    let mut colors: Vec<[u8; 3]> = Vec::new();
     for line in text.lines() {
         let Some((when, hex)) = line.split_once(' ') else { continue };
         let Some(rgb) = from_hex(hex) else { continue };
-        if !hex.starts_with('#') || !hex[1..].contains(filter.as_str()) || rows.len() > 12 {
+        if !hex.starts_with('#') || !hex[1..].contains(filter.as_str()) || colors.len() >= 30 {
             continue;
         }
+        colors.push(rgb);
         let shown = hex.to_uppercase();
         let at = when.parse::<f64>().map_or(0.0, |s| s * 1000.0);
         rows.push(Row {
             title: shown.clone(),
-            subtitle: format!("Picked {} · Tab shows its forms", ago(at, now)),
-            score: 96.0 - rows.len() as f64 * 0.001,
+            subtitle: format!("Picked {} · Enter copies · Tab shows its forms", ago(at, now)),
+            score: 96.0 - colors.len() as f64 * 0.001,
             copy: shown.clone(),
             swatch: Some(format!("#{}{}{}", hex2(rgb[0]), hex2(rgb[1]), hex2(rgb[2]))),
             group: Some("Picked".into()),
@@ -300,7 +387,52 @@ fn picked(ctx: &Context, filter: &str) -> Answer {
             ..Default::default()
         });
     }
+    if colors.is_empty() {
+        let title = if filter.is_empty() {
+            "Nothing picked yet".to_string()
+        } else {
+            format!("No picked colour has \"{filter}\"")
+        };
+        rows.push(Row { title, subtitle: "Picked colours".into(), score: 40.0, ..Default::default() });
+        return Answer { rows, ttl_ms: Some(30_000) };
+    }
+    let kinds: Vec<String> = match ctx.settings.get("exports").and_then(Value::as_array) {
+        Some(list) => list.iter().filter_map(Value::as_str).map(str::to_lowercase).collect(),
+        None => DEFAULT_EXPORTS.iter().map(|k| k.to_string()).collect(),
+    };
+    for (i, kind) in kinds.iter().enumerate() {
+        let Some((name, body)) = export(kind, &colors) else { continue };
+        let n = colors.len();
+        rows.push(Row {
+            title: format!("Copy {n} picked colour{} as {name}", if n == 1 { "" } else { "s" }),
+            subtitle: body.lines().take(3).collect::<Vec<_>>().join(" ").chars().take(120).collect(),
+            icon: "󰆏".into(),
+            score: 90.0 - i as f64 * 0.001,
+            group: Some("Export".into()),
+            run: Some(json!({ "kind": "copy", "target": body, "label": "copy" })),
+            ..Default::default()
+        });
+    }
     Answer { rows, ttl_ms: Some(30_000) }
+}
+
+/// A colour's contrast on white and on black, after its forms.
+fn on_white_and_black(rgb: [u8; 3], hex: &str, first: usize) -> Vec<Row> {
+    [("white", [255, 255, 255]), ("black", [0, 0, 0])]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, bg))| {
+            let (ratio, shown) = ratio(rgb, bg);
+            Row {
+                title: format!("{shown}:1 on {name}"),
+                subtitle: format!("Contrast · text {} · large text {}", level(ratio, 7.0, 4.5), level(ratio, 4.5, 3.0)),
+                score: 92.0 - (first + i) as f64 * 0.01,
+                copy: shown,
+                swatch: Some(hex.to_string()),
+                ..Default::default()
+            }
+        })
+        .collect()
 }
 
 pub struct Colors;
@@ -325,19 +457,29 @@ impl Extension for Colors {
             if q.chars().count() < 2 || qw.is_empty() {
                 return Answer::default();
             }
-            let title = words(PICK_TITLE);
-            let in_title = prefixes_all(&qw, &title);
-            if !in_title && !prefixes_all(&qw, &[title, words(PICK_WORDS)].concat()) {
-                return Answer::default();
-            }
-            let score = if PICK_TITLE.to_lowercase().starts_with(&q) {
-                88.5
-            } else if in_title {
-                62.0
-            } else {
-                56.0
+            // As a command would rank: a title starting with the query, then
+            // the query in its title, then in its keywords.
+            let found = |title: &str, keywords: &str| {
+                let tw = words(title);
+                let in_title = prefixes_all(&qw, &tw);
+                if title.to_lowercase().starts_with(&q) {
+                    Some(88.5)
+                } else if in_title {
+                    Some(62.0)
+                } else if prefixes_all(&qw, &[tw, words(keywords)].concat()) {
+                    Some(56.0)
+                } else {
+                    None
+                }
             };
-            return vec![picker(ctx, score)].into();
+            let mut rows = Vec::new();
+            if let Some(score) = found(PICK_TITLE, PICK_WORDS) {
+                rows.push(picker(ctx, score));
+            }
+            if let Some(score) = found(CONTRAST_TITLE, CONTRAST_WORDS) {
+                rows.push(contrast_picker(score - 0.01));
+            }
+            return rows.into();
         };
         let hex = format!("#{}{}{}", hex2(rgb[0]), hex2(rgb[1]), hex2(rgb[2]));
         let wanted: Vec<String> = match ctx.settings.get("formats").and_then(Value::as_array) {
@@ -345,7 +487,8 @@ impl Extension for Colors {
             _ => DEFAULT_FORMATS.iter().map(|f| f.to_string()).collect(),
         };
         let values: Vec<(&str, String)> = wanted.iter().filter_map(|name| form(name, rgb, &color)).collect();
-        values
+        let n = values.len();
+        let mut rows: Vec<Row> = values
             .into_iter()
             .enumerate()
             .map(|(i, (label, text))| Row {
@@ -356,8 +499,12 @@ impl Extension for Colors {
                 swatch: Some(hex.clone()),
                 ..Default::default()
             })
-            .collect::<Vec<_>>()
-            .into()
+            .collect();
+        // How it reads as text: on white and on black, unless "contrast" is off.
+        if ctx.settings.get("contrast").and_then(Value::as_bool) != Some(false) {
+            rows.extend(on_white_and_black(rgb, &hex, n));
+        }
+        rows.into()
     }
 }
 
@@ -374,10 +521,20 @@ mod tests {
 
     #[test]
     fn what_the_js_reads() {
-        assert_eq!(titles("#ff6644"), ["#FF6644", "rgb(255, 102, 68)", "hsl(11, 100%, 63%)", "oklch(70% 0.193 34.1)"]);
+        assert_eq!(
+            titles("#ff6644"),
+            [
+                "#FF6644",
+                "rgb(255, 102, 68)",
+                "hsl(11, 100%, 63%)",
+                "oklch(70% 0.193 34.1)",
+                "2.9:1 on white",
+                "7.23:1 on black"
+            ]
+        );
         assert_eq!(titles("rgb(255, 0, 0)")[0], "#FF0000");
         assert_eq!(titles("rgb(300 0 0)")[0], "#FF0000");
-        assert_eq!(titles("ff6644").len(), 4);
+        assert_eq!(titles("ff6644").len(), 6);
         assert_eq!(titles("#f64")[0], "#FF6644");
     }
 
@@ -413,7 +570,7 @@ mod tests {
 
     #[test]
     fn the_formats_you_ask_for() {
-        let all = json!({ "formats": ["hsv", "hwb", "lab", "lch", "oklab", "cmyk", "vec4", "decimal", "0x", "nope"] });
+        let all = json!({ "formats": ["hsv", "hwb", "lab", "lch", "oklab", "cmyk", "vec4", "decimal", "0x", "nope"], "contrast": false });
         let got: Vec<_> = rows("#ff6644", all, None).into_iter().map(|r| r.title).collect();
         assert_eq!(
             got,
@@ -430,7 +587,11 @@ mod tests {
             ]
         );
         assert_eq!(rows("#000", json!({ "formats": ["cmyk"] }), None)[0].title, "cmyk(0%, 0%, 0%, 100%)");
-        assert_eq!(rows("#ff6644", json!({ "formats": [] }), None).len(), 4);
+        assert_eq!(rows("#ff6644", json!({ "formats": [] }), None).len(), 6);
+        let on = rows("#777", json!({ "formats": ["hex"] }), None);
+        assert_eq!(on[1].title, "4.47:1 on white");
+        assert_eq!(on[1].subtitle, "Contrast · text fails · large text AA");
+        assert_eq!(on[2].title, "4.68:1 on black");
     }
 
     #[test]
@@ -450,23 +611,66 @@ mod tests {
     }
 
     #[test]
-    fn the_picker_and_what_it_picked() {
+    fn the_picker_does_what_you_set() {
         let found = rows("color picker", Value::Null, None);
         assert_eq!(found[0].title, "Pick a colour from the screen");
-        assert_eq!(found[0].run, Some(json!({ "kind": "action", "name": "pick" })));
+        assert_eq!(found[0].run, Some(json!({ "kind": "action", "name": "pick", "args": ["copy+show", "hex"] })));
+        assert_eq!(found[0].alt, Some(json!({ "kind": "action", "name": "pick", "args": ["copy", "hex"] })));
+        assert_eq!(
+            found[0].subtitle,
+            "Click any pixel: Enter copies its hex and shows its forms · Shift+Enter copies its hex"
+        );
         assert_eq!(rows("pick", Value::Null, None)[0].score, 88.5);
         assert!(rows("p", Value::Null, None).is_empty());
-        let off = json!({ "copyOnPick": false });
-        assert_eq!(
-            rows("eyedropper", off.clone(), None)[0].run,
-            Some(json!({ "kind": "action", "name": "pick_only" }))
-        );
+        let mine = json!({ "afterPick": "show", "afterPickAlt": "copy", "copyFormat": "OKLCH" });
+        let r = &rows("eyedropper", mine, None)[0];
+        assert_eq!(r.run, Some(json!({ "kind": "action", "name": "pick", "args": ["show", "oklch"] })));
+        assert_eq!(r.alt, Some(json!({ "kind": "action", "name": "pick", "args": ["copy", "oklch"] })));
+        let odd = json!({ "afterPick": "$(rm -rf ~)", "afterPickAlt": "copy+show", "copyFormat": "nope" });
+        let r = &rows("eyedropper", odd, None)[0];
+        assert_eq!(r.run, Some(json!({ "kind": "action", "name": "pick", "args": ["copy+show", "hex"] })));
+        assert!(r.alt.is_none());
+        let c = rows("contrast picker", Value::Null, None);
+        assert_eq!(c[0].title, "Pick two colours for contrast");
+        assert_eq!(c[0].run, Some(json!({ "kind": "action", "name": "pick_contrast" })));
+    }
+
+    #[test]
+    fn what_it_picked_and_exports() {
         let picks = "1790000000 #ff6644\n1789990000 #2680d9\nbad\n1 #zzzzzz\n";
         let listed = rows("pick ", Value::Null, Some(picks));
         let titles: Vec<_> = listed.iter().map(|r| r.title.as_str()).collect();
-        assert_eq!(titles, ["Pick a colour from the screen", "#FF6644", "#2680D9"]);
-        assert_eq!(listed[1].subtitle, "Picked 5 min ago · Tab shows its forms");
-        assert_eq!(listed[1].complete.as_deref(), Some("#FF6644"));
-        assert_eq!(rows("pick 26", off, Some(picks)).len(), 2);
+        assert_eq!(
+            titles,
+            [
+                "Pick a colour from the screen",
+                "Pick two colours for contrast",
+                "#FF6644",
+                "#2680D9",
+                "Copy 2 picked colours as CSS variables",
+                "Copy 2 picked colours as SCSS variables",
+                "Copy 2 picked colours as JSON",
+                "Copy 2 picked colours as Tailwind colours",
+                "Copy 2 picked colours as a GIMP / Inkscape palette"
+            ]
+        );
+        assert_eq!(listed[2].subtitle, "Picked 5 min ago · Enter copies · Tab shows its forms");
+        assert_eq!(listed[2].complete.as_deref(), Some("#FF6644"));
+        let body = |r: &Row| r.run.as_ref().unwrap()["target"].as_str().unwrap().to_string();
+        assert_eq!(body(&listed[4]), ":root {\n  --picked-1: #ff6644;\n  --picked-2: #2680d9;\n}\n");
+        assert_eq!(body(&listed[5]), "$picked-1: #ff6644;\n$picked-2: #2680d9;\n");
+        assert_eq!(body(&listed[6]), "[\n  \"#ff6644\",\n  \"#2680d9\"\n]\n");
+        assert_eq!(body(&listed[7]), "colors: {\n  'picked-1': '#ff6644',\n  'picked-2': '#2680d9',\n}\n");
+        assert_eq!(
+            body(&listed[8]),
+            "GIMP Palette\nName: Punctum picks\n#\n255 102  68\tpicked-1 #ff6644\n 38 128 217\tpicked-2 #2680d9\n"
+        );
+        let only = rows("pick 26", json!({ "exports": ["json"] }), Some(picks));
+        assert_eq!(
+            only.iter().map(|r| r.title.as_str()).collect::<Vec<_>>()[2..],
+            ["#2680D9", "Copy 1 picked colour as JSON"]
+        );
+        assert_eq!(rows("pick ", Value::Null, None)[2].title, "Nothing picked yet");
+        assert_eq!(rows("pick zz", Value::Null, Some(picks))[2].title, "No picked colour has \"zz\"");
     }
 }

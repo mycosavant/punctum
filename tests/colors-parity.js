@@ -1,6 +1,6 @@
 // node tests/colors-parity.js [punctumd] — wherever the JS colour provider
 // answers, the Rust one in punctumd must give the same HEX, RGB and HSL rows
-// (and swatch), then its OKLCH row. Where only Rust answers, the query must be
+// (and swatch), then its OKLCH row and its contrast on white and on black. Where only Rust answers, the query must be
 // a CSS colour function or #rgba hex, which it reads on purpose (colors.rs);
 // never a word.
 const { spawnSync } = require("child_process")
@@ -36,17 +36,21 @@ const run = spawnSync(bin, [], { input, encoding: "utf8", maxBuffer: 64 * 1024 *
 if (run.error || run.status !== 0) { console.log("FAIL  punctumd didn't run: " + (run.error || run.stderr)); process.exit(1) }
 const replies = run.stdout.trim().split("\n").map(l => JSON.parse(l))
 const fields = r => ({ title: r.title, subtitle: r.subtitle, swatch: r.swatch, score: r.score, copy: r.copy })
-let diffs = 0, extra = 0, answered = 0
+let diffs = 0, extra = 0, answered = 0, commands = 0
 queries.forEach((q, id) => {
   const js = Colors.provider.match(q, {}).map(fields)
   const rs = (replies[id].rows || []).map(fields)
   if (rs.length) answered++
   let ok
-  if (js.length) ok = rs.length === 4 && JSON.stringify(rs.slice(0, 3)) === JSON.stringify(js) && rs[3].subtitle === "OKLCH" && rs[3].swatch === js[0].swatch
+  if (js.length) ok = rs.length === 6 && JSON.stringify(rs.slice(0, 3)) === JSON.stringify(js) && rs[3].subtitle === "OKLCH" && rs[3].swatch === js[0].swatch
+    && / on white$/.test(rs[4].title) && / on black$/.test(rs[5].title) && rs.slice(4).every(r => /^Contrast · /.test(r.subtitle))
+  // The pickers, which Rust lists as rows where the JS lists its picker as a
+  // command (found the same way, by words of the title or keywords).
+  else if (rs.length && rs.every(r => /^Pick (a colour from the screen|two colours for contrast)$/.test(r.title))) { ok = true; commands++ }
   else if (rs.length) { ok = /^\s*((rgba?|hsla?|hwba?|lab|lch|oklab|oklch)\(.*\)|#([0-9a-f]{4}|[0-9a-f]{8}))\s*$/i.test(q); if (ok) extra++ }
   else ok = true
   if (!ok && diffs++ < 12) console.log("FAIL  " + JSON.stringify(q) + "\n  js:   " + JSON.stringify(js) + "\n  rust: " + JSON.stringify(rs))
 })
-console.log((diffs ? "FAIL" : "ok  ") + "  colors: JS and Rust agree on " + (queries.length - diffs - extra) + " of " + queries.length + " queries ("
-  + answered + " colours; " + extra + " CSS colour functions or alpha hex only Rust reads)")
+console.log((diffs ? "FAIL" : "ok  ") + "  colors: JS and Rust agree on " + (queries.length - diffs - extra - commands) + " of " + queries.length + " queries ("
+  + answered + " colours; " + extra + " CSS colour functions or alpha hex only Rust reads; " + commands + " find the pickers)")
 process.exit(diffs ? 1 : 0)

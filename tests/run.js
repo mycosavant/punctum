@@ -1214,7 +1214,7 @@ print(json.dumps({
     check("native: time's help and commands come from its manifest", nq("?time").map(x => x.subtitle).join("|") === "→ 14:00 Colombo|→ 17:30 Tokyo|→ 05:30 New York" && nq("?dates")[0].icon === "󰃭" && nq("world clock").some(x => x.title === "World clock"))
     check("native: a zone the bar never probed answers", nq("time in reykjavik")[0].title === "08:30 Reykjavik")
     const col = nq("#ff6644").filter(r => r.provider === "colors"), hsl = nq("hsl(210 70% 50%)").filter(r => r.provider === "colors")
-    check("native: colours through punctumd keep their swatch, add OKLCH, read hsl()", col.map(r => r.title).join("|") === "#FF6644|rgb(255, 102, 68)|hsl(11, 100%, 63%)|oklch(70% 0.193 34.1)"
+    check("native: colours through punctumd keep their swatch, add OKLCH, read hsl()", col.map(r => r.title).join("|") === "#FF6644|rgb(255, 102, 68)|hsl(11, 100%, 63%)|oklch(70% 0.193 34.1)|2.9:1 on white|7.23:1 on black"
       && col.every(r => r.swatch === "#ff6644") && col[0].hero && hsl[0].title === "#2680D9" && nq("decade").every(r => r.provider !== "colors") && nq("pick a colour").some(r => r.title === "Pick a colour from the screen"), col.map(r => r.title).join("|") + " " + (hsl[0] || {}).title)
     const appRows = x => nq(x).filter(r => r.provider === "apps")
     check("native: apps through punctumd, with launch history, actions and pins", appRows("f")[0].title === "Firefox" && appRows("brave new window")[0].run.action === 0
@@ -1269,7 +1269,8 @@ print(json.dumps({
       && JSON.stringify(set[1].alt.target) === JSON.stringify([P + "extensions/remind/remind-set", "--cancel", "omarchy-reminder-1-a.timer"]) && asked["remind\nlist"].argv.join(" ") === "omarchy-reminder show --json")
     const picker = pick("color picker", "colors")[0], pickMode = pick("pick ", "colors")
     check("native: the colour picker runs the pick script beside its manifest, and pick lists what it picked", picker.title === "Pick a colour from the screen"
-      && JSON.stringify(picker.run.target) === JSON.stringify([P + "extensions/colors/pick", "--copy"]) && pickMode[0].run.target[0] === P + "extensions/colors/pick"
+      && JSON.stringify(picker.run.target) === JSON.stringify([P + "extensions/colors/pick", "--then", "copy+show", "--format", "hex"])
+      && JSON.stringify(picker.alt.target) === JSON.stringify([P + "extensions/colors/pick", "--then", "copy", "--format", "hex"]) && pickMode[0].run.target[0] === P + "extensions/colors/pick"
       && asked["colors\npicks"].argv.join(" ") === P + "extensions/colors/pick --history" && (Engine.mode("pick x", config) || {}).label === "Colour picker"
       && !nq("pick a colour").some(r => r.provider === "colors" && r.group === "Commands" && !r.run), JSON.stringify(picker.run))
     const ratio = nq("#fff on #333")[0]

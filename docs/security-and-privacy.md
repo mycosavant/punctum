@@ -30,7 +30,7 @@ apps is local. So is everything typed until Enter.
 | Files (`~`), Inside files (`rg `) | Your home folder, live | Results until the bar closes |
 | Packages (`pkg `) | pacman's sync databases, through `expac` | The list until the bar closes |
 | Apps, keybindings | Desktop entries; `omarchy-menu-keybindings` | Launch counts, pins (cache) |
-| Colour picker (`pick`) | The screen, through `hyprpicker`, when you press Enter on the picker | The last 30 colours picked, in `~/.local/state/punctum/colors`; with `"copyOnPick"` (on by default) the hex goes to the clipboard |
+| Colour picker (`pick`) | The screen, through `hyprpicker`, when you press Enter on the picker | The last 30 colours picked, in `~/.local/state/punctum/colors`; when `afterPick` / `afterPickAlt` say copy, the colour goes to the clipboard |
 
 Everything the bar keeps is under `~/.cache/punctum/`, in a 700
 folder, each file 600. When the bar closes, the results list, per-open loads

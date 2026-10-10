@@ -2055,7 +2055,9 @@ Item {
                 onClicked: {
                   root.selectedIndex = rowItem.index
                   root.activate(rowItem.index)
-                  input.forceActiveFocus()
+                  // An action closes the bar, and the shell may unload it
+                  // before this runs; then there is no field to focus.
+                  if (typeof input !== "undefined" && input && root.opened) input.forceActiveFocus()
                 }
               }
             }
