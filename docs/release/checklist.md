@@ -14,8 +14,10 @@ day). The repository is ready locally in `~/git/punctum`; nothing is published.
 - README for users; dependencies listed against Omarchy's base packages.
 - LICENSE: the maintainer's notice, Saikomantisu's kept, Keystroke's for the
   adapted parts.
-- CI: `.github/workflows/tests.yml` (Arch container, normal user). **Never
-  run**: Docker on this machine needs root. The first push is its first run.
+- CI: `.github/workflows/tests.yml` (Arch container, normal user). Green
+  since run 38055077757 (2026-10-10). In the container it can't test that a
+  sandbox hides the session bus, or that the resolver is mounted only with
+  network on; the run says so in two `note` lines.
 - Name checks: [punctum-checks.md](punctum-checks.md).
 - Upstream drafts rebased onto Command Bar 1.3.1: [../upstream/](../upstream/README.md).
 
@@ -24,7 +26,7 @@ day). The repository is ready locally in `~/git/punctum`; nothing is published.
 1. **Optional: look at DE 1128046** (*punctum Gesellschaft für Software mbH*,
    classes 9/35/42, 1988) at register.dpma.de. It's the one live mark whose
    owner names software; the checks couldn't read its goods list.
-2. **Publish the repository.** Create `github.com/mycosavant/punctum`
+2. **Publish the repository.** Done 2026-10-10: `github.com/mycosavant/punctum`. Create `github.com/mycosavant/punctum`
    (public, no template files), then:
 
    ```sh
