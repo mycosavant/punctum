@@ -1,24 +1,28 @@
 # Features
 
-Each feature is a *provider*: a file in `providers/`, listed by id in
-`"providers"` in the config. Remove an id to switch the feature off. Features
-from upstream (calculator, currency, time, units, emoji, windows, apps,
-processes, agent) are summarised at the end; the [README](../README.md) table
-has their examples.
+Each feature is an extension: a folder in `extensions/` with an
+`extension.json`. `"extensions": { "<id>": false }` in your config switches
+one off; `?extensions` lists them all, on or off, with what each runs, reads,
+writes and contacts. Features from upstream (calculator, currency, time,
+units, emoji, windows, apps, processes, agent) are summarised at the end; the
+[README](../README.md) table has their examples. To write your own, see
+[Writing extensions](writing-extensions.md).
 
 For each: what to type, what Enter and Shift+Enter do, and what it reads or
 runs.
 
 ---
 
-## Everywhere — `/`  (`locate`)
+## Everywhere — `/`  (`everywhere`)
 
-Files and folders anywhere on the disk, by name, as you type.
-[Everywhere](everywhere.md) has the full account.
+Files and folders anywhere on the disk, by name, as you type. Also a command
+of its own (`everywhere`, with an fzf picker). [Everywhere](everywhere.md)
+has the full account.
 
 - `/notes`, `/dwnlds`, `/report .pdf$`, `/hosts !backup`
 - **Enter** opens with the default app. **Shift+Enter** opens a terminal in its folder.
-- **Runs** `plocate`, `fzf` and, for the home index, `updatedb`. All local.
+- **Runs** the `everywhere` command, a script extension, which runs `plocate`,
+  `fzf` and, for its home index, `updatedb`. All local.
 
 ## Files under home — `~`  (`files`)
 
@@ -114,6 +118,27 @@ As in DuckDuckGo: `!` and a short name sends the rest to one site.
 - Defaults: `nasb`, `bible`, `nasb95`, `esv`, `kjv`, `ddg`, `g`, `w`, `yt`,
   `gh`, `aw` (Arch Wiki), `ap` (Arch packages), `maps` (OpenStreetMap).
   See [Configuration](configuration.md#bangs) to add, change or drop them.
+
+## Reminders and alarms — `remind`, `alarm`, `!remindme`  (`remind`)
+
+Reminders that show with Omarchy's own: in its bar indicator, and in
+`omarchy-reminder show` and `clear`.
+
+- `remind 10m take out the laundry`, `remind me to call mom at 3pm`,
+  `!remindme tomorrow 9am dentist`, `remind 1h30m stretch`, `remind 20 tea`
+  (a bare number is minutes, as `omarchy-reminder` takes it).
+- Times: `10m`, `1h30m`, `2.5h`, `90s`, `3pm`, `7:15pm`, `at 7` (the next
+  7 o'clock), `18:30`, `noon`, `midnight`, `tonight 8`, `tomorrow 9am`,
+  `friday noon`. A time with a colon is the 24-hour clock: `alarm 6:45` is
+  06:45.
+- `alarm 6:45`, `alarm tomorrow 7am`: a critical notification and the alarm
+  sound, three times.
+- **Enter** sets it. `remind` on its own lists what's set; **Shift+Enter**
+  cancels one.
+- **Runs** `remind-set`, which makes a transient systemd user timer named the
+  way Omarchy names its own; the message goes to it on stdin.
+- Like Omarchy's, a reminder doesn't survive a reboot or logout, and one due
+  while the laptop sleeps fires when it wakes.
 
 ## Inbox note — `n `  (`notes`)
 

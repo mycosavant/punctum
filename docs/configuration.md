@@ -3,12 +3,14 @@
 Your settings go in `~/.config/omarchy/extensions/commandbar.json`. It is
 JSONC, so `//` and `/* */` comments are fine. Create it if it doesn't exist.
 
-It is merged over [`config.default.json`](../config.default.json):
+It is merged over the bar's own [`config.default.json`](../config.default.json)
+(hotkey, card, glass) and, for each extension, over the `defaults` in its
+`extension.json`:
 
 - **Objects merge key by key.** `{ "glass": { "opacity": 0.9 } }` changes the
   opacity and keeps `enabled`.
-- **Lists replace.** Setting `"providers"` replaces the whole list; setting
-  `"bible": { "versions": [...] }` replaces the translations.
+- **Lists replace.** `"bible": { "versions": [...] }` replaces the
+  translations; `"commands": [...]` replaces the keyword commands.
 - **`null` removes** a key from an object: `"bangs": { "engines": { "g": null } }`
   drops the `!g` bang.
 
@@ -19,10 +21,8 @@ A short example:
 
 ```jsonc
 {
-  // Turn features off by leaving them out of this list.
-  "providers": ["commands", "bangs", "notes", "clipboard", "files", "locate", "contents",
-                "packages", "bible", "url", "colors", "math", "currency", "time", "emoji",
-                "processes", "units", "windows", "apps", "hotkeys", "ai"],
+  // Switch extensions off (or on) by id; ?extensions lists them all.
+  "extensions": { "bible": false, "packages": false },
   "notes": { "inbox": "~/Vault/Inbox.md" },
   "bangs": { "engines": { "rust": { "title": "Rust docs", "open": "https://doc.rust-lang.org/std/?search={q}" } } },
   "contents": { "hidden": true }
@@ -34,7 +34,12 @@ A short example:
 | Key | Default | Meaning |
 |---|---|---|
 | `hotkey` | `"SUPER + PERIOD"` | The key that opens the bar. If it's taken by another binding, the bar says so instead of binding over it |
-| `providers` | all of them | Which features run, in this order for ties. Remove an id to switch a feature off |
+| `extensions` | `{}` | `"id": false` switches an extension off, `true` on (`{ "enabled": false }` works too). Unlisted ones follow their manifest |
+| `providers` | unset | The older form: a list of ids that are on, in order. If present, it decides alone |
+
+Your own extensions go in `~/.config/omarchy/commandbar/extensions/<id>/`; see
+[Writing extensions](writing-extensions.md). One with a bundled extension's
+id replaces it.
 
 ## The card
 
@@ -53,7 +58,7 @@ command bar position".
 
 ## Features
 
-### `locate` (Everywhere, `/`)
+### `everywhere` (`/`)
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -70,6 +75,10 @@ command bar position".
 | Key | Default | Meaning |
 |---|---|---|
 | `hidden` | `false` | Include hidden files and folders. Git-ignored files stay skipped |
+
+### `remind`
+
+No settings. `remind 10m tea`, `alarm 6:45`; see [Features](features.md#reminders-and-alarms--remind--alarm--remindme--remind).
 
 ### `bible`
 
@@ -151,10 +160,13 @@ All under `~/.cache/omarchy-commandbar/`, mode 600 in a 700 folder:
 | `launches.json` | How often you open each app, for ranking |
 | `last-query` | The text you closed the bar with, so it comes back |
 | `rates.json` | The last exchange rates, so currency works offline |
-| `home.db` | Everywhere's index of your home folder |
 
-Everything except `home.db` goes through `bin/commandbar-cache`, which knows
-only these names, caps each file's size, refuses symlinks and files it doesn't
-own, and writes through a private temporary file and a rename.
+Each goes through `bin/commandbar-cache`, which knows only these names, caps
+each file's size, refuses symlinks and files it doesn't own, and writes
+through a private temporary file and a rename.
+
+Everywhere keeps its index of your home folder at
+`~/.cache/everywhere/home.db` (mode 600 in a 700 folder), and reminders keep
+their messages where Omarchy's do, in `$XDG_RUNTIME_DIR/omarchy-reminders/`.
 
 Delete the folder to reset all of it.

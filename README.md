@@ -11,9 +11,11 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
 - **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
 - **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/commandbar-note` writes it: text on stdin, symlinks refused, never creates the folder.
-- **Everywhere** (`/name`): every file on the disk as you type, like Everything on Windows. plocate does the lookup (the system index for outside your home folder, rebuilt nightly; a private index of your home folder, rebuilt in about half a second on the first `/` query after the bar opens, at most once a minute), fzf filters with its query syntax (`'exact`, `^start` of a name, `.pdf$`, `!leave-out`), and the order puts a name that is the word first, with a lift for your home folder. `"locate": { "exclude": [...] }` keeps caches out.
+- **Everywhere** (`/name`): every file on the disk as you type, like Everything on Windows. Also a command of its own, `everywhere`, with an fzf picker (`everywhere -i`); in the bar it's a script extension. plocate does the lookup (the system index for outside your home folder, rebuilt nightly; a private index of your home folder, refreshed on the first `/` query after the bar opens, at most once a minute), fzf filters with its query syntax (`'exact`, `^start` of a name, `.pdf$`, `!leave-out`), and the order puts a name that is the word first. `"everywhere": { "exclude": [...] }` keeps caches out. See [docs/everywhere.md](docs/everywhere.md).
 - **Inside files** (`rg words`): ripgrep under your home folder, the words as a fixed string. Enter opens your editor at the line; Shift+Enter opens the file. `"contents": { "hidden": true }` includes dot-folders.
 - **Syncthing**: the `syncthing` keyword opens the local web UI at 127.0.0.1:8384.
+- **Reminders and alarms**: `remind 10m tea`, `remind me to call mom at 3pm`, `!remindme tomorrow 9am dentist`, `alarm 6:45` (a critical notification and a sound). They show with Omarchy's own reminders; `remind` alone lists them and Shift+Enter cancels one.
+- **Extensions**: every feature is an extension you can switch off (`"extensions": { "bible": false }`) and you can write your own, as a script in any language or in JavaScript. `?extensions` lists them with what each runs, reads and contacts.
 - **Bible**: type a reference (`john 3:16`, `1 jn 1:9`, `psalm 23`) and it opens on Bible Gateway, NASB first. With no keyword a reference needs a book name of three letters or more, or a verse after a colon, so `mar 3` stays a date and `am 5` a time; after `bible` any form works (`bible ps 23`); `bible love one another` is a word search. `"bible": { "versions": [...] }` sets the translations.
 - **Bangs**: `!nasb john 3:16`, `!aw hyprland`, or the bang at the end. Yours go under `"bangs": { "engines": { … } }`, merged over the defaults by name (`"g": null` drops one). A bang you haven't listed goes to DuckDuckGo with the whole query, as Zen does with DuckDuckGo as its engine; `"fallback": ""` stops that. `!` lists them.
 - **Packages**: `pkg kfind` searches the repositories in your pacman.conf (Arch's and Omarchy's here; never the AUR), read once per open with `expac`. Enter on a package you don't have opens a terminal with `sudo pacman -S repo/name`, so pacman asks first and installs from the repository on that row; on one you have it shows `pacman -Qi`. Shift+Enter opens its archlinux.org page, or `pacman -Si` for a repository that isn't Arch's.
@@ -30,7 +32,7 @@ It also fixes three things found reading upstream:
 
 ## Documentation
 
-Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md), [Everywhere](docs/everywhere.md), [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), [writing a provider](docs/writing-a-provider.md), [architecture](docs/architecture.md), and a [proposal](docs/proposal-extensions.md) for optional extensions, a standalone Everywhere and a community release.
+Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md), [Everywhere](docs/everywhere.md), [configuration](docs/configuration.md), [security and privacy](docs/security-and-privacy.md), [writing extensions](docs/writing-extensions.md), [architecture](docs/architecture.md), and the [extensions proposal](docs/proposal-extensions.md) with what was built and what a community release still needs.
 
 ![Command Bar: Spotlight-style command bar for Omarchy](preview.png)
 
@@ -69,6 +71,7 @@ Full documentation is in [`docs/`](docs/README.md): [features](docs/features.md)
 | `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
 | `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
+| `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
 | `rg invoice`, `grep TODO` | Lines inside your files (ripgrep). Enter opens the editor at that line |
 | `john 3:16`, `psalm 23`, `bible ps 23`, `bible grace` | Scripture on Bible Gateway, your first translation (NASB) on top |
 | `!nasb john 3:16`, `!aw wayland`, `!` | Bangs: your list first, anything else through DuckDuckGo |
@@ -152,14 +155,14 @@ The hotkey is removed with the plugin.
 
 ## Configure
 
-Put your settings in `~/.config/omarchy/extensions/commandbar.json`. They override the defaults in [`config.default.json`](config.default.json), and changes apply when you save. You can use comments and trailing commas.
+Put your settings in `~/.config/omarchy/extensions/commandbar.json`. They override the defaults in [`config.default.json`](config.default.json) and in each extension's `extension.json`, and changes apply when you save. You can use comments and trailing commas. [Configuration](docs/configuration.md) lists every setting.
 
 ```jsonc
 {
   // A Hyprland key combination. "" means no hotkey.
   "hotkey": "SUPER + PERIOD",
-  // Features to turn on. When results score equally, earlier ones come first.
-  "providers": ["commands", "clipboard", "files", "url", "colors", "math", "currency", "time", "emoji", "processes", "units", "windows", "apps", "hotkeys", "ai"],
+  // Switch extensions off or on by id. ?extensions lists them all.
+  "extensions": { "bible": false, "packages": false },
   // Default home currency is USD.
   "currency": { "home": "EUR", "favorites": ["USD", "GBP"] },
   // Default home zone is your system time zone.
@@ -201,33 +204,17 @@ Under the agent, a "Chat websites" section lists each site, so Alt+2 and Alt+3 o
 
 ## Adding a feature
 
-[Writing a provider](docs/writing-a-provider.md) has the full contract, background searches and testing. In short:
+Every feature is an extension: a folder with an `extension.json` and either a script in any language or a JavaScript provider. Put yours in `~/.config/omarchy/commandbar/extensions/<id>/` and run `omarchy-restart-shell`. The smallest one, [`examples/hello`](examples/hello), is a twelve-line Python script:
 
-Each feature is a JavaScript file in `providers/`:
-
-```js
-.pragma library
-
-var provider = {
-  id: "units",
-  name: "Units",
-  icon: "󰕒",
-  // Found by name: typing "unit" shows this command.
-  commands: [{ title: "Convert Units", keywords: "unit convert", text: "e.g. 5 km to mi", complete: "5 km to mi", select: true }],
-  // Shown in the "?" list.
-  help: [{ title: "Units", examples: ["5 km to mi", "30c to f"] }],
-  // Return [] if the query isn't for this feature.
-  match: function(query, ctx) {
-    return [{ title: "3.11 mi", subtitle: "5 km → mi", score: 80, copy: "3.11" }]
-  }
-}
+```jsonc
+// extension.json
+{ "schema": 1, "id": "hello", "name": "Hello", "type": "script", "command": ["./hello"],
+  "mode": { "pattern": "^\\s*hi\\s", "label": "Hello" } }
 ```
 
-A result can include `run: { kind: "open" | "run", target }` to open or run something on Enter, `group` to list it under its own heading instead of the feature's name, and `fallback: true` to show it only when no other result does. `ctx.settings` is the provider's section of the config. `ctx` also has `rates`, `zones`, `localZone`, `emojis`, `processes`, `now()`, `format(n)` and `plain(n)`.
+The bar sends the script `{"text": "Ada", "settings": {...}, ...}` on stdin and shows the rows it prints, `{"items": [{"title": "Hello, Ada!", "copy": "Hello, Ada!"}]}`. Enter does what a row's action says, from a short list the bar carries out itself (open, copy, paste, edit, run a command). [Writing extensions](docs/writing-extensions.md) has the manifest, both kinds, the actions and testing.
 
-To enable it, import it in [`providers/index.js`](providers/index.js), add it to the list there, and add its `id` to `"providers"` in the config.
-
-Test providers without the shell by running `node tests/run.js`.
+Test without the shell by running `node tests/run.js`.
 
 To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

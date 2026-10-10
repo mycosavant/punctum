@@ -4,79 +4,103 @@
 
 ```
 omarchy-shell (Quickshell, long-running)
-└── CommandBar.qml            the overlay: input, list, keys, geometry, glass;
-    │                         runs processes and carries out actions
-    ├── lib/Engine.js         runs enabled providers, ranks, groups, help, mode chip
-    ├── providers/index.js    the registry: every provider, imported statically
-    ├── providers/*.js        one feature each: query → rows (pure functions)
-    ├── lib/Geometry.js       card position and size (pure)
-    ├── lib/Hotkey.js         binding the hotkey without stealing a taken one (pure)
-    └── bin/                  small helpers the bar runs
-        ├── commandbar-cache    the only reader and writer of the cache files
-        ├── commandbar-note     appends to the inbox note
-        ├── commandbar-edit     opens the editor at a line
-        └── commandbar-agent    starts the default agent with a prompt
+└── CommandBar.qml             the overlay: input, list, keys, geometry, glass;
+    │                          finds and loads extensions; runs every process;
+    │                          carries out actions
+    ├── lib/Engine.js          runs the enabled extensions, ranks, groups, help,
+    │                          mode chips, ?extensions
+    ├── lib/Extensions.js      manifests: validation, switches, settings,
+    │                          script extensions (pure)
+    ├── lib/Match.js, Calc.js, FileKinds.js, tzcities.js
+    │                          helpers shared by bundled extensions
+    ├── lib/Geometry.js        card position and size (pure)
+    ├── lib/Hotkey.js          binding the hotkey without stealing a taken one (pure)
+    ├── extensions/<id>/       one feature each: extension.json + provider.js,
+    │                          or a script (everywhere; the example in examples/)
+    └── bin/
+        ├── commandbar-extensions  finds extensions and reads their manifests
+        ├── commandbar-cache       the only reader and writer of the cache files
+        ├── commandbar-note        appends to the inbox note
+        ├── commandbar-edit        opens the editor at a line
+        └── commandbar-agent       starts the default agent with a prompt
 ```
 
-The manifest (`manifest.json`) declares one `overlay` entry point,
-`CommandBar.qml`, with `keepLoaded: true`, so the window survives between
-opens and opening costs no load time.
+Your extensions live in `~/.config/omarchy/commandbar/extensions/<id>/`; one
+with a bundled extension's id replaces it.
+
+## Startup
+
+1. `bin/commandbar-extensions` lists the bundled extensions, then yours. From
+   your folder it refuses anything not yours alone (a folder or manifest
+   another user owns or can write, a symlinked manifest), and it reports
+   required commands missing from PATH.
+2. `lib/Extensions.js` validates each manifest; refused ones go to
+   `?extensions` with the reason.
+3. A JS extension's provider is loaded through a three-line QML object made
+   at run time (`Qt.createQmlObject` importing its file), the only way QML
+   can import a path chosen at run time. A script extension gets a provider
+   from `Ext.scriptProvider`.
+4. `Engine.setProviders` takes them all, in manifest order.
+5. The config is built from `config.default.json` (the bar's own settings),
+   your `commandbar.json`, and each extension's section: its manifest
+   defaults merged with yours.
+
+This runs again whenever your config changes.
 
 ## A keystroke
 
-1. The text changes; `CommandBar.qml` calls `Engine.run(text, config, services)`.
-2. Engine builds a `ctx` for each enabled provider (its settings plus the
-   data and request hooks the bar has) and calls `match`.
-3. A provider that needs something slow calls a request hook
-   (`requestSearch`, `requestFiles`, `requestPackages`, `requestClipboard`)
-   and returns a placeholder or its previous rows.
-4. Engine adds the rows found by name (`commands`), drops `fallback` rows if
-   anything else answered, sorts by score, groups by heading, and marks a
-   direct answer as the large "hero" row.
-5. When a process lands, the bar stores its output and runs step 1 again.
-6. Enter calls `activate()`, which hands the row's `run` to `perform()`;
-   `perform()` carries it out by `kind`. Providers never run anything themselves.
+1. `CommandBar.qml` calls `Engine.run(text, config, services)`.
+2. Engine builds a `ctx` per enabled extension (its settings, its folder, the
+   bar's data, and its own view of the background service) and calls `match`.
+3. An extension that needs something slow asks: `ctx.requestSearch`,
+   `ctx.load`, `ctx.requestJob`. It returns a placeholder or its previous rows.
+4. Engine adds rows found by name (`commands`), drops `fallback` rows if
+   anything else answered, sorts by score then extension order, groups by
+   heading, and shows a `hero` extension's answer large.
+5. When a process lands, the bar stores the output and runs step 1 again.
+6. Enter calls `activate()`, which hands the row's action to `perform()`.
+   Extensions never run anything themselves.
+
+## The background service
+
+All in `CommandBar.qml`, all argument lists:
+
+| Part | Asked by | Behaviour |
+|---|---|---|
+| search | `ctx.requestSearch(key, argvs, { stdin, timeout })` | one at a time for the whole bar; argument lists run in turn, each landing as a chunk; a newer key stops the running one; 3 s watchdog per command, results marked `timedOut` |
+| load | `ctx.load(key, argv, { ttl })` | one at a time; once per open and dropped on close (a late result for a closed bar is discarded), or kept and re-read every `ttl` |
+| job | `ctx.requestJob(key, argv, { every, rerun })` | at most every N seconds, one at a time; `rerun` drops the extension's search so it asks again |
+| input | an `argv` action with `input` | stdin, one at a time |
+
+Keys are prefixed with the extension's id in Engine, so one extension never
+sees another's results. On close the bar stops the search, drops per-open
+loads, and calls every provider's `forget()`.
+
+Data the bar keeps for everyone (apps, windows, processes, rates, zones,
+emojis, the default agent) still has its own small process each.
 
 ## Who owns what
 
 | Concern | Lives in |
 |---|---|
-| What a query means | providers |
+| What a query means | extensions |
+| Which extensions are on, their settings, the script protocol | `lib/Extensions.js` |
 | Ranking, grouping, help, mode chips | `lib/Engine.js` |
-| Running processes, reading files, the network | `CommandBar.qml` |
+| Processes, files, the network | `CommandBar.qml` |
 | Carrying out actions | `CommandBar.qml` (`perform`) |
 | Persisted state | `bin/commandbar-cache`, `~/.cache/omarchy-commandbar/` |
-| Settings | `config.default.json` merged with the user's `commandbar.json` |
 
-Keeping providers pure is what makes them testable in Node (`tests/run.js`)
-with no shell, and it keeps what can happen on Enter to a short, reviewable
-list: a provider that follows the contract only *proposes* an action. This is
-a convention, not a sandbox: provider code runs inside the shell, where QML's
-`Qt` object could build a process, so a provider is trusted code.
+An extension that follows the contract only *proposes* actions from a short
+list the bar carries out. For JS extensions that's a convention: they run
+inside the shell, where QML's `Qt` object could build a process, so they're
+trusted code. For script extensions it's a boundary: the bar validates every
+row and action they print, and they never touch the shell.
 
-## Background processes
+## Limits
 
-| Process | Started by | Bounded by |
-|---|---|---|
-| `searchProc` | `requestSearch` (Everywhere, Inside files) | one at a time; newest key wins; 3 s watchdog; `timeout 3` inside |
-| `homeIndexProc` | `requestHomeIndex` | at most once a minute |
-| `filesProc` | `requestFiles` (`~`) | one walk at a time; 3 s watchdog |
-| `packagesProc` | `requestPackages` | once per open |
-| clipboard `FileView` | `requestClipboard` | once per open |
-| `hotkeysProc` | any query | at most every 30 s |
-| `ratesProc` | a currency query | when stale, at most every 10 minutes |
-
-All loaded data is dropped in `forget()` when the bar closes.
-
-## Where it strains
-
-- **Static registry.** QML `.import` is resolved when the file loads, so every
-  provider is compiled in. A new feature means editing `providers/index.js`.
-- **Per-feature plumbing in the bar.** Each kind of background data
-  (clipboard, packages, files) has its own properties, process and request
-  hook in `CommandBar.qml`, about 40 lines each. `requestSearch` is the
-  general version and could absorb most of them.
-- **One defaults file.** Every feature's defaults sit in `config.default.json`,
-  so features can't be added or removed as units.
-
-The [extensions proposal](proposal-extensions.md) addresses these.
+- A new or changed extension needs `omarchy-restart-shell`: Quickshell caches
+  the files it has imported.
+- Script extensions run only in their mode; one that answered every keystroke
+  would start a process per key.
+- Permissions are labels. A real sandbox for script extensions (`bwrap`,
+  `systemd-run --user -p ...`) is possible and not built.

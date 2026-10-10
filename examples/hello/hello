@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+# The Command Bar sends one JSON request on stdin:
+#   {"protocol": 1, "query": "hi Ada", "text": "Ada", "settings": {...}, "home": "/home/you"}
+# and reads {"items": [...], "message": "..."} from stdout. Each item is a row:
+#   title, subtitle, icon, copy, and run / alt actions the bar carries out:
+#   open (a URL or absolute path), copy, paste, edit (target + line), argv (+ input).
+import json
+import sys
+
+req = json.load(sys.stdin)
+name = req["text"].strip()
+greeting = req["settings"].get("greeting", "Hello")
+text = f"{greeting}, {name}!"
+print(json.dumps({"items": [{"title": text, "subtitle": "Enter copies it", "copy": text,
+                             "run": {"kind": "copy", "target": text, "label": "copy"}}]}))

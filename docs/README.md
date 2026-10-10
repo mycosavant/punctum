@@ -14,7 +14,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | [Everywhere](everywhere.md) | The file search: how it finds, ranks and stays current, and its query syntax |
 | [Configuration](configuration.md) | Every setting in `commandbar.json`, with defaults |
 | [Security and privacy](security-and-privacy.md) | What runs, what is read, what leaves the machine, and how typed text is kept out of shell code |
-| [Writing a provider](writing-a-provider.md) | Adding a feature today: the provider contract, async searches, tests |
+| [Writing extensions](writing-extensions.md) | Your own features: the manifest, script extensions in any language, JS extensions, actions, tests |
 | [Architecture](architecture.md) | How a keystroke becomes rows, and where each piece lives |
 | [Extensions and release proposal](proposal-extensions.md) | Making features optional plugins others can write, releasing Everywhere on its own, and what a community release needs |
 
@@ -33,6 +33,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 | `rg ` | Lines inside your files |
 | `cb ` | Clipboard history |
 | `pkg ` | Packages |
+| `remind `, `alarm `, `!remindme ` | Reminders and alarms |
 | `!` | Bangs (`!nasb john 3:16`) |
 | `n ` | Add a line to your inbox note |
 | `keys ` | Keybindings |
@@ -44,11 +45,19 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 Anything else is matched by every feature at once: `firefox` finds the app,
 `2+2` answers 4, `john 3:16` offers the verse, `mar 3` gives the date.
 
+## Extensions
+
+Every feature is an extension you can switch off (`"extensions": { "bible": false }`),
+and you can add your own, as a script in any language or in JavaScript, in
+`~/.config/omarchy/commandbar/extensions/`. Type `?extensions` to see them
+all and what each touches.
+
 ## Settings file
 
 `~/.config/omarchy/extensions/commandbar.json` (JSONC: comments allowed). It is
-merged over [`config.default.json`](../config.default.json): objects merge key
-by key, lists replace. See [Configuration](configuration.md).
+merged over [`config.default.json`](../config.default.json) and each
+extension's defaults: objects merge key by key, lists replace. See
+[Configuration](configuration.md).
 
 ## After changing code
 

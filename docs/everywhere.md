@@ -4,6 +4,23 @@ Type `/` and part of a name. Every file and folder on the disk that matches is
 listed as you type, best first. It is the Linux answer to Everything on
 Windows.
 
+Everywhere is also a command of its own,
+[`extensions/everywhere/everywhere`](../extensions/everywhere/everywhere), and
+the bar is just one way in:
+
+```sh
+everywhere notes              # ranked paths, best first
+everywhere report .pdf$       # the same query syntax as in the bar
+everywhere -i                 # pick one with fzf (a preview line shows ls -ld), print it
+everywhere -i --open          # ... and open it
+everywhere --json dwnlds      # rows for other launchers
+everywhere --index            # refresh the index of your home folder
+```
+
+To have it on your PATH: `ln -s ~/.config/omarchy/plugins/hypha.commandbar/extensions/everywhere/everywhere ~/.local/bin/everywhere`.
+In the bar it's a script extension: the bar sends the query as JSON on
+stdin and shows the rows it prints.
+
 ```
 /notes              names containing "notes"
 /dwnlds             letters in order: finds Downloads
@@ -26,7 +43,7 @@ Everywhere keeps indexes instead and asks them:
 | Index | Covers | Kept current by | Size here |
 |---|---|---|---|
 | The system's plocate index, `/var/lib/plocate/plocate.db` | everything outside your home folder | `plocate-updatedb.timer`, nightly | 602k paths |
-| A private index of your home folder, `~/.cache/omarchy-commandbar/home.db` | your home folder | the bar: `updatedb` on the first `/` query after it opens, at most once a minute (about 0.5 s) | 275k paths |
+| A private index of your home folder, `~/.cache/everywhere/home.db` | your home folder | `everywhere --index --max-age 60`, which the bar runs on the first `/` query after it opens (about 0.6 s) | 275k paths |
 
 Files in your home folder are current to within a minute. Elsewhere, a file
 created today shows up after tonight's rebuild. The system index's copy of your
@@ -56,26 +73,29 @@ matches before the filters run.
 6. **Order**, best first:
    - a name that *is* the word, then one that starts with it, contains it,
      or has its letters in order;
-   - a small lift for your home folder, a small drop for hidden paths;
+   - a lift for your home folder (+0.5) and a bigger drop for hidden paths
+     (-0.6), so `~/.config/x/hosts` sits under `/etc/hosts` while
+     `~/Downloads` still beats a system file named like it;
    - shallower, then shorter;
    - fzf's own order breaks ties.
 
    fzf's ranking alone put an Android icon file above `~/Downloads` for
    `dwnlds`; this order is the desktop's.
 
-Every command runs under `timeout 3`, and the bar stops a search after 3 s and
-says so ("Stopped after 3 s") rather than claiming nothing matched.
+Each step is bounded (3 s), and the bar stops a search after 3 s and says so
+("Stopped after 3 s") rather than claiming nothing matched.
 
 ## Settings
 
 ```jsonc
-"locate": {
+"everywhere": {
   // Paths containing any of these strings are left out.
   "exclude": ["/.cache/", "/.cargo/registry/", "/.cargo/git/", "/node_modules/", "/.local/share/Trash/", "/.git/"]
 }
 ```
 
-To turn it off, remove `"locate"` from `"providers"`.
+To turn it off: `"extensions": { "everywhere": false }`. The command keeps
+working on its own (`--exclude` adds exclusions there).
 
 ## Privacy
 
@@ -85,7 +105,7 @@ To turn it off, remove `"locate"` from `"providers"`.
   result.
 - The private index lists every path in your home folder. It is mode 600 in a
   700 folder, so only you can read it. It stays there if you disable the
-  feature; delete `~/.cache/omarchy-commandbar/home.db` to remove it.
+  feature; delete `~/.cache/everywhere/home.db` to remove it.
 
 ## Compared with the alternatives
 
@@ -99,7 +119,5 @@ To turn it off, remove `"locate"` from `"providers"`.
 
 ## Limits
 
-- Folders and files look the same in the list: plocate doesn't say which a
-  path is. Enter opens either correctly.
 - No size or date filters yet (Everything's `size:` and `dm:`).
 - Outside your home folder, files from today are missing until tonight.

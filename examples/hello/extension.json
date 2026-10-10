@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "description": "hi <name>: the smallest script extension, to copy from",
+  "icon": "󰞅",
+  "type": "script",
+  "command": ["./hello"],
+  "mode": { "pattern": "^\\s*hi\\s", "label": "Hello" },
+  "placeholder": "Type a name after hi",
+  "defaults": { "greeting": "Hello" },
+  "permissions": { "runs": [], "reads": [], "writes": [], "network": [] },
+  "help": [{ "id": "hello", "title": "Hello", "about": "hi and a name; Enter copies the greeting", "examples": [{ "q": "hi Ada", "note": "Hello, Ada!" }] }]
+}

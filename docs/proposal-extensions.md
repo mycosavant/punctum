@@ -1,8 +1,9 @@
 # Proposal: extensions, Everywhere on its own, and a community release
 
-Status: proposal, 2026-10-09. Nothing here is built yet. Claims about the code
-are as of commit `b66fd1c`; claims marked *untested* are design, not
-measurement.
+Status, 2026-10-09: **steps 2 to 5 are built** (commits `70904cc`, `12d1b02`);
+step 1 is drafted in [`upstream/`](upstream/README.md) and step 6 is open.
+The rest of this page is the proposal as written, against commit `b66fd1c`,
+with what changed in the building noted under [As built](#as-built).
 
 ## What prompted it
 
@@ -16,7 +17,7 @@ Everywhere, the file search, would be useful well beyond this bar.
 
 - **Features are already units.** Each is one provider file with a uniform
   contract: query in, rows out, actions proposed from a fixed list. See
-  [Writing a provider](writing-a-provider.md).
+  [Writing a provider](writing-extensions.md) (now Writing extensions).
 - **Toggling already exists**, crudely: `"providers": [...]` in the config.
 - **Providers are pure**, so each has tests that run in Node with no shell.
 - **One generic background-process service exists**: `requestSearch(key, argv)`,
@@ -198,6 +199,29 @@ about releasing.
 
 Everywhere could be released after step 3, on its own, before any of the
 rest.
+
+## As built
+
+What differs from the proposal above, checked against the code:
+
+- **Loading JS extensions** works as proposed, without a shipped
+  `Extension.qml`: the bar makes the three-line QML object itself
+  (`Qt.createQmlObject` with the extension folder as its URL). Checked live:
+  all bundled extensions and a user extension load.
+- **`ctx.run`** became three calls: `ctx.requestSearch` (newest wins, chunks,
+  stdin), `ctx.load` (once per open, or `ttl`), `ctx.requestJob` (every N s,
+  `rerun`). Keys are prefixed per extension.
+- **Manifests** also carry `hero`, `minQuery`, `placeholder` and `refresh`;
+  `mode` is a regular expression; switches accept `true`/`false` or
+  `{ "enabled": ... }`, and the older `"providers"` list still works.
+- **The user folder** is `~/.config/omarchy/commandbar/extensions/`, with
+  ownership and permission checks in `bin/commandbar-extensions`.
+- **Everywhere** is a Python command, `extensions/everywhere/everywhere`; its
+  index moved to `~/.cache/everywhere/home.db`. Not done from the "later"
+  list: size and date filters, inotify.
+- **Also added:** reminders and alarms (`extensions/remind`), and
+  `examples/hello`, the smallest script extension.
+- **Not built:** a sandbox for script extensions; a settings panel.
 
 ## Decisions for the maintainer
 
