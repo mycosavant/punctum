@@ -199,7 +199,7 @@ Your own shortcuts, entirely in the config:
 - `open` URL-encodes `{q}` and hands the address to `xdg-open`.
 - `run` runs under bash with the typed text as `$1`; `{q}` becomes `"$1"`.
   Templates where bash would evaluate the value anyway (`{q}` in single
-  quotes, arithmetic, array subscripts) are refused with a message. See
+  quotes, arithmetic, array subscripts, builtins that take a variable's name) are refused with a message. See
   [Security and privacy](security-and-privacy.md#typed-text-and-the-shell).
 
 ## The card

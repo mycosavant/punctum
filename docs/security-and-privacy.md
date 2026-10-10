@@ -49,11 +49,11 @@ to parse, except where noted, and in those cases the typed text is an
 | Script extensions | A JSON request on stdin, never the command line. Every row and action they print is validated: only `open` (http, https, mailto, file or an absolute path), `copy`, `paste`, `edit` and `argv`, labelled by the bar |
 | Inside files | `bash -c SCRIPT punctum-rg <words>`; rg gets them as one fixed-string argument after `--` |
 | Files | `fd` as an argument list; words regex-escaped, after `--` or inside `--and=` |
-| Packages | `bash -c SCRIPT punctum-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
+| Packages | By default the copied text `sudo pacman -S <repo>/<name>`; with `install` on, `bash -c SCRIPT punctum-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
 | Clipboard, copy | Text on `wl-copy`'s stdin, never on a command line (where any process could read it in `/proc`) |
 | Inbox note | Text on `punctum-note`'s stdin |
 | Edit at line | `punctum-edit <line> <path>`; the line must be digits, the path absolute |
-| Web rows | `{q}` URL-encoded, the address handed to `xdg-open` as one argument; only `http(s)` templates are accepted for bangs |
+| Web rows | `{q}` URL-encoded, the address handed to `bin/punctum-open` (which passes a URL to `xdg-open` unchanged) as one argument; only `http(s)` templates are accepted for bangs |
 | Keyword `run` commands | See below |
 
 The tests run Everywhere, Inside files, a script extension and `remind-set`
@@ -72,19 +72,26 @@ Two kinds of template are refused, with a message, because bash would evaluate
 the value itself there:
 
 - `{q}` inside single quotes (it wouldn't expand at all);
-- arithmetic or array subscripts: `$(( ))`, `(( ))`, `[[ ]]`, `let`,
-  `declare`, `typeset`, `local`, `${a[…]}`. In these, a value such as
-  `a[$(cmd)]` runs `cmd`.
+- arithmetic, array subscripts and builtins that take a variable's name:
+  `$(( ))`, `(( ))`, `[[ ]]`, `let`, `declare`, `typeset`, `local`,
+  `${a[…]}`, `${!…}`, `test -v`/`[ -v ]`, `printf -v`, `read`, `mapfile`,
+  `unset`, `getopts`, `wait -p`. In these, a value such as `a[$(cmd)]` runs
+  `cmd`. (Measured with bash 5.3: `test -v`, `[ -v ]`, `${!x}`, `printf -v`,
+  `read` and `declare -n` ran it; the others are refused because they take a
+  name too. Until 2026-10-10 only the first group was refused; the review
+  before release found the rest.)
+
+A template that hands the text to another shell on purpose (`eval`, `sh -c`,
+`ssh host {q}`) runs it as code, as those commands do with any argument.
 
 ## Privilege
 
-The bar never asks for administrator rights itself. One feature hands you a
-prompt that does: **Enter on a package you don't have** opens a terminal
-running `sudo pacman -S <repo>/<name>`. sudo asks for your password, and
-pacman shows what it will install and asks again. Closing the terminal at
-either prompt installs nothing. `"extensions": { "packages": false }` if you'd
-rather the bar never offer it. (The Omarchy plugin marketplace doesn't allow
-this; see the [release proposal](proposal-extensions.md).)
+The bar never asks for administrator rights itself. **Enter on a package you
+don't have** copies `sudo pacman -S <repo>/<name>` for you to paste into a
+terminal. With `"packages": { "install": true }` Enter opens a terminal
+running that command instead: sudo asks for your password, and pacman shows
+what it will install and asks again, and closing the terminal at either
+prompt installs nothing.
 
 ## Extensions you add
 

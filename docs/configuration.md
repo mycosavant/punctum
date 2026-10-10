@@ -22,7 +22,7 @@ A short example:
 ```jsonc
 {
   // Switch extensions off (or on) by id; ?extensions lists them all.
-  "extensions": { "bible": false, "packages": false },
+  "extensions": { "bible": true, "packages": false },
   "notes": { "inbox": "~/Vault/Inbox.md" },
   "bangs": { "engines": { "rust": { "title": "Rust docs", "open": "https://doc.rust-lang.org/std/?search={q}" } } },
   "contents": { "hidden": true }
@@ -112,6 +112,12 @@ An engine:
 
 Defaults: `ddg`, `g`, `w` (Wikipedia), `yt`, `gh`, `aw` (Arch Wiki), `ap`
 (Arch packages), `maps` (OpenStreetMap).
+
+### `packages` (`pkg `)
+
+| Key | Default | Meaning |
+|---|---|---|
+| `install` | `false` | `true`: Enter on a package you don't have opens a terminal running `sudo pacman -S <repo>/<name>` (sudo and pacman ask first). `false`: Enter copies that command |
 
 ### `notes` (`n `)
 

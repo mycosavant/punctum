@@ -9,8 +9,8 @@
 # (found 2026-10-10: .md and .rs rows did nothing; .html and folders opened).
 # So for a local file:
 #
-# - text whose default app is a terminal app, or has no default: your
-#   Omarchy default editor, the way Omarchy opens text itself
+# - text (or an empty file) whose default app is a terminal app, or has no
+#   default: your Omarchy default editor, the way Omarchy opens text itself
 #   (omarchy-launch-editor), through punctum-edit;
 # - another terminal app: gio open, which starts it in xdg-terminal-exec;
 # - anything else, and every URL: xdg-open, unchanged.
@@ -38,14 +38,16 @@ if [[ -n $default ]]; then
     f=$d/applications/$default
     [[ -r $f ]] || f=$d/applications/${default/-//}
     [[ -r $f ]] || continue
-    t=$(awk -F= '/^\[/ { g = $0 } g == "[Desktop Entry]" && $1 == "Terminal" { print $2; exit }' "$f")
+    t=$(awk -F'[ \t]*=[ \t]*' '{ sub(/\r$/, "") } /^\[/ { g = $0 } g == "[Desktop Entry]" && $1 == "Terminal" { print $2; exit }' "$f")
     [[ $t == true ]] && terminal=true
     break
   done
 fi
 
+# An empty file counts as text: xdg-mime and file both sniff the content, so
+# a just-made notes.md is inode/x-empty or "binary" to them.
 text=false
-if [[ $mime == text/* ]]; then
+if [[ $mime == text/* || ! -s $path ]]; then
   text=true
 elif [[ $(file -b --mime-encoding -- "$path" 2>/dev/null) != binary ]]; then
   text=true

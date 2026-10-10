@@ -12,11 +12,22 @@
 //
 // Two kinds of template are refused, with a message, because bash would
 // evaluate the value itself there: {q} inside single quotes (it wouldn't
-// expand at all), and any template using arithmetic or array subscripts
-// ($(( )), (( )), [[ ]], let, declare, ${…[…]}), where a value such as
-// a[$(cmd)] runs cmd.
+// expand at all), and any template using arithmetic, array subscripts or a
+// builtin that takes a variable's name ($(( )), (( )), [[ ]], let, declare,
+// ${…[…]}, ${!…}, test -v, printf -v, read, mapfile, unset, getopts,
+// wait -p), where a value such as a[$(cmd)] runs cmd. Measured with bash
+// 5.3 on 2026-10-10: test -v, [ -v ], ${!x}, printf -v, read and declare -n
+// ran it; the rest are refused because they take a name too.
+//
+// Templates that hand the value to another shell on purpose (eval, sh -c,
+// ssh host {q}) run it as code by design: that is what they're for.
 
-var EVALUATES = /\(\(|\[\[|\$\[|\blet\b|\bdeclare\b|\btypeset\b|\blocal\b|\$\{[^}]*\[/
+var EVALUATES = new RegExp([
+  "\\(\\(", "\\[\\[", "\\$\\[", "\\$\\{[^}]*\\[", "\\$\\{!",
+  "\\b(let|declare|typeset|local|read|mapfile|readarray|unset|getopts)\\b",
+  "\\bprintf\\s+-v\\b", "\\bwait\\s+-p\\b",
+  "(^|[\\s;&|(!])(test|\\[)\\s+(!\\s+)?-[vR]\\b"
+].join("|"))
 
 // The script with each {q} turned into a reference to $1, or null when the
 // template is refused. Tracks bash quoting and skips comments.

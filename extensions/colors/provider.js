@@ -2,7 +2,7 @@
 
 // A colour typed as hex or rgb() shows a swatch and its HEX, RGB and HSL
 // forms; Enter copies one. Parsing adapted from Keystroke's core/Colors.js
-// (MIT, Arseniy Zarechnev, evindor/keystroke).
+// (evindor/keystroke, MIT; its notice is in LICENSE).
 //
 //   #ff6644 · #f64 · ff6644 · rgb(255, 102, 68)
 //

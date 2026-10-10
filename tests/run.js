@@ -14,7 +14,8 @@ const rates = { rates: { USD: 1, LKR: 300.5, EUR: 0.9, INR: 83.2, GBP: 0.78, JPY
 const zones = { "Asia/Colombo": { offset: 330, abbr: "+0530" }, "UTC": { offset: 0, abbr: "UTC" }, "America/New_York": { offset: -240, abbr: "EDT" }, "Europe/London": { offset: 60, abbr: "BST" }, "America/Los_Angeles": { offset: -420, abbr: "PDT" }, "Asia/Tokyo": { offset: 540, abbr: "JST" } }
 const now = () => new Date(2026, 8, 23, 14, 0)   // 23 Sep 2026 14:00 local
 let fails = 0
-const emojis = JSON.parse(require("fs").readFileSync("/usr/share/omarchy/shell/plugins/emojis/emojis.json", "utf8"))
+// A slice of Omarchy's emojis.json, so the tests run without Omarchy installed (CI).
+const emojis = JSON.parse(require("fs").readFileSync(__dirname + "/fixtures/emojis.json", "utf8"))
 const processes = [
   { pid: 101, rss: 400000, cpu: 12.5, name: "chrome", args: "/opt/google/chrome/chrome" },
   { pid: 102, rss: 200000, cpu: 3.0, name: "chrome", args: "/opt/google/chrome/chrome --type=renderer" },
@@ -175,11 +176,17 @@ expect("g foo bar", "Search Google: foo bar")
 // Hotkey: which Lua gets sent to `hyprctl eval`.
 { const H = load(P + "lib/Hotkey.js"), cmd = "omarchy-shell shell toggle io.github.mycosavant.punctum"
   const other = { modmask: 64, key: "K", description: "Keybindings", dispatcher: "__lua" }
-  const mine = { modmask: 64, key: "PERIOD", description: "Command bar", dispatcher: "__lua" }
+  const mine = { modmask: 64, key: "PERIOD", description: "Punctum", dispatcher: "__lua" }
+  const foreign = { modmask: 64, key: "PERIOD", description: "Something else", dispatcher: "__lua" }
+  const commandBar = { modmask: 64, key: "PERIOD", description: "Command bar", dispatcher: "__lua" }
   const j = a => JSON.stringify(a)
   const checks = [
     ["parse", JSON.stringify(H.parseCombo("super + alt + c")) === '{"mask":72,"key":"C"}' && H.parseCombo("") === null && H.parseCombo("SUPER +") !== null && H.parseCombo("C + SUPER") === null],
-    ["binds when free", (r => r.bound && r.lua.length === 2 && r.lua[0] === 'hl.bind("SUPER + PERIOD", hl.dsp.exec_cmd("' + cmd + '"), { description = "Command bar" })')(H.plan(j([other]), "SUPER + PERIOD", cmd))],
+    ["binds when free", (r => r.bound && r.lua.length === 2 && r.lua[0] === 'hl.bind("SUPER + PERIOD", hl.dsp.exec_cmd("' + cmd + '"), { description = "Punctum" })')(H.plan(j([other]), "SUPER + PERIOD", cmd))],
+    ["bound twice → unbind, bind once", (r => r.bound && r.lua.length === 3 && r.lua[0] === 'hl.unbind("SUPER + PERIOD")' && /^hl\.bind\("SUPER \+ PERIOD"/.test(r.lua[1]))(H.plan(j([other, mine, mine]), "SUPER + PERIOD", cmd))],
+    ["bound twice + foreign conflict → no bind, no unbind", (r => !r.bound && r.conflict !== "" && r.lua.length === 0)(H.plan(j([mine, mine, foreign]), "SUPER + PERIOD", cmd))],
+    ["old key bound twice → one unbind", (r => r.bound && r.lua.length === 3 && r.lua.filter(s => s === 'hl.unbind("SUPER + PERIOD")').length === 1)(H.plan(j([mine, mine]), "SUPER + ALT + C", cmd))],
+    ["Command Bar's key is someone else's: a conflict, never ours to unbind", (r => !r.bound && r.conflict === "Command bar" && r.lua.length === 0)(H.plan(j([commandBar]), "SUPER + PERIOD", cmd)) && H.plan(j([commandBar]), "SUPER + ALT + C", cmd).lua.every(s => !/unbind/.test(s))],
     ["already bound → nothing", (r => r.bound && r.lua.length === 0)(H.plan(j([other, mine]), "SUPER + PERIOD", cmd))],
     ["key changed → unbind old, bind new", (r => r.bound && r.lua[0] === 'hl.unbind("SUPER + PERIOD")' && /^hl\.bind\("SUPER \+ ALT \+ C"/.test(r.lua[1]))(H.plan(j([mine]), "SUPER + ALT + C", cmd))],
     ["taken by another → no bind, conflict", (r => !r.bound && r.conflict === "Keybindings" && r.lua.length === 0)(H.plan(j([other]), "SUPER + K", cmd))],
@@ -255,7 +262,15 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     "let n={q}",
     "# \"\necho \"{q}\"",                       // a quote in a comment
     "printf %s \"pre-{q}-post\"",
-    "echo {q} # trailing {q}"
+    "echo {q} # trailing {q}",
+    "test -v {q} && echo set",                  // these take a variable's name and evaluate its subscript
+    "[ -v {q} ] && echo set",
+    "x={q}; echo ${!x}",
+    "printf -v {q} %s v",
+    "read -r {q} <<<v",
+    "[ ! -v {q} ] || echo set",
+    "mapfile {q} <<<v",
+    "test -n {q} && echo nonempty"              // an ordinary test is fine
   ]
   const verdicts = []
   for (const tmpl of templates) {
@@ -266,7 +281,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   }
   const marks = fs.readdirSync(dir)
   fs.rmSync(dir, { recursive: true, force: true })
-  const want = "ran|refused|refused|refused|refused|refused|ran|ran|ran"
+  const want = "ran|refused|refused|refused|refused|refused|ran|ran|ran|refused|refused|refused|refused|refused|refused|refused|ran"
   const ok = marks.length === 0 && verdicts.join("|") === want
   console.log((ok ? "ok  " : "FAIL") + "  templates that evaluate are refused, the rest run the text as text" + (ok ? "" : " → " + verdicts.join("|") + " marks:" + marks)); if (!ok) fails++ }
 { const row = Engine.run("x a b", { providers: ["commands"], commands: [{ keyword: "x", run: "printf '[%s]' {q} \"<{q}>\"" }] }, {})[0]
@@ -368,6 +383,8 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   stub("nvim", "true")
   const desktop = (id, terminal) => fs.writeFileSync(dir + "/data/applications/" + id, "[Desktop Entry]\nExec=x %F\nTerminal=" + terminal + "\n[Desktop Action new]\nTerminal=false\n")
   desktop("nvim.desktop", "true"); desktop("zen.desktop", "false"); desktop("viewer.desktop", "true"); desktop("gimp.desktop", "false")
+  // The spec allows spaces around = and CRLF line ends.
+  fs.writeFileSync(dir + "/data/applications/spaced.desktop", "[Desktop Entry]\r\nExec=x %F\r\nTerminal = true\r\n")
   const env = Object.assign({}, process.env, { PATH: dir + "/bin:/usr/bin", STUBS: dir, HOME: dir + "/home", XDG_DATA_HOME: dir + "/data", XDG_DATA_DIRS: dir + "/sys" })
   const open = (target, mime, def) => {
     fs.writeFileSync(dir + "/mime", mime + "\n")
@@ -385,6 +402,11 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     check("open: a hostile file name reaches the editor unchanged and runs nothing", r[r.length - 1] === rs && !fs.existsSync(dir + "/pwned"), r.join(" ")) }
   { const r = open(md, "text/markdown", null)
     check("open: text with no default app goes to the editor", r[0] === "omarchy-launch-tui", r.join(" ")) }
+  { const empty = dir + "/files/new.md"; fs.writeFileSync(empty, "")
+    const r = open(empty, "inode/x-empty", null)
+    check("open: a new, empty file goes to the editor (its type can't be sniffed)", r[0] === "omarchy-launch-tui" && r[r.length - 1] === empty, r.join(" ")) }
+  { const r = open(md, "text/plain", "spaced.desktop")
+    check("open: Terminal = true with spaces and CRLF is still a terminal app", r[0] === "omarchy-launch-tui", r.join(" ")) }
   { const r = open(md, "text/html", "zen.desktop")
     check("open: text with a GUI default keeps xdg-open", r.join(" ") === "xdg-open " + md, r.join(" ")) }
   { const r = open(png, "image/png", "viewer.desktop")
@@ -695,6 +717,12 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("bangs: outside a mode a trailing bang still works", top("john 3:16 !w") === "bangs")
   const t = Date.now(); Engine.run("a ".repeat(20000) + "!x", config, { now, apps, windows: [] })
   check("bangs and bible: a pasted blob is quick", Date.now() - t < 200, (Date.now() - t) + "ms") }
+
+// The sandbox's write denylist lives twice: bin/punctum-sandbox enforces it
+// when a script runs, lib/Extensions.js refuses a manifest early. Same list.
+{ const fs = require("fs"), list = (file, re) => JSON.parse("[" + fs.readFileSync(P + file, "utf8").match(re)[1].replace(/'/g, '"').replace(/,\s*$/, "") + "]").sort().join(" ")
+  const py = list("bin/punctum-sandbox", /DENY_WRITES = \[([\s\S]*?)\]/), js = list("lib/Extensions.js", /var DENY_WRITES = \[([\s\S]*?)\]/)
+  check("sandbox: the two write denylists are the same", py === js && py.split(" ").length > 20, py + " ≠ " + js) }
 
 // neutral defaults: nothing personal ships switched on
 { const fs = require("fs"), man = id => JSON.parse(fs.readFileSync(P + "extensions/" + id + "/extension.json", "utf8"))
@@ -1014,7 +1042,14 @@ print(json.dumps({
   check("sandbox: false runs it as it is (calibration: the probe sees home, the session if there is one, the env and writes for real)", off.secret === true && off.runtime === hasBus && off.env_secret === true && fs.existsSync(home + "/new"), JSON.stringify(off))
   check("sandbox: the environment is cleared (a token in it doesn't get in)", strict.env_secret === false && asked.env_secret === false)
   const netOn = run({ network: true })
-  check("sandbox: network on reaches loopback and has the resolver; off has neither (calibrated against each other)", netOn.loopback === true && netOn.resolver === true && strict.loopback === false && strict.resolver === false, JSON.stringify([netOn.loopback, netOn.resolver, strict.loopback, strict.resolver]))
+  // The resolver files are mounted only with network on, which shows only when
+  // the host's /etc/resolv.conf points into /run (systemd-resolved,
+  // NetworkManager). In a container it's a plain file under /etc, present
+  // either way; loopback is what shows the network is off.
+  const resolvLink = (() => { try { return fs.readlinkSync("/etc/resolv.conf") } catch (e) { return "" } })()
+  const resolverShows = /^(\/run\/|\.\.\/run\/)/.test(resolvLink)
+  if (!resolverShows) console.log("note  sandbox: /etc/resolv.conf isn't a link into /run here, so mounting the resolver only with network on is untested")
+  check("sandbox: network on reaches loopback and has the resolver; off reaches neither (calibrated against each other)", netOn.loopback === true && netOn.resolver === true && strict.loopback === false && (strict.resolver === false || !resolverShows), JSON.stringify([netOn.loopback, netOn.resolver, strict.loopback, strict.resolver, resolvLink]))
   fs.rmSync(home + "/new", { force: true })
   const rw = run({ home: "read-write" })
   check("sandbox: home read-write really writes (and ?extensions calls it not a sandbox)", rw.write_home === true && fs.existsSync(home + "/new")

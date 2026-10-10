@@ -1,7 +1,7 @@
 .pragma library
 
 // A web address typed into the bar opens in your default browser. Adapted
-// from Keystroke's core/Url.js (MIT, Arseniy Zarechnev, evindor/keystroke):
+// from Keystroke's core/Url.js (evindor/keystroke, MIT; its notice is in LICENSE):
 // recognised without a network request or a shell, and handed to xdg-open as
 // one argument.
 //

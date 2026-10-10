@@ -123,7 +123,7 @@ off, and `?extensions` says which command it needs.
 - `curl`: exchange rates
 - `wl-copy` (from `wl-clipboard`): copying results
 - `xdg-open`: web keyword commands
-- `ps` and `kill` (from `procps-ng`): the process list
+- `ps` (from `procps-ng`) and `kill` (from `util-linux`): the process list
 - `date` and `timedatectl`: time zones
 - `uwsm-app` and `gtk-launch`: opening apps, the same way Omarchy's own launcher does
 - `hyprctl`: setting the hotkey, and listing and focusing windows
@@ -145,7 +145,7 @@ off, and `?extensions` says which command it needs.
 ### Network, files and processes
 
 - The only network request is to `https://open.er-api.com/v6/latest/USD`, made when you convert currency and the saved rates are out of date. The rates update once a day. What you type is not sent anywhere, except the text you search with a web keyword like `g` and the prompt you give your agent with `ai`.
-- It writes only to `~/.cache/punctum/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches) and your pinned apps. It does not change your Hyprland or Omarchy config files.
+- The bar keeps its own state only in `~/.cache/punctum/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches), your pinned apps, the card's position and size, and extensions you switched in `?extensions`. Extensions write where `?extensions` says: Everywhere its index of your home folder in `~/.cache/everywhere/`, `n` your inbox note, reminders their messages under `$XDG_RUNTIME_DIR`, and a script extension the folders its manifest asks to write. Nothing changes your Hyprland or Omarchy config files.
 - It reads `~/.local/state/omarchy/clipboard-history.json` once, the first time you type `cb ` after opening the bar, and forgets it and every row built from it when the bar closes. It isn't watched, so a copy landing while you browse can't move the rows under the selection; reopen to see it. It never writes that file.
 - `~` searches run `fd` as an argument list with your words regex-escaped, under your home folder, stopping after 400 hits or 3 seconds. Hidden files are left out unless `"files": { "hidden": true }`.
 - Keybindings come from sourcing Omarchy's `omarchy-menu-keybindings`, at most every 30 seconds and only once you type something. They depend on that script doing nothing but define functions when sourced with `--print`.
@@ -196,7 +196,7 @@ Put your settings in `~/.config/omarchy/extensions/punctum.json`. They override 
 }
 ```
 
-`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is passed as `$1`, so it can't change the command itself. Templates where bash would evaluate that value anyway are refused with a message: `{q}` in single quotes, and arithmetic or array subscripts (`$(( ))`, `(( ))`, `[[ ]]`, `let`, `${a[…]}`), where `a[$(cmd)]` runs `cmd`.
+`{q}` is whatever you type after the keyword. In `open` commands it is URL-encoded. In `run` commands it is passed as `$1`, so it can't change the command itself. Templates where bash would evaluate that value anyway are refused with a message: `{q}` in single quotes, arithmetic or array subscripts (`$(( ))`, `(( ))`, `[[ ]]`, `let`, `${a[…]}`), and builtins that take a variable's name (`declare`, `${!…}`, `test -v`, `printf -v`, `read` and the like), where `a[$(cmd)]` runs `cmd`. A template that hands the text to another shell on purpose, such as `eval`, `sh -c` or `ssh host {q}`, runs it as code: that is what those do.
 
 ## Asking your agent
 

@@ -24,6 +24,10 @@ jobs:
         run: pacman -Syu --noconfirm --needed nodejs python bash bubblewrap plocate fd fzf ripgrep file glib2 xdg-utils procps-ng
       - name: Run the tests as a normal user
         run: |
+          # Ubuntu runners restrict unprivileged user namespaces through
+          # AppArmor, which stops a non-setuid bwrap; a privileged container
+          # may lift it.
+          sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           useradd -m tester
           chown -R tester: "$GITHUB_WORKSPACE"
           uid=$(id -u tester)

@@ -214,7 +214,9 @@ What differs from the proposal above, checked against the code:
 - **Manifests** also carry `hero`, `minQuery`, `placeholder` and `refresh`;
   `mode` is a regular expression; switches accept `true`/`false` or
   `{ "enabled": ... }`, and the older `"providers"` list still works.
-- **The user folder** is `~/.config/omarchy/commandbar/extensions/`, with
+- **The user folder** is `~/.config/omarchy/commandbar/extensions/` (since
+  2026-10-10, with the rename to Punctum, `~/.config/omarchy/punctum/extensions/`
+  and `bin/punctum-extensions`), with
   ownership and permission checks in `bin/commandbar-extensions`.
 - **Everywhere** is a Python command, `extensions/everywhere/everywhere`; its
   index moved to `~/.cache/everywhere/home.db`. Not done from the "later"

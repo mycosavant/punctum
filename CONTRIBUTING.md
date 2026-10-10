@@ -39,7 +39,7 @@ Punctum is meant for the Omarchy plugin marketplace, whose automated security ch
 - Don't ask for administrator rights, and don't start, stop or change system services. The marketplace's automated check flags these.
 - Don't download something and then run it.
 - Don't add network requests unless the feature needs one, and only make them when the user asks for that feature.
-- Don't write to the user's config files. The bar writes only to `~/.cache/punctum/`.
+- Don't write to the user's config files. The bar keeps its own state only in `~/.cache/punctum/`; an extension that writes elsewhere says so in its manifest's `permissions`.
 - Keep the defaults neutral. Personal choices, such as a currency, time zone or hotkey, go in your own `~/.config/omarchy/extensions/punctum.json`, not in `config.default.json`.
 - Never put what the user types into a shell string. Use argument lists, or pass it as an argument or on stdin to a constant script. See `{q}` handling in `extensions/commands/provider.js`.
 - List any new command-line tool in the README's Dependencies section.

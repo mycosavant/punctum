@@ -2,7 +2,7 @@
 .import "../../lib/FileKinds.js" as FileKinds
 
 // Files and folders under the home folder, found with `fd`. Adapted from
-// Keystroke's core/Files.js (MIT, Arseniy Zarechnev, evindor/keystroke).
+// Keystroke's core/Files.js (evindor/keystroke, MIT; its notice is in LICENSE).
 //
 //   ~readme          names containing r…e…a…d…m…e in order
 //   ~docs report     "report" in the name, under something matching "docs"

@@ -3,7 +3,7 @@
 
 // Omarchy's keybindings, findable by what they do, with the keys next to
 // them so next time you press the keys instead. Adapted from Keystroke's
-// core/Hotkeys.js (MIT, Arseniy Zarechnev, evindor/keystroke).
+// core/Hotkeys.js (evindor/keystroke, MIT; its notice is in LICENSE).
 //
 //   full screen      → Full screen · Super + F
 //   keys             every binding, in Super+K's order

@@ -877,10 +877,11 @@ Item {
   // reload, after config changes, and at startup. lib/Hotkey.js decides what
   // to bind or unbind; a key that something else already uses is left alone.
   // The id comes from the manifest, so a renamed clone binds its own; it goes
-  // into a shell command, so anything but [A-Za-z0-9._-] falls back.
+  // into a shell command, so anything Omarchy's own plugin tools wouldn't
+  // accept (omarchy-plugin-validate's pattern, no "..") falls back.
   readonly property string pluginId: {
     var id = root.manifest && root.manifest.id
-    return typeof id === "string" && /^[A-Za-z0-9._-]+$/.test(id) ? id : "io.github.mycosavant.punctum"
+    return typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && id.indexOf("..") < 0 ? id : "io.github.mycosavant.punctum"
   }
   readonly property string toggleCommand: "omarchy-shell shell toggle " + root.pluginId
   property bool configsLoaded: false
@@ -890,14 +891,16 @@ Item {
 
   function ensureHotkey() {
     if (!root.configsLoaded) return
-    if (bindsProc.running) { root.hotkeyQueued = true; return }
+    // Wait for the previous bind to land too: reading the binds before it has
+    // would see the key as free and bind it a second time.
+    if (bindsProc.running || hotkeyEvalProc.running) { root.hotkeyQueued = true; return }
     bindsProc.running = true
   }
 
   function reconcileHotkey(bindsJson) {
     var hotkey = String(root.config.hotkey || "").trim()
     var p = Hotkey.plan(bindsJson, hotkey, root.toggleCommand)
-    if (p.lua.length > 0) Quickshell.execDetached(["hyprctl", "eval", p.lua.join("\n")])
+    if (p.lua.length > 0) { hotkeyEvalProc.command = ["hyprctl", "eval", p.lua.join("\n")]; hotkeyEvalProc.running = true }
     root.boundHotkey = p.bound ? hotkey : ""
     if (p.conflict && root.warnedConflict !== hotkey) {
       root.warnedConflict = hotkey
@@ -905,7 +908,16 @@ Item {
       Quickshell.execDetached(["notify-send", "-a", "Punctum", "Punctum has no hotkey",
         hotkey + " already opens \"" + p.conflict + "\". Set a different \"hotkey\" in ~/.config/omarchy/extensions/punctum.json."])
     }
+    if (!hotkeyEvalProc.running) root.runQueuedHotkey()
+  }
+
+  function runQueuedHotkey() {
     if (root.hotkeyQueued) { root.hotkeyQueued = false; root.ensureHotkey() }
+  }
+
+  Process {
+    id: hotkeyEvalProc
+    onExited: root.runQueuedHotkey()
   }
 
   Process {

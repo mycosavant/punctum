@@ -55,7 +55,7 @@ The installed bar is still `hypha.commandbar` in
    own choices that left the defaults (Bible on, the Bible bangs, the
    Syncthing keyword); there was no Command Bar config file before.
 2. Copy `~/.cache/omarchy-commandbar/` to `~/.cache/punctum/` (geometry,
-   pins, launch counts, rates, extension switches).
+   pins, launch counts, rates, last query).
 3. Disable `hypha.commandbar` first, so Super+Period is free, then clone
    `~/git/punctum` into `~/.config/omarchy/plugins/io.github.mycosavant.punctum`
    and enable it. Once on GitHub, `omarchy plugin add` replaces the clone.
