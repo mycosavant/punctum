@@ -481,7 +481,7 @@ mod tests {
     fn at(local: &str, y: i16, mo: i8, d: i8, h: i8, settings: &serde_json::Value, q: &str) -> Answer {
         let zone = TimeZone::get(local).unwrap();
         let now = jiff::civil::date(y, mo, d).at(h, 0, 0, 0).to_zoned(zone.clone()).unwrap().timestamp();
-        Time.matches(q, &Context { settings, now, local_zone: zone })
+        Time.matches(q, &Context { settings, now, local_zone: zone, data: &crate::NO_DATA })
     }
 
     fn lanka(q: &str) -> Vec<Row> {

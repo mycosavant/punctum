@@ -40,7 +40,7 @@ Saikomantisu.
 | `:fire`, `emoji party` | Emoji search. Enter types the emoji into the app you were using and copies it |
 | `5 km to mi`, `72f`, `5 ft 11 in to cm`, `2 cups in ml` | Unit conversion: length, weight, temperature, volume, area, speed, data and time. Offline |
 | `brave`, `netflix`, `w `, `w github` | Switch to an open window, found by its app or its title. `w ` lists them all, most recent first |
-| `firefox`, `term`, `vsc`, `brave new window` | Open an installed app, or one of its actions like New Window. Only apps: nothing here changes a setting or a default |
+| `firefox`, `term`, `vsc`, `brave new window` | Open an installed app, or one of its actions like New Window. Only apps: nothing here changes a setting or a default. With [native extensions](docs/native.md), also by its letters in order: `frfx` |
 | `kill`, `kill chrome`, `kill -9 node` | Quit one of your processes, or all processes with that name |
 | `cb `, `cb invoice` | Clipboard history, pinned first. Enter pastes into the app you were using, Shift+Enter only copies |
 | `~readme`, `~docs report` | Files and folders under `~`, letters in order (`~dwnlds` finds Downloads). Enter opens, Shift+Enter opens a terminal in the folder |
@@ -105,7 +105,7 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
-Units, time zones, colours and web addresses can also run natively, in punctumd, a
+Apps, units, time zones, colours and web addresses can also run natively, in punctumd, a
 small Rust daemon. It's optional, and the bar works without it; with it,
 time zones come from your system's tzdata and every IANA zone answers. With Rust installed,
 `cargo build --release` in the plugin folder builds it, and the bar picks it

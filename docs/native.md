@@ -6,6 +6,7 @@ as a fallback, so the bar works without punctumd.
 
 | Extension | Rust file | What the Rust version uses | Where it does better than the JS |
 |---|---|---|---|
+| Apps | `apps.rs` | [nucleo-matcher](https://docs.rs/nucleo-matcher) (Helix's fuzzy matcher), [icu_collator](https://docs.rs/icu_collator) | Finds an app by its letters in order from the start of a word (`frfx` → Firefox, `spfy` → Spotify), ranked below everything the old rules find. Ties sort by Unicode collation, as `localeCompare` does |
 | Units | `units.rs` | — | Nothing yet: a port, digit for digit |
 | Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
 | Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words |
@@ -115,6 +116,11 @@ in order, one JSON object per line. It exits when stdin closes.
 → {"id": "time\ntime in tokyo", "ext": "time", "query": "time in tokyo", "settings": {...}}
 ← {"id": "time\ntime in tokyo", "rows": [...], "ttl": 41250}
 
+// the shell's state an extension needs, sent when it changes and after each
+// hello: apps, launches, pinned, windows (the only keys it takes)
+→ {"id": "data", "op": "data", "key": "apps", "value": [{"id": "firefox", "name": "Firefox", ...}]}
+← {"id": "data", "ok": true}
+
 // tests fix the clock and the system zone; the bar never sends these
 → {"id": 1, "ext": "time", "query": "time", "now": 1790152230000, "local_zone": "Asia/Colombo"}
 
@@ -124,6 +130,16 @@ in order, one JSON object per line. It exits when stdin closes.
 
 Rows may carry `run` and `alt` actions from the bar's short list (open, copy,
 paste, edit, argv). The bar checks them the way it checks a script's actions.
+Native rows may also use the bar's own `app` (an id of letters, digits and
+`._+-`, and an optional action index) and `window` (a `0x…` address)
+actions, which scripts can't. They may set `swatch`, `image`, `group`,
+`appId` and `pinned`, each checked too. A manifest with `"empty": true` has
+its answer to `""` listed on the empty bar (Apps' pinned apps).
+
+When the bar sends new shell state, it drops every cached answer and every
+answer still coming, since those used the old state. Requests and replies
+share one pipe, in order, so a query sent after the state is answered with
+it.
 
 The bar uses the extension id and query as the request id, and caches each
 answer until the config changes or its `ttl` runs out. A stale answer stays

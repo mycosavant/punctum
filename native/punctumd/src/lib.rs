@@ -1,12 +1,15 @@
 //! punctumd: Punctum's native extensions, served to the bar over stdin and
 //! stdout, one JSON object per line. See docs/native.md for the protocol.
 
+pub mod apps;
 pub mod cities;
 pub mod colors;
 pub mod format;
 pub mod time;
 pub mod units;
 pub mod url;
+
+use std::collections::HashMap;
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -30,7 +33,24 @@ pub struct Row {
     pub alt: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub swatch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// Marks a row Alt+P can pin.
+    #[serde(rename = "appId", skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
+
+/// No shell state, for tests of extensions that don't use any.
+#[cfg(test)]
+pub(crate) static NO_DATA: std::sync::LazyLock<Data> = std::sync::LazyLock::new(Data::new);
+
+/// What the bar has told punctumd about the shell (`op: "data"`), by key:
+/// apps, launches, pinned, windows. See docs/native.md.
+pub type Data = HashMap<String, Value>;
 
 /// What an extension answers: its rows, and for how long they hold. An
 /// answer that depends on the clock says when it goes stale; the bar caches
@@ -54,9 +74,16 @@ pub struct Context<'a> {
     pub now: Timestamp,
     /// The system's time zone.
     pub local_zone: TimeZone,
+    /// The shell's state, as the bar last sent it.
+    pub data: &'a Data,
 }
 
 impl Context<'_> {
+    /// One piece of the shell's state, or null if the bar hasn't sent it.
+    pub fn data(&self, key: &str) -> &Value {
+        self.data.get(key).unwrap_or(&Value::Null)
+    }
+
     /// A setting as a string, if it is one and isn't empty.
     pub fn str_setting(&self, key: &str) -> Option<&str> {
         self.settings.get(key).and_then(Value::as_str).filter(|s| !s.is_empty())
@@ -71,7 +98,7 @@ pub trait Extension: Sync {
 
 /// Every extension this build serves.
 pub fn extensions() -> &'static [&'static dyn Extension] {
-    &[&units::Units, &time::Time, &url::Url, &colors::Colors]
+    &[&units::Units, &time::Time, &url::Url, &colors::Colors, &apps::Apps]
 }
 
 pub const PROTOCOL: u32 = 1;
@@ -80,9 +107,14 @@ pub const PROTOCOL: u32 = 1;
 pub struct Request {
     #[serde(default)]
     pub id: Value,
-    /// "hello" or "match" (the default).
+    /// "hello", "data" or "match" (the default).
     #[serde(default)]
     pub op: Option<String>,
+    /// data: which piece of the shell's state, and its value.
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub value: Value,
     #[serde(default)]
     pub ext: String,
     #[serde(default)]
@@ -105,9 +137,12 @@ pub fn system_zone() -> TimeZone {
     TimeZone::try_system().unwrap_or(TimeZone::UTC)
 }
 
+/// The keys `op: "data"` takes; anything else is refused.
+pub const DATA_KEYS: &[&str] = &["apps", "launches", "pinned", "windows"];
+
 /// The reply to one request line. A request that can't be read gets an
 /// `error`, with its id when there was one, so the bar never waits on it.
-pub fn handle(line: &str) -> Value {
+pub fn handle(line: &str, data: &mut Data) -> Value {
     let req: Request = match serde_json::from_str(line) {
         Ok(r) => r,
         Err(e) => return serde_json::json!({ "id": Value::Null, "error": format!("unreadable request: {e}") }),
@@ -119,6 +154,13 @@ pub fn handle(line: &str) -> Value {
             "version": env!("CARGO_PKG_VERSION"),
             "extensions": extensions().iter().map(|e| e.id()).collect::<Vec<_>>(),
         }),
+        "data" => {
+            if !DATA_KEYS.contains(&req.key.as_str()) {
+                return serde_json::json!({ "id": req.id, "error": format!("unknown data \"{}\"", req.key) });
+            }
+            data.insert(req.key, req.value);
+            serde_json::json!({ "id": req.id, "ok": true })
+        }
         "match" => {
             let Some(ext) = extensions().iter().find(|e| e.id() == req.ext) else {
                 return serde_json::json!({ "id": req.id, "error": format!("no extension \"{}\"", req.ext) });
@@ -127,6 +169,7 @@ pub fn handle(line: &str) -> Value {
                 settings: &req.settings,
                 now: req.now.and_then(|ms| Timestamp::from_millisecond(ms).ok()).unwrap_or_else(Timestamp::now),
                 local_zone: req.local_zone.as_deref().and_then(|z| TimeZone::get(z).ok()).unwrap_or_else(system_zone),
+                data,
             };
             // One extension's bug answers its own request with an error; the
             // daemon, and every other extension, carries on. Nothing it

@@ -5,17 +5,15 @@
   "version": "1.0.0",
   "description": "firefox: open an app or one of its actions; Alt+P pins",
   "icon": "󰀻",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
+  "empty": true,
   "order": 190,
   "helpOrder": 10,
-  "defaults": {
-    "pinned": []
-  },
-  "permissions": {
-    "runs": [
-      "gtk-launch, through uwsm-app"
-    ]
-  }
+  "defaults": {"pinned": []},
+  "help": [
+    {"id": "apps", "title": "Open an app", "about": "Type part of an app's name, or what it does", "examples": ["firefox", "term", "brave new window"]}
+  ],
+  "permissions": {"runs": ["gtk-launch, through uwsm-app"]}
 }

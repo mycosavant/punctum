@@ -10,6 +10,11 @@
 // typing "brave" can't land on "Default browser → Brave" by accident.
 //
 //   firefox · term · vsc (acronym) · brave new window
+//
+// This is the JS fallback for native/punctumd/src/apps.rs, used when punctumd
+// isn't installed; tests/apps-parity.js keeps the two the same, so change
+// both together. The Rust one also finds an app by its letters in order
+// ("frfx"), below everything these rules find.
 
 var LIMIT = 6
 var ACTIONS = 3

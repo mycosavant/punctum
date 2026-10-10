@@ -146,6 +146,7 @@ mod tests {
             settings: &serde_json::Value::Null,
             now: jiff::Timestamp::now(),
             local_zone: jiff::tz::TimeZone::UTC,
+            data: &crate::NO_DATA,
         };
         Colors.matches(q, &ctx).rows.into_iter().map(|r| r.title).collect()
     }

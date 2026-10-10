@@ -927,6 +927,28 @@ Item {
     return have ? have.rows : null
   }
 
+  // The shell's state a native extension needs (apps, launches, pins,
+  // windows), sent when it changes and after each hello. Answers given
+  // before are dropped, cached or still coming: they used the old state.
+  function pushNative(key, value) {
+    if (!nativeProc.running || !Object.keys(root.nativeServed).length) return
+    root.nativeCache = ({})
+    root.nativePending = ({})
+    nativeProc.write(JSON.stringify({ id: "data", op: "data", key: key, value: value }) + "\n")
+  }
+
+  function pushAllNative() {
+    root.pushNative("apps", root.apps)
+    root.pushNative("launches", root.launches)
+    root.pushNative("pinned", root.pinnedApps)
+    root.pushNative("windows", root.windows)
+  }
+
+  onAppsChanged: root.pushNative("apps", root.apps)
+  onLaunchesChanged: root.pushNative("launches", root.launches)
+  onPinnedAppsChanged: root.pushNative("pinned", root.pinnedApps)
+  onWindowsChanged: root.pushNative("windows", root.windows)
+
   function nativeLanded(line) {
     var r
     try { r = JSON.parse(line) } catch (e) { console.warn("punctum: punctumd: unreadable reply"); return }
@@ -938,6 +960,7 @@ Item {
       root.nativeFailures = 0
       root.nativeVersion = typeof r.version === "string" ? r.version.slice(0, 32) : ""
       root.nativeServed = served
+      root.pushAllNative()
       root.refreshNativeStatus()
       if (root.extensionsText) root.installExtensions(root.extensionsText)
       return

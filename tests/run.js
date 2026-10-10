@@ -1180,14 +1180,17 @@ print(json.dumps({
   const found = Extensions.discover([{ dir: P + "extensions" }])
   // The bar's services.native, made synchronous: one punctumd per question,
   // as a Sri Lanka user at 14:00 on 23 Sep 2026, wherever the tests run.
+  // The shell's state goes first, as the bar pushes it.
+  let shell = { apps, launches: { firefox: 12 }, pinned: ["signal"], windows: [] }
   const native = (id, query, settings) => {
-    const r = spawnSync(bin, [], { input: JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" }) + "\n", encoding: "utf8" })
-    return JSON.parse(r.stdout).rows
+    const data = Object.keys(shell).map(key => JSON.stringify({ id: "d", op: "data", key, value: shell[key] }))
+    const r = spawnSync(bin, [], { input: data.concat([JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8" })
+    return JSON.parse(r.stdout.trim().split("\n").pop()).rows
   }
   const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1206,6 +1209,19 @@ print(json.dumps({
     const col = nq("#ff6644").filter(r => r.provider === "colors"), hsl = nq("hsl(210 70% 50%)").filter(r => r.provider === "colors")
     check("native: colours through punctumd keep their swatch, add OKLCH, read hsl()", col.map(r => r.title).join("|") === "#FF6644|rgb(255, 102, 68)|hsl(11, 100%, 63%)|oklch(70% 0.193 34.1)"
       && col.every(r => r.swatch === "#ff6644") && col[0].hero && hsl[0].title === "#2680D9" && nq("decade").every(r => r.provider !== "colors") && nq("pick a colour").some(r => r.title === "Pick a colour from the screen"), col.map(r => r.title).join("|") + " " + (hsl[0] || {}).title)
+    const appRows = x => nq(x).filter(r => r.provider === "apps")
+    check("native: apps through punctumd, with launch history, actions and pins", appRows("f")[0].title === "Firefox" && appRows("brave new window")[0].run.action === 0
+      && appRows("brave new window")[0].run.kind === "app" && appRows("signal")[0].pinned && appRows("signal")[0].appId === "signal" && /^Pinned · /.test(appRows("signal")[0].subtitle)
+      && appRows("frfx")[0].title === "Firefox" && !appRows("2+2").length, appRows("frfx").map(r => r.title).join())
+    const empty = Engine.run("", config, { now, native })
+    check("native: the empty bar lists pinned apps from punctumd", empty.length === 1 && empty[0].title === "Signal" && empty[0].section === "Pinned" && empty[0].run.kind === "app", JSON.stringify(empty.map(r => r.title)))
+    shell = Object.assign({}, shell, { windows: [{ address: "0xb1", cls: "brave-browser", title: "x", workspace: "1", focus: 1 }] })
+    check("native: a running app opens a new window", appRows("brave")[0].run.label === "open new")
+    const forged = Ext.nativeProvider(Ext.validate({ schema: 1, id: "apps", type: "native" }, "/x")).match("q", { native: () => [
+      { title: "a", run: { kind: "app", target: "x; rm -rf ~" } }, { title: "b", run: { kind: "app", target: "ok.app", action: 1.5 } },
+      { title: "c", run: { kind: "window", target: "$(x)" } }, { title: "d", run: { kind: "window", target: "0xb1", label: "anything" }, appId: "../x", group: "G", pinned: "yes" }] })
+    check("native: app and window actions are checked; bad ids, actions and addresses refused", forged.every(r => r.run === null || (r.run.kind === "window" && r.run.label === "switch"))
+      && forged[3].run.target === "0xb1" && !forged[3].appId && forged[3].group === "G" && !forged[3].pinned, JSON.stringify(forged.map(r => r.run)))
     const open = x => (nq(x).find(r => r.provider === "url") || {}).run
     check("native: web addresses open through punctumd, actions checked by the bar", open("example.com/a?b=1").target === "https://example.com/a?b=1" && open("example.com").label === "open"
       && open("localhost:3000").target === "http://localhost:3000" && nq("example.com")[0].alt.kind === "copy" && !open("readme.md") && !open("mr.smith") && open("nas.local").target === "https://nas.local")
@@ -1224,14 +1240,14 @@ print(json.dumps({
   { const T = c => ["term", c]
     const first = st => { Engine.setNativeStatus(Object.assign({ build: T("build"), fetch: T("fetch"), remove: T("remove") }, st)); return Engine.run("?extensions", config, { now })[0] }
     const offCargo = first({ running: false, cargo: true, release: true })
-    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, [^·]*Units run in JavaScript/.test(offCargo.subtitle)
+    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, [^·]* run in JavaScript/.test(offCargo.subtitle)
       && /runs no programs, opens no connections/.test(offCargo.subtitle) && offCargo.run.target.join() === "term,build" && offCargo.actionLabel === "Build" && offCargo.alt.target.join() === "term,fetch", offCargo.subtitle)
     const offRelease = first({ running: false, cargo: false, release: true })
     check("native row: off without cargo, Enter downloads the checked release", offRelease.run.target.join() === "term,fetch" && !offRelease.alt && /checks its SHA-256/.test(offRelease.subtitle))
     const offNone = first({ running: false, cargo: false, release: false })
     check("native row: with neither, Enter copies how to get Rust", offNone.run.kind === "copy" && offNone.run.target === "sudo pacman -S rust")
     const onMine = first({ running: true, version: "0.1.0", installed: true, cargo: true })
-    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, [^·]*Units run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
+    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, [^·]* run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
     const onPkg = first({ running: true, version: "0.1.0", installed: false, packaged: "/usr/bin/punctumd" })
     check("native row: on from a package, it says where and offers nothing to undo", /from \/usr\/bin\/punctumd/.test(onPkg.subtitle) && !onPkg.run && !onPkg.alt)
     Engine.setNativeStatus(null)
