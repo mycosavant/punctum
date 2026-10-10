@@ -1,0 +1,33 @@
+#!/bin/bash
+# Open a file in your Omarchy default editor at a line.
+#
+#   commandbar-edit <line> <absolute path>
+#
+# omarchy-launch-editor +LINE doesn't work with Ghostty: given
+# `ghostty -e nvim +3 file` it starts `nvim file` (seen 2026-10-09), since it
+# reads a leading + as one of its own actions. So a terminal editor is
+# started through bash, which hands it the line in its own syntax, and the
+# terminal never sees a +. GUI editors get their own line flag; anything
+# else opens at the top through omarchy-launch-editor.
+
+line=$1 path=$2
+case $line in "" | *[!0-9]*) exit 2 ;; esac
+[[ $path == /* ]] || exit 2
+
+editor=nvim
+state="$HOME/.local/state/omarchy/defaults/editor"
+[[ -r $state ]] && read -r editor <"$state"
+command -v "$editor" >/dev/null || editor=nvim
+name=${editor##*/}
+
+tui() { exec omarchy-launch-tui --app-id="org.omarchy.$name" bash -c "$1" "$editor" "$line" "$path"; }
+
+case $name in
+nvim | vim) tui 'exec "$0" -c "$1" -- "$2"' ;;
+nano) tui 'exec "$0" "+$1" -- "$2"' ;;
+micro | hx | helix) tui 'exec "$0" "$2:$1"' ;;
+code | code-oss | codium | cursor | windsurf) exec setsid uwsm-app -- "$editor" --goto "$path:$line" ;;
+zed | zeditor) exec setsid uwsm-app -- "$editor" "$path:$line" ;;
+kate | kwrite) exec setsid uwsm-app -- "$editor" --line "$line" "$path" ;;
+*) exec omarchy-launch-editor "$path" ;;
+esac

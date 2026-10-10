@@ -309,6 +309,7 @@ Item {
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
     else if (run.kind === "note") root.addNote(run.path, run.target)
+    else if (run.kind === "edit") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-edit", String(run.line), String(run.target)])
     else if (run.kind === "reset-geometry") root.resetGeometry()
     else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])

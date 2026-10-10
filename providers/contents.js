@@ -12,9 +12,10 @@
 // Files over 4 MB are skipped; at most 3 lines per file and 300 lines in all
 // come back, and a search still running after 3 s is stopped.
 //
-// Enter opens the file in your editor at that line (omarchy-launch-editor
-// +LINE, which nvim, vim, nano and micro understand); Shift+Enter opens it
-// with its default app. The words reach rg as one argument after --.
+// Enter opens the file in your Omarchy default editor at that line
+// (bin/commandbar-edit, which speaks each editor's line syntax; Ghostty drops
+// the +LINE that omarchy-launch-editor would pass). Shift+Enter opens it with
+// its default app. The words reach rg as one argument after --.
 
 var MIN_QUERY = 3
 var LIMIT = 40
@@ -56,7 +57,7 @@ function row(hit, ctx, n) {
     icon: Files.ICONS[Files.kindOf({ rel: name, dir: false })],
     score: 97 - n * 0.001,
     copy: "",
-    run: { kind: "argv", target: ["omarchy-launch-editor", "+" + hit.line, hit.path], label: "edit at line" },
+    run: { kind: "edit", target: hit.path, line: hit.line, label: "edit at line" },
     alt: { kind: "argv", target: ["xdg-open", hit.path], label: "open" }
   }
 }

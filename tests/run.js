@@ -635,7 +635,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const hits = C.parse("/home/u/a.md\u000012:  the   invoice\n/home/u/b.txt\u00003:x\nnot a hit\n")
   check("contents: parse keeps path, line and text", hits.length === 2 && hits[0].line === 12 && hits[0].text === "the invoice")
   const rows = run("rg invoice", ["contents"], { home: "/home/u", search: { key: C.plan("invoice", config.contents).key, text: "/home/u/a.md\u000012:the invoice\n" }, requestSearch: () => {} })
-  check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.target.join(" ") === "omarchy-launch-editor +12 /home/u/a.md" && rows[0].alt.target.join(" ") === "xdg-open /home/u/a.md" && rows[0].subtitle === "~/a.md:12")
+  check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.kind === "edit" && rows[0].run.target === "/home/u/a.md" && rows[0].run.line === 12 && rows[0].alt.target.join(" ") === "xdg-open /home/u/a.md" && rows[0].subtitle === "~/a.md:12")
   check("contents: mode chip", (Engine.mode("rg x", config) || {}).label === "In files")
   // For real, in a scratch home: finds the line, and a $(…) query runs nothing.
   const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-rg-")
