@@ -58,7 +58,7 @@ function row(hit, ctx, n) {
     score: 97 - n * 0.001,
     copy: "",
     run: { kind: "edit", target: hit.path, line: hit.line, label: "edit at line" },
-    alt: { kind: "argv", target: ["xdg-open", hit.path], label: "open" }
+    alt: { kind: "open", target: hit.path, label: "open" }
   }
 }
 

@@ -120,7 +120,7 @@ function row(entry, n) {
     image: FileKinds.kindOf(entry) === "image" ? entry.path : "",
     score: 97 - n * 0.001,
     copy: "",
-    run: { kind: "argv", target: ["xdg-open", entry.path], label: entry.dir ? "open folder" : "open" },
+    run: { kind: "open", target: entry.path, label: entry.dir ? "open folder" : "open" },
     alt: { kind: "argv", target: ["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + dir], label: "terminal here" }
   }
 }

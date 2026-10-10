@@ -154,7 +154,7 @@ The bar, not the extension, carries out what Enter does, and only these:
 
 | `kind` | Fields | Does |
 |---|---|---|
-| `open` | `target` | `xdg-open` an `http(s)://`, `mailto:` or `file:///` URL, or an absolute path |
+| `open` | `target` | open an `http(s)://`, `mailto:` or `file:///` URL, or an absolute path, through `bin/commandbar-open`: `xdg-open`, except that a text file whose default app runs in a terminal (or has none) opens in your Omarchy default editor, and another terminal app starts through `gio open` |
 | `copy` | `target` | the text to `wl-copy` on stdin |
 | `paste` | `target` | copy, then Shift+Insert into the window you came from |
 | `edit` | `target`, `line` | your Omarchy default editor at that line |

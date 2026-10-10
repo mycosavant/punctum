@@ -130,5 +130,6 @@ run. So:
 - Bounds on searches (3 s, `timeout 3`) protect responsiveness, not secrecy.
 - The plocate system index is built by root and filtered by plocate, which
   only shows paths you're allowed to list. The bar adds nothing to that.
-- `xdg-open` decides which app opens a file; a file's type can be chosen by
-  whoever made it.
+- `xdg-open` decides which app opens a file (or, for text whose default app
+  runs in a terminal, your editor; `bin/commandbar-open`); a file's type can
+  be chosen by whoever made it.

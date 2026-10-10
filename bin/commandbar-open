@@ -1,0 +1,59 @@
+#!/bin/bash
+# Open a URL, a folder or a file the way the desktop would.
+#
+#   commandbar-open <URL or absolute path>
+#
+# xdg-open on Hyprland (xdg-utils 1.2.1, its "generic" desktop) ignores a
+# desktop entry's Terminal=true: for a text file whose default is
+# nvim.desktop it runs `nvim file` with no terminal, which dies unseen
+# (found 2026-10-10: .md and .rs rows did nothing; .html and folders opened).
+# So for a local file:
+#
+# - text whose default app is a terminal app, or has no default: your
+#   Omarchy default editor, the way Omarchy opens text itself
+#   (omarchy-launch-editor), through commandbar-edit;
+# - another terminal app: gio open, which starts it in xdg-terminal-exec;
+# - anything else, and every URL: xdg-open, unchanged.
+
+target=$1
+[[ -n $target ]] || exit 2
+here=${BASH_SOURCE[0]%/*}
+
+path=
+case $target in
+/*) path=$target ;;
+file:///*) path=$(python3 -Ic 'import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1][7:]))' "$target") ;;
+esac
+[[ -n $path && -f $path ]] || exec xdg-open "$target"
+
+mime=$(xdg-mime query filetype "$path" 2>/dev/null)
+mime=${mime%%;*}
+default=$(xdg-mime query default "$mime" 2>/dev/null)
+
+# Terminal= from the [Desktop Entry] group of the first matching desktop file.
+terminal=false
+if [[ -n $default ]]; then
+  IFS=: read -ra dirs <<<"${XDG_DATA_HOME:-$HOME/.local/share}:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+  for d in "${dirs[@]}"; do
+    f=$d/applications/$default
+    [[ -r $f ]] || f=$d/applications/${default/-//}
+    [[ -r $f ]] || continue
+    t=$(awk -F= '/^\[/ { g = $0 } g == "[Desktop Entry]" && $1 == "Terminal" { print $2; exit }' "$f")
+    [[ $t == true ]] && terminal=true
+    break
+  done
+fi
+
+text=false
+if [[ $mime == text/* ]]; then
+  text=true
+elif [[ $(file -b --mime-encoding -- "$path" 2>/dev/null) != binary ]]; then
+  text=true
+fi
+
+if [[ $text == true && ( -z $default || $terminal == true ) ]]; then
+  exec "$here/commandbar-edit" 1 "$path"
+elif [[ $terminal == true ]]; then
+  exec gio open "$path"
+fi
+exec xdg-open "$path"

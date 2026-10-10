@@ -22,6 +22,8 @@ omarchy-shell (Quickshell, long-running)
         ├── commandbar-cache       the only reader and writer of the cache files
         ├── commandbar-note        appends to the inbox note
         ├── commandbar-edit        opens the editor at a line
+        ├── commandbar-open        opens a URL or file (xdg-open, but text
+        │                          with a terminal default goes to the editor)
         └── commandbar-agent       starts the default agent with a prompt
 ```
 

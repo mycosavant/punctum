@@ -356,6 +356,49 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     check("a damaged agent name opens the picker, not a notification", !r.launched && !r.notified && r.picked && r.picked[0] === "--pick") }
   fs.rmSync(dir, { recursive: true, force: true }) }
 
+// bin/commandbar-open: xdg-open on Hyprland ignores Terminal=true, so a text
+// file whose default is nvim.desktop must reach the editor instead.
+{ const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-open-")
+  for (const d of ["bin", "data/applications", "sys", "home", "files"]) fs.mkdirSync(dir + "/" + d, { recursive: true })
+  const stub = (name, body) => fs.writeFileSync(dir + "/bin/" + name, "#!/bin/bash\n" + body + "\n", { mode: 0o755 })
+  // xdg-mime answers from two files the test writes: the type and the default.
+  stub("xdg-mime", '[[ $2 == filetype ]] && cat "$STUBS/mime"; [[ $2 == default ]] && cat "$STUBS/default" 2>/dev/null; true')
+  for (const c of ["xdg-open", "gio", "omarchy-launch-tui"]) stub(c, 'printf "%s\\n" "' + c + '" "$@" > "$STUBS/ran"')
+  stub("nvim", "true")
+  const desktop = (id, terminal) => fs.writeFileSync(dir + "/data/applications/" + id, "[Desktop Entry]\nExec=x %F\nTerminal=" + terminal + "\n[Desktop Action new]\nTerminal=false\n")
+  desktop("nvim.desktop", "true"); desktop("zen.desktop", "false"); desktop("viewer.desktop", "true"); desktop("gimp.desktop", "false")
+  const env = Object.assign({}, process.env, { PATH: dir + "/bin:/usr/bin", STUBS: dir, HOME: dir + "/home", XDG_DATA_HOME: dir + "/data", XDG_DATA_DIRS: dir + "/sys" })
+  const open = (target, mime, def) => {
+    fs.writeFileSync(dir + "/mime", mime + "\n")
+    if (def) fs.writeFileSync(dir + "/default", def + "\n"); else fs.rmSync(dir + "/default", { force: true })
+    fs.rmSync(dir + "/ran", { force: true })
+    spawnSync(P + "bin/commandbar-open", [target], { env, cwd: dir })
+    return fs.existsSync(dir + "/ran") ? fs.readFileSync(dir + "/ran", "utf8").replace(/\n$/, "").split("\n") : []
+  }
+  const md = dir + "/files/notes.md", rs = dir + "/files/$(touch pwned); `touch pwned`.rs", png = dir + "/files/a.png", spaced = dir + "/files/two words.md"
+  fs.writeFileSync(md, "# hi\n"); fs.writeFileSync(rs, "fn main() {}\n"); fs.writeFileSync(spaced, "x\n")
+  fs.writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0xff, 0xfe]))
+  { const r = open(md, "text/plain", "nvim.desktop")
+    check("open: text whose default is a terminal app goes to the editor", r[0] === "omarchy-launch-tui" && r[r.length - 1] === md, r.join(" ")) }
+  { const r = open(rs, "text/plain", "nvim.desktop")
+    check("open: a hostile file name reaches the editor unchanged and runs nothing", r[r.length - 1] === rs && !fs.existsSync(dir + "/pwned"), r.join(" ")) }
+  { const r = open(md, "text/markdown", null)
+    check("open: text with no default app goes to the editor", r[0] === "omarchy-launch-tui", r.join(" ")) }
+  { const r = open(md, "text/html", "zen.desktop")
+    check("open: text with a GUI default keeps xdg-open", r.join(" ") === "xdg-open " + md, r.join(" ")) }
+  { const r = open(png, "image/png", "viewer.desktop")
+    check("open: a binary file whose default is a terminal app goes through gio", r.join(" ") === "gio open " + png, r.join(" ")) }
+  { const r = open(png, "image/png", "gimp.desktop")
+    check("open: a binary file with a GUI default keeps xdg-open", r.join(" ") === "xdg-open " + png, r.join(" ")) }
+  { const r = open("https://example.com/a b", "text/plain", "nvim.desktop")
+    check("open: a URL goes to xdg-open untouched", r.join(" ") === "xdg-open https://example.com/a b", r.join(" ")) }
+  { const r = open(dir + "/files", "inode/directory", "nvim.desktop")
+    check("open: a folder goes to xdg-open", r.join(" ") === "xdg-open " + dir + "/files", r.join(" ")) }
+  { const r = open("file://" + dir + "/files/two%20words.md", "text/plain", "nvim.desktop")
+    check("open: a file:// URL is decoded to its path", r[0] === "omarchy-launch-tui" && r[r.length - 1] === spaced, r.join(" ")) }
+  fs.rmSync(dir, { recursive: true, force: true }) }
+
 // bin/commandbar-cache, run against a throwaway HOME.
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   const home = fs.mkdtempSync(os.tmpdir() + "/commandbar-home-"), dir = home + "/.cache/omarchy-commandbar"
@@ -434,8 +477,8 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("files: NUL output parsed, unterminated tail dropped", entries.length === 4 && entries[1].dir && entries[1].rel === "notes", JSON.stringify(entries))
   const rows = run("~notes", ["files"], Object.assign({ home: "/h" }, landed("files", F.key("notes", {}), out)))
   check("files: rows rank a name that starts with the word first", rows[0].title === "notes" && rows[0].subtitle === "~ · Folder" && rows.length === 3, rows.map(r => r.title).join("|"))
-  check("files: Enter opens with xdg-open, Shift+Enter a terminal in the folder",
-    rows[1].run.target.join(" ") === "xdg-open /h/Documents/notes.md" && rows[1].alt.target.join(" ") === "uwsm-app -- xdg-terminal-exec --dir=/h/Documents", JSON.stringify(rows[1]))
+  check("files: Enter opens, Shift+Enter a terminal in the folder",
+    rows[1].run.kind === "open" && rows[1].run.target === "/h/Documents/notes.md" && rows[1].alt.target.join(" ") === "uwsm-app -- xdg-terminal-exec --dir=/h/Documents", JSON.stringify(rows[1]))
   const tie = run("~notes", ["files"], Object.assign({ home: "/h" }, landed("files", F.key("notes", {}), "/h/a/notes_tests.rs\0/h/a/notes.rs\0")))
   // Two walks: the first stopped mid-path. Its tail must not join the second's first path.
   const two = run("~notes", ["files"], { home: "/h", search: { key: "files\n" + F.key("notes", {}), text: "", chunks: ["/h/a/notes.md\0/h/a/no", "tes.rs\0/h/b/notes.txt\0"], done: true }, requestSearch: () => {} })
@@ -619,7 +662,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const hits = C.parse("/home/u/a.md\u000012:  the   invoice\n/home/u/b.txt\u00003:x\nnot a hit\n")
   check("contents: parse keeps path, line and text", hits.length === 2 && hits[0].line === 12 && hits[0].text === "the invoice")
   const rows = run("rg invoice", ["contents"], Object.assign({ home: "/home/u" }, landed("contents", C.plan("invoice", config.contents).key, "/home/u/a.md\u000012:the invoice\n")))
-  check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.kind === "edit" && rows[0].run.target === "/home/u/a.md" && rows[0].run.line === 12 && rows[0].alt.target.join(" ") === "xdg-open /home/u/a.md" && rows[0].subtitle === "~/a.md:12")
+  check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.kind === "edit" && rows[0].run.target === "/home/u/a.md" && rows[0].run.line === 12 && rows[0].alt.kind === "open" && rows[0].alt.target === "/home/u/a.md" && rows[0].subtitle === "~/a.md:12")
   check("contents: mode chip", (Engine.mode("rg x", config) || {}).label === "In files")
   // For real, in a scratch home: finds the line, and a $(…) query runs nothing.
   const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-rg-")

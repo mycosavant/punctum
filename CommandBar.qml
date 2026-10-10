@@ -314,7 +314,7 @@ Item {
   function perform(run) {
     if (run.kind === "app") root.launchApp(run.target, run.action)
     else if (run.kind === "window") root.focusWindow(run.target)
-    else if (run.kind === "open") Quickshell.execDetached(["xdg-open", run.target])
+    else if (run.kind === "open") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-open", String(run.target)])
     else if (run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-agent", run.target])
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0 && typeof run.input === "string") root.runWithInput(run.target.map(String), run.input)
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
