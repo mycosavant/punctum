@@ -3,10 +3,10 @@
 Every feature of the bar is an extension: a folder with an `extension.json`
 and either a JavaScript provider or any executable. The bundled ones are in
 [`extensions/`](../extensions); yours go in
-`~/.config/omarchy/commandbar/extensions/<id>/`. A new folder is found at
+`~/.config/omarchy/punctum/extensions/<id>/`. A new folder is found at
 startup and whenever your config file changes; a changed provider file needs
 `omarchy-restart-shell`, since Quickshell caches what it has imported.
-`?extensions` lists what loaded, and `journalctl --user -f | grep commandbar`
+`?extensions` lists what loaded, and `journalctl --user -f | grep punctum`
 says why one didn't.
 
 There are two kinds:
@@ -86,7 +86,7 @@ The bar runs `command` with one JSON request on stdin:
   `every` seconds; when it finishes, the current query runs again, so the
   rows may refresh while you look. Everywhere uses it to refresh its index.
 - If the command can't start, or fails with no output, the extension says
-  so in a row with the first error line; `bin/commandbar-extensions` also
+  so in a row with the first error line; `bin/punctum-extensions` also
   keeps an extension off when its `./` command isn't executable, its command
   isn't on PATH, or (sandboxed) its command or interpreter lives in your
   home folder.
@@ -116,7 +116,7 @@ It asks for more, and only what it needs:
 
 How it holds:
 
-- `bin/commandbar-sandbox` builds the bwrap command each time the script
+- `bin/punctum-sandbox` builds the bwrap command each time the script
   runs. It opens every `reads` and `writes` path one component at a time
   from your home folder without following symlinks and mounts the open file,
   so a script can't plant a link in a folder it may write and have a later
@@ -154,7 +154,7 @@ The bar, not the extension, carries out what Enter does, and only these:
 
 | `kind` | Fields | Does |
 |---|---|---|
-| `open` | `target` | open an `http(s)://`, `mailto:` or `file:///` URL, or an absolute path, through `bin/commandbar-open`: `xdg-open`, except that a text file whose default app runs in a terminal (or has none) opens in your Omarchy default editor, and another terminal app starts through `gio open` |
+| `open` | `target` | open an `http(s)://`, `mailto:` or `file:///` URL, or an absolute path, through `bin/punctum-open`: `xdg-open`, except that a text file whose default app runs in a terminal (or has none) opens in your Omarchy default editor, and another terminal app starts through `gio open` |
 | `copy` | `target` | the text to `wl-copy` on stdin |
 | `paste` | `target` | copy, then Shift+Insert into the window you came from |
 | `edit` | `target`, `line` | your Omarchy default editor at that line |

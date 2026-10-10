@@ -17,26 +17,6 @@
   "defaults": {
     "fallback": "https://duckduckgo.com/?q={q}",
     "engines": {
-      "nasb": {
-        "title": "Bible (NASB)",
-        "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB"
-      },
-      "bible": {
-        "title": "Bible (NASB)",
-        "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB"
-      },
-      "nasb95": {
-        "title": "Bible (NASB 1995)",
-        "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB1995"
-      },
-      "esv": {
-        "title": "Bible (ESV)",
-        "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=ESV"
-      },
-      "kjv": {
-        "title": "Bible (KJV)",
-        "open": "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=KJV"
-      },
       "ddg": {
         "title": "DuckDuckGo",
         "open": "https://duckduckgo.com/?q={q}",

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Open a file in your Omarchy default editor at a line.
 #
-#   commandbar-edit <line> <absolute path>
+#   punctum-edit <line> <absolute path>
 #
 # omarchy-launch-editor +LINE doesn't work with Ghostty: given
 # `ghostty -e nvim +3 file` it starts `nvim file` (seen 2026-10-09), since it

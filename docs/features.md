@@ -50,7 +50,7 @@ Lines containing your words, in files under your home folder.
   skipped, stopped after 3 s.
 - ripgrep skips hidden files, git-ignored files and binaries.
   `"contents": { "hidden": true }` includes hidden files (~/.config).
-- Opening at the line goes through `bin/commandbar-edit`, which passes the
+- Opening at the line goes through `bin/punctum-edit`, which passes the
   line the way each editor wants (nvim and vim `-c N`, nano `+N`, micro and
   helix `file:N`, VS Code `--goto`, Zed `file:N`, Kate `--line`).
   `omarchy-launch-editor +N` can't be used: Ghostty drops arguments that start
@@ -151,7 +151,7 @@ Appends a line to a note, such as your Obsidian inbox.
 - **Enter** appends it.
 - Needs `"notes": { "inbox": "~/Vault/Inbox.md" }`. `"format"` shapes the line
   from `{date}`, `{time}` and `{text}`.
-- `bin/commandbar-note` writes it: the text arrives on stdin, a symlink is
+- `bin/punctum-note` writes it: the text arrives on stdin, a symlink is
   refused, the folder must already exist, and a new file is created mode 600.
 
 ## Keybindings — `keys `  (`hotkeys`)
@@ -178,7 +178,7 @@ Your Hyprland keybindings, found by what they do.
 
 - **Alt+P** on an app pins or unpins it. The empty bar lists your pins, so
   Super+Period then Alt+1 opens the first.
-- Pins are saved in `~/.cache/omarchy-commandbar/pinned-apps.json`;
+- Pins are saved in `~/.cache/punctum/pinned-apps.json`;
   `"apps": { "pinned": [...] }` is the starting list.
 
 ## Keyword commands  (`commands`)
@@ -206,7 +206,7 @@ Your own shortcuts, entirely in the config:
   your Hyprland config. `"glass": { "enabled": false }` makes it solid.
 - **Move and resize**: drag by the edges or the footer; resize from the grip in
   the bottom-right corner. It stays where you leave it
-  (`~/.cache/omarchy-commandbar/geometry.json`). The command "Reset command bar
+  (`~/.cache/punctum/geometry.json`). The command "Reset command bar
   position" goes back to `"window"` in the config. A card that would run off
   the bottom of the screen is moved up to fit.
 
@@ -218,7 +218,7 @@ Every extension, on or off, with what it runs, reads, writes and contacts
 and, for script extensions, its sandbox. **Enter** switches the selected one
 and the bar stays open. Switches are kept in the bar's cache, not your config
 file; "Reset extension switches" goes back to what the config says, and "Open
-settings file" opens `commandbar.json` in your editor.
+settings file" opens `punctum.json` in your editor.
 
 ## From upstream
 

@@ -9,7 +9,7 @@
 //
 // The provider is pure: it says which fd argvs answer a query (ctx.requestSearch)
 // and turns the paths that come back (ctx.search) into rows. fd runs from
-// CommandBar.qml as an argument list, never through a shell; the typed words
+// Punctum.qml as an argument list, never through a shell; the typed words
 // are regex-escaped and come after `--` or inside `--and=`, so none of them can
 // be read as an option. Enter opens with the default app; Shift+Enter opens a
 // terminal in the folder.

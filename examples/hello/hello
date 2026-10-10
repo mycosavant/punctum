@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# The Command Bar sends one JSON request on stdin:
+# Punctum sends one JSON request on stdin:
 #   {"protocol": 1, "query": "hi Ada", "text": "Ada", "settings": {...}, "home": "/home/you"}
 # and reads {"items": [...], "message": "..."} from stdout. Each item is a row:
 #   title, subtitle, icon, copy, and run / alt actions the bar carries out:

@@ -10,7 +10,7 @@
 //   keys screenshot  bindings about screenshots
 //
 // The list and the dispatch both come from `omarchy-menu-keybindings`, the
-// script behind Super+K: CommandBar.qml sources it and prints its cached
+// script behind Super+K: Punctum.qml sources it and prints its cached
 // records (ctx.load reads that text), one per line:
 //
 //   "SUPER + F            → Full screen\tlua\thl.dsp.window.fullscreen(…)"

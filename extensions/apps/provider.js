@@ -1,7 +1,7 @@
 .pragma library
 .import "../../lib/Match.js" as Match
 
-// Launch installed applications. CommandBar.qml keeps a snapshot of the
+// Launch installed applications. Punctum.qml keeps a snapshot of the
 // visible desktop entries in ctx.apps:
 //   [{ id, name, generic, comment, keywords, icon, wmclass, actions: [{ index, name }] }]
 // and how often each was launched from the bar in ctx.launches: { id: count }.

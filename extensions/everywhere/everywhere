@@ -23,7 +23,7 @@ desktop search should: a name that is the word first, then one that starts
 with it, contains it, or has its letters in order; a small lift for home and
 a small drop for hidden paths; then shallower and shorter.
 
---commandbar speaks the Command Bar's script-extension protocol: a JSON
+--punctum speaks the Punctum's script-extension protocol: a JSON
 request on stdin ({"text": ..., "settings": {"exclude": [...]}}) and
 {"items": [...]} on stdout.
 
@@ -536,7 +536,7 @@ def item(path, home, details=False):
     }
 
 
-def commandbar(home):
+def punctum(home):
     try:
         req = json.loads(sys.stdin.read(1024 * 1024) or "{}")
     except ValueError:
@@ -591,15 +591,15 @@ def main():
     ap.add_argument("--no-default-excludes", action="store_true")
     ap.add_argument("--index", action="store_true", help="rebuild the index of your home folder")
     ap.add_argument("--max-age", type=float, help="with --index: only if older than this many seconds")
-    ap.add_argument("--commandbar", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--punctum", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--rank", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
     home = os.path.expanduser("~")
 
     if args.index:
         return index(args.max_age)
-    if args.commandbar:
-        return commandbar(home)
+    if args.punctum:
+        return punctum(home)
     if args.interactive:
         return interactive(args, home)
     text = " ".join(args.query)

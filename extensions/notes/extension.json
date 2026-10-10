@@ -20,7 +20,7 @@
   },
   "permissions": {
     "runs": [
-      "bin/commandbar-note"
+      "bin/punctum-note"
     ],
     "writes": [
       "the note named in notes.inbox (appends only)"

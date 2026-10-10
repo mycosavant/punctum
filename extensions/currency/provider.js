@@ -2,7 +2,7 @@
 .import "../../lib/Calc.js" as Calc
 
 // Currency converter. Rates (USD-based) are fetched and cached by
-// CommandBar.qml and arrive here as ctx.rates = { rates, updated, stale }.
+// Punctum.qml and arrive here as ctx.rates = { rates, updated, stale }.
 //
 //   100 usd to lkr · 100usd in eur · $50 · €20 to inr · 50 eur · usd lkr · 12*50 usd
 
@@ -116,7 +116,7 @@ var provider = {
     var q = parse(query, rates)
     if (!q) return []
     // The only place the exchange-rate API is triggered: a query that is
-    // actually a conversion. CommandBar.qml skips it while the cache is fresh.
+    // actually a conversion. Punctum.qml skips it while the cache is fresh.
     if (ctx.requestRates) ctx.requestRates()
 
     if (!rates) {

@@ -13,7 +13,7 @@
 // come back, and a search still running after 3 s is stopped.
 //
 // Enter opens the file in your Omarchy default editor at that line
-// (bin/commandbar-edit, which speaks each editor's line syntax; Ghostty drops
+// (bin/punctum-edit, which speaks each editor's line syntax; Ghostty drops
 // the +LINE that omarchy-launch-editor would pass). Shift+Enter opens it with
 // its default app. The words reach rg as one argument after --.
 
@@ -30,7 +30,7 @@ function plan(text, settings) {
   var t = String(text || "").trim()
   if (t.length < MIN_QUERY || t.length > MAX_QUERY || /[\u0000-\u001f]/.test(t)) return null
   var hidden = !!(settings && settings.hidden)
-  return { key: (hidden ? "h\n" : "") + t, argv: ["bash", "-c", SCRIPT, "commandbar-rg", t].concat(hidden ? ["1"] : []) }
+  return { key: (hidden ? "h\n" : "") + t, argv: ["bash", "-c", SCRIPT, "punctum-rg", t].concat(hidden ? ["1"] : []) }
 }
 
 // "path\0LINE:text" per line.

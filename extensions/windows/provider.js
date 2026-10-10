@@ -1,7 +1,7 @@
 .pragma library
 .import "../../lib/Match.js" as Match
 
-// Switch to an open window. CommandBar.qml takes a snapshot of Hyprland's
+// Switch to an open window. Punctum.qml takes a snapshot of Hyprland's
 // windows (hyprctl clients) each time the bar opens, in ctx.windows:
 //   [{ address, cls, title, workspace, focus }]   focus 0 = most recent
 //

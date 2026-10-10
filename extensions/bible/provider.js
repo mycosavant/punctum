@@ -7,7 +7,7 @@
 //   bible love one another                             a keyword search
 //
 // "bible": { "versions": ["NASB", "NASB1995", "ESV", "KJV"] } in
-// commandbar.json picks the translations, as Bible Gateway names them. A
+// punctum.json picks the translations, as Bible Gateway names them. A
 // reference needs a chapter after the book, so "job" alone stays an app
 // search. Bible Gateway's quicksearch takes both a reference and words: it
 // sends a reference on to the passage, so one URL serves both.

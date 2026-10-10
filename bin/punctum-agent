@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hands a prompt to Omarchy's default agent, or says why it can't.
 #
-# Usage: commandbar-agent <prompt>
+# Usage: punctum-agent <prompt>
 #
 # `omarchy default agent <name>` installs an agent before it saves the name, so
 # a missing agent means it was removed since, or the name came from dotfiles on
@@ -21,7 +21,7 @@ if [[ ! $agent =~ ^[a-z0-9][a-z0-9._-]{0,31}$ ]]; then
 fi
 
 if omarchy-cmd-missing "$agent"; then
-  notify-send -a "Command Bar" "$agent isn't installed" \
+  notify-send -a "Punctum" "$agent isn't installed" \
     "Run omarchy default agent $agent to install it again, or pick another agent"
   exit 1
 fi

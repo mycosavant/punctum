@@ -10,9 +10,11 @@
 // databases), and dropped when the bar closes. Nothing is fetched from the
 // network: it searches what your last `pacman -Sy` downloaded.
 //
-// Enter on a package you don't have opens a terminal running
-// `sudo pacman -S <repo>/<name>`, so pacman shows what it will do and asks
-// first, and a name in two repositories installs from the row you chose.
+// Enter on a package you don't have copies `sudo pacman -S <repo>/<name>`
+// to paste where you choose; the bar never asks for administrator rights on
+// its own. With "packages": { "install": true } Enter opens a terminal
+// running that command instead, so sudo and pacman both ask first. Either
+// way a name in two repositories installs from the row you chose.
 // Enter on one you have shows `pacman -Qi`. Shift+Enter opens its page on
 // archlinux.org for Arch's own repositories, `pacman -Si` for others. The
 // name reaches bash as $1, and only names pacman itself allows are offered.
@@ -69,10 +71,10 @@ function rank(p, ws) {
 }
 
 function terminal(script, title, name) {
-  return ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=" + title, "-e", "bash", "-c", script, "commandbar-pkg", name]
+  return ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=" + title, "-e", "bash", "-c", script, "punctum-pkg", name]
 }
 
-function row(p, installed, n) {
+function row(p, installed, n, install) {
   var have = Object.prototype.hasOwnProperty.call(installed, p.name)
   var newer = have && installed[p.name] !== p.version
   return {
@@ -82,7 +84,8 @@ function row(p, installed, n) {
     score: 97 - n * 0.001,
     copy: "",
     run: have ? { kind: "argv", target: terminal(DETAILS, "Package " + p.name, p.name), label: "details" }
-              : { kind: "argv", target: terminal(INSTALL, "Install " + p.name, p.repo + "/" + p.name), label: "install" },
+         : install ? { kind: "argv", target: terminal(INSTALL, "Install " + p.name, p.repo + "/" + p.name), label: "install" }
+         : { kind: "copy", target: "sudo pacman -S " + p.repo + "/" + p.name, label: "copy install command" },
     alt: ARCH_REPOS.test(p.repo)
       ? { kind: "open", target: "https://archlinux.org/packages/" + encodeURIComponent(p.repo) + "/" + encodeURIComponent(p.arch) + "/" + encodeURIComponent(p.name) + "/", label: "archlinux.org" }
       : { kind: "argv", target: terminal(REPO_DETAILS, "Package " + p.name, p.repo + "/" + p.name), label: "details" }
@@ -97,7 +100,7 @@ var provider = {
     { title: "Search packages", keywords: "packages pacman install software arch repo", text: "pkg and a name, from your pacman repositories", complete: "pkg " }
   ],
   help: [
-    { id: "packages", title: "Packages", about: "pkg and a name searches your pacman repositories. Enter installs one you don't have (pacman asks first) or shows one you do; Shift+Enter opens archlinux.org",
+    { id: "packages", title: "Packages", about: "pkg and a name searches your pacman repositories. Enter copies the install command for one you don't have (or, with \"install\": true, runs it in a terminal) and shows one you do; Shift+Enter opens archlinux.org",
       examples: [{ q: "pkg ", note: "Type a name after it" }, { q: "pkg kfind", hint: "A package by name" }, { q: "pkg file search", hint: "Words in the description" }] }
   ],
   forget: function() { memo = { text: null, data: null } },
@@ -116,6 +119,6 @@ var provider = {
     }
     hits.sort(function(a, b) { return b.r - a.r || (a.p.name < b.p.name ? -1 : 1) })
     if (!hits.length) return [{ title: "No package matches \"" + m[1].trim() + "\"", subtitle: "Packages · your pacman repositories, no AUR", score: 40, copy: "" }]
-    return hits.slice(0, LIMIT).map(function(h, n) { return row(h.p, data.installed, n) })
+    return hits.slice(0, LIMIT).map(function(h, n) { return row(h.p, data.installed, n, !!(ctx.settings && ctx.settings.install === true)) })
   }
 }

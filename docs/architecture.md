@@ -4,7 +4,7 @@
 
 ```
 omarchy-shell (Quickshell, long-running)
-└── CommandBar.qml             the overlay: input, list, keys, geometry, glass;
+└── Punctum.qml             the overlay: input, list, keys, geometry, glass;
     │                          finds and loads extensions; runs every process;
     │                          carries out actions
     ├── lib/Engine.js          runs the enabled extensions, ranks, groups, help,
@@ -18,21 +18,21 @@ omarchy-shell (Quickshell, long-running)
     ├── extensions/<id>/       one feature each: extension.json + provider.js,
     │                          or a script (everywhere; the example in examples/)
     └── bin/
-        ├── commandbar-extensions  finds extensions and reads their manifests
-        ├── commandbar-cache       the only reader and writer of the cache files
-        ├── commandbar-note        appends to the inbox note
-        ├── commandbar-edit        opens the editor at a line
-        ├── commandbar-open        opens a URL or file (xdg-open, but text
+        ├── punctum-extensions  finds extensions and reads their manifests
+        ├── punctum-cache       the only reader and writer of the cache files
+        ├── punctum-note        appends to the inbox note
+        ├── punctum-edit        opens the editor at a line
+        ├── punctum-open        opens a URL or file (xdg-open, but text
         │                          with a terminal default goes to the editor)
-        └── commandbar-agent       starts the default agent with a prompt
+        └── punctum-agent       starts the default agent with a prompt
 ```
 
-Your extensions live in `~/.config/omarchy/commandbar/extensions/<id>/`; one
+Your extensions live in `~/.config/omarchy/punctum/extensions/<id>/`; one
 with a bundled extension's id replaces it.
 
 ## Startup
 
-1. `bin/commandbar-extensions` lists the bundled extensions, then yours. From
+1. `bin/punctum-extensions` lists the bundled extensions, then yours. From
    your folder it refuses anything not yours alone (a folder or manifest
    another user owns or can write, a symlinked manifest), and it reports
    required commands missing from PATH.
@@ -44,7 +44,7 @@ with a bundled extension's id replaces it.
    from `Ext.scriptProvider`.
 4. `Engine.setProviders` takes them all, in manifest order.
 5. The config is built from `config.default.json` (the bar's own settings),
-   your `commandbar.json`, and each extension's section: its manifest
+   your `punctum.json`, and each extension's section: its manifest
    defaults merged with yours.
 
 This runs again whenever your config changes, which picks up a new
@@ -52,7 +52,7 @@ extension folder; a changed provider file needs `omarchy-restart-shell`.
 
 ## A keystroke
 
-1. `CommandBar.qml` calls `Engine.run(text, config, services)`.
+1. `Punctum.qml` calls `Engine.run(text, config, services)`.
 2. Engine builds a `ctx` per enabled extension (its settings, its folder, the
    bar's data, and its own view of the background service) and calls `match`.
 3. An extension that needs something slow asks: `ctx.requestSearch`,
@@ -66,7 +66,7 @@ extension folder; a changed provider file needs `omarchy-restart-shell`.
 
 ## The background service
 
-All in `CommandBar.qml`, all argument lists:
+All in `Punctum.qml`, all argument lists:
 
 | Part | Asked by | Behaviour |
 |---|---|---|
@@ -89,9 +89,9 @@ emojis, the default agent) still has its own small process each.
 | What a query means | extensions |
 | Which extensions are on, their settings, the script protocol | `lib/Extensions.js` |
 | Ranking, grouping, help, mode chips | `lib/Engine.js` |
-| Processes, files, the network | `CommandBar.qml` |
-| Carrying out actions | `CommandBar.qml` (`perform`) |
-| Persisted state | `bin/commandbar-cache`, `~/.cache/omarchy-commandbar/` |
+| Processes, files, the network | `Punctum.qml` |
+| Carrying out actions | `Punctum.qml` (`perform`) |
+| Persisted state | `bin/punctum-cache`, `~/.cache/punctum/` |
 
 An extension that follows the contract only *proposes* actions from a short
 list the bar carries out. For JS extensions that's a convention: they run

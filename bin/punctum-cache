@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read and write the Command Bar's cache files safely.
+"""Read and write the Punctum's cache files safely.
 
 The shell never opens these files itself. This helper:
   - only knows the files in LIMITS, each with its own size cap;
@@ -12,8 +12,8 @@ The shell never opens these files itself. This helper:
     an owner-owned regular file. A .json file is written only if it parses,
     so a bad download never replaces the last good one.
 
-Usage: commandbar-cache read <name>    prints the file ("" if it's missing)
-       commandbar-cache write <name>   replaces the file with stdin
+Usage: punctum-cache read <name>    prints the file ("" if it's missing)
+       punctum-cache write <name>   replaces the file with stdin
 """
 
 import errno
@@ -30,7 +30,7 @@ LIMITS = {
     "launches.json": 64 * 1024,
     "pinned-apps.json": 16 * 1024,
     "extension-switches.json": 16 * 1024,
-    "rates.json": 256 * 1024,   # matches ratesMaxBytes in CommandBar.qml
+    "rates.json": 256 * 1024,   # matches ratesMaxBytes in Punctum.qml
 }
 
 
@@ -39,7 +39,7 @@ class Unsafe(Exception):
 
 
 def cache_dir():
-    return os.path.join(os.path.expanduser("~"), ".cache", "omarchy-commandbar")
+    return os.path.join(os.path.expanduser("~"), ".cache", "punctum")
 
 
 def open_dir(path):
@@ -121,7 +121,7 @@ def write_file(dirfd, name, data):
 
 def main(argv):
     if len(argv) != 2 or argv[0] not in ("read", "write") or argv[1] not in LIMITS:
-        print("usage: commandbar-cache read|write " + "|".join(sorted(LIMITS)), file=sys.stderr)
+        print("usage: punctum-cache read|write " + "|".join(sorted(LIMITS)), file=sys.stderr)
         return 2
     action, name = argv
 
@@ -144,8 +144,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except Unsafe as e:
-        print("commandbar-cache: refusing: %s" % e, file=sys.stderr)
+        print("punctum-cache: refusing: %s" % e, file=sys.stderr)
         sys.exit(1)
     except OSError as e:
-        print("commandbar-cache: %s" % e, file=sys.stderr)
+        print("punctum-cache: %s" % e, file=sys.stderr)
         sys.exit(1)

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Open a URL, a folder or a file the way the desktop would.
 #
-#   commandbar-open <URL or absolute path>
+#   punctum-open <URL or absolute path>
 #
 # xdg-open on Hyprland (xdg-utils 1.2.1, its "generic" desktop) ignores a
 # desktop entry's Terminal=true: for a text file whose default is
@@ -11,7 +11,7 @@
 #
 # - text whose default app is a terminal app, or has no default: your
 #   Omarchy default editor, the way Omarchy opens text itself
-#   (omarchy-launch-editor), through commandbar-edit;
+#   (omarchy-launch-editor), through punctum-edit;
 # - another terminal app: gio open, which starts it in xdg-terminal-exec;
 # - anything else, and every URL: xdg-open, unchanged.
 
@@ -52,7 +52,7 @@ elif [[ $(file -b --mime-encoding -- "$path" 2>/dev/null) != binary ]]; then
 fi
 
 if [[ $text == true && ( -z $default || $terminal == true ) ]]; then
-  exec "$here/commandbar-edit" 1 "$path"
+  exec "$here/punctum-edit" 1 "$path"
 elif [[ $terminal == true ]]; then
   exec gio open "$path"
 fi

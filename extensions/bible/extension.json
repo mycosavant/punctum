@@ -7,7 +7,7 @@
   "icon": "󰂺",
   "type": "js",
   "entry": "provider.js",
-  "enabled": true,
+  "enabled": false,
   "order": 90,
   "helpOrder": 120,
   "defaults": {

@@ -5,7 +5,7 @@
 //   ai why is my wifi slow    → omarchy-agent-prompt 'why is my wifi slow'
 //   >_ why is my wifi slow    the same, by prefix (also ">"; "prefixes" in the config)
 //
-// through bin/commandbar-agent, which says so in a notification when the
+// through bin/punctum-agent, which says so in a notification when the
 // agent isn't installed instead of failing where nothing shows it.
 // Omarchy's launcher knows each agent's flags, opens it in a terminal and
 // starts it unattended, so the row says that before Enter.

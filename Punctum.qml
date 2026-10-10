@@ -26,7 +26,7 @@ Item {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "").replace(/\/$/, "")
-  readonly property string userConfigPath: home + "/.config/omarchy/extensions/commandbar.json"
+  readonly property string userConfigPath: home + "/.config/omarchy/extensions/punctum.json"
   readonly property string ratesUrl: "https://open.er-api.com/v6/latest/USD"
   readonly property int ratesMaxBytes: 256 * 1024
 
@@ -137,7 +137,7 @@ Item {
 
   function applyLayerRule() {
     Quickshell.execDetached(["hyprctl", "eval",
-      'hl.layer_rule({ name = "hypha-commandbar-glass", match = { namespace = "^omarchy-commandbar$" }, blur = '
+      'hl.layer_rule({ name = "punctum-glass", match = { namespace = "^punctum$" }, blur = '
       + (root.glassOn ? "true" : "false") + ", ignore_alpha = " + root.glassLevels.ignoreAlpha + " })"])
   }
 
@@ -215,7 +215,7 @@ Item {
     root.saveLastQuery()
     root.forget()
     if (root.shell && typeof root.shell.hide === "function")
-      root.shell.hide((root.manifest && root.manifest.id) || "hypha.commandbar")
+      root.shell.hide(root.pluginId)
   }
 
   // After an action (open, run, copy) the bar starts empty next time; only a
@@ -246,7 +246,7 @@ Item {
       launches: root.launches,
       agent: root.agent,
       search: root.search,
-      sandboxHelper: root.pluginDir + "/bin/commandbar-sandbox",
+      sandboxHelper: root.pluginDir + "/bin/punctum-sandbox",
       pinnedApps: root.pinnedApps,
       home: root.home,
       omarchyPath: root.omarchyPath,
@@ -314,21 +314,21 @@ Item {
   function perform(run) {
     if (run.kind === "app") root.launchApp(run.target, run.action)
     else if (run.kind === "window") root.focusWindow(run.target)
-    else if (run.kind === "open") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-open", String(run.target)])
-    else if (run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-agent", run.target])
+    else if (run.kind === "open") Quickshell.execDetached([root.pluginDir + "/bin/punctum-open", String(run.target)])
+    else if (run.kind === "agent") Quickshell.execDetached([root.pluginDir + "/bin/punctum-agent", run.target])
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0 && typeof run.input === "string") root.runWithInput(run.target.map(String), run.input)
     else if (run.kind === "argv" && Array.isArray(run.target) && run.target.length > 0) Quickshell.execDetached(run.target.map(String))
     else if (run.kind === "copy") root.copyText(run.target)
     else if (run.kind === "paste") root.copyText(run.target, true)
     else if (run.kind === "note") root.addNote(run.path, run.target)
-    else if (run.kind === "edit") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-edit", String(run.line), String(run.target)])
+    else if (run.kind === "edit") Quickshell.execDetached([root.pluginDir + "/bin/punctum-edit", String(run.line), String(run.target)])
     else if (run.kind === "reset-geometry") root.resetGeometry()
     else if (run.kind === "toggle-extension") root.switchExtension(String(run.target), !!run.on)
     else if (run.kind === "reset-switches") root.saveSwitches({})
-    else if (run.kind === "open-settings") Quickshell.execDetached([root.pluginDir + "/bin/commandbar-edit", "1", root.userConfigPath])
-    else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "commandbar", String(run.arg)])
+    else if (run.kind === "open-settings") Quickshell.execDetached([root.pluginDir + "/bin/punctum-edit", "1", root.userConfigPath])
+    else if (run.kind === "shell") Quickshell.execDetached(["bash", "-c", run.target, "punctum", String(run.arg)])
     else if (run.kind === "run") Quickshell.execDetached(["bash", "-c", run.target])
-    else console.warn("commandbar: unknown action kind " + run.kind)
+    else console.warn("punctum: unknown action kind " + run.kind)
   }
 
   // Alt+P on an app row pins or unpins it. The list starts as "apps.pinned"
@@ -412,7 +412,7 @@ Item {
     property bool didStart: false
     onRunningChanged: if (!running && !didStart) Qt.callLater(function() {
       if (inputProc.running || inputProc.didStart || !root.inputCurrent) return
-      Quickshell.execDetached(["notify-send", "-a", "Command Bar", "Couldn't run " + String(root.inputCurrent.argv[0]).split("/").pop()])
+      Quickshell.execDetached(["notify-send", "-a", "Punctum", "Couldn't run " + String(root.inputCurrent.argv[0]).split("/").pop()])
       root.inputCurrent = null
       root.inputNext()
     })
@@ -423,14 +423,14 @@ Item {
       inputProc.stdinEnabled = false
     }
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: " + text.trim().slice(0, 300))
+      onStreamFinished: if (text.trim() !== "") console.warn("punctum: " + text.trim().slice(0, 300))
     }
     onExited: { root.inputCurrent = null; root.inputNext() }
   }
 
   // ---------------------------------------------------------------- inbox note
 
-  // bin/commandbar-note appends the line, which it reads from stdin. One at a
+  // bin/punctum-note appends the line, which it reads from stdin. One at a
   // time; a note added while one is being written waits its turn.
   property var noteQueue: []
   property var noteCurrent: null
@@ -443,7 +443,7 @@ Item {
   function noteNext() {
     if (root.noteQueue.length === 0) return
     root.noteCurrent = root.noteQueue.shift()
-    noteProc.command = ["python3", "-I", root.pluginDir + "/bin/commandbar-note", root.noteCurrent.path]
+    noteProc.command = ["python3", "-I", root.pluginDir + "/bin/punctum-note", root.noteCurrent.path]
     noteProc.stdinEnabled = true
     noteProc.running = true
   }
@@ -463,7 +463,7 @@ Item {
         Quickshell.execDetached(["omarchy-notification-send", "-g", "󰎞", "-t", "2500", "Noted", "Added to " + name])
       else
         Quickshell.execDetached(["omarchy-notification-send", "-g", "󰎞", "-u", "critical", "Note not saved",
-          (String(noteErr.text || "").trim() || "commandbar-note failed").slice(0, 200)])
+          (String(noteErr.text || "").trim() || "punctum-note failed").slice(0, 200)])
       root.noteNext()
     }
   }
@@ -586,7 +586,7 @@ Item {
     root.searchExited = true
     root.searchStreamDone = true
     if (root.opened && searchProc.forKey !== "" && searchProc.forKey === root.searchWantKey) {
-      console.warn("commandbar: couldn't start " + JSON.stringify(searchProc.command))
+      console.warn("punctum: couldn't start " + JSON.stringify(searchProc.command))
       root.search = { key: searchProc.forKey, chunks: [""], text: "", timedOut: false, failed: true, done: true }
       root.searchQueue = []
       root.recompute()
@@ -673,7 +673,7 @@ Item {
     var job = root.loadCurrent
     root.loadCurrent = null
     if (!job.flush) {
-      console.warn("commandbar: couldn't start " + JSON.stringify(job.argv))
+      console.warn("punctum: couldn't start " + JSON.stringify(job.argv))
       delete root.loading[job.key]
       var next = Object.assign({}, root.loadCache)
       next[job.key] = { text: "", at: Date.now(), keep: job.keep, failed: true }
@@ -715,12 +715,12 @@ Item {
     onStarted: jobProc.didStart = true
     onRunningChanged: if (!running && !didStart) Qt.callLater(function() {
       if (jobProc.running || jobProc.didStart || !root.jobCurrent) return
-      console.warn("commandbar: couldn't start job " + JSON.stringify(root.jobCurrent.argv))
+      console.warn("punctum: couldn't start job " + JSON.stringify(root.jobCurrent.argv))
       root.jobCurrent = null
       root.jobNext()
     })
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: job: " + text.trim().slice(0, 300))
+      onStreamFinished: if (text.trim() !== "") console.warn("punctum: job: " + text.trim().slice(0, 300))
     }
     onExited: {
       var job = root.jobCurrent
@@ -774,13 +774,13 @@ Item {
 
   // ---------------------------------------------------------------- extensions
 
-  // Found by bin/commandbar-extensions (bundled ones, then yours from
-  // ~/.config/omarchy/commandbar/extensions/), validated by lib/Extensions.js,
+  // Found by bin/punctum-extensions (bundled ones, then yours from
+  // ~/.config/omarchy/punctum/extensions/), validated by lib/Extensions.js,
   // and loaded: a js extension's provider file through a small QML object
   // made at run time (QML can't import a path chosen at run time any other
   // way), a script extension wrapped by Ext.scriptProvider. Found again at
   // startup and whenever your config changes.
-  readonly property string userExtensionsDir: root.home + "/.config/omarchy/commandbar/extensions"
+  readonly property string userExtensionsDir: root.home + "/.config/omarchy/punctum/extensions"
   property var extensionObjects: []
 
   function discoverExtensions() {
@@ -793,7 +793,7 @@ Item {
 
   function installExtensions(text) {
     var found = []
-    try { found = JSON.parse(text) } catch (e) { console.warn("commandbar: couldn't list extensions: " + e) }
+    try { found = JSON.parse(text) } catch (e) { console.warn("punctum: couldn't list extensions: " + e) }
     var refused = []
     found = (Array.isArray(found) ? found : []).filter(function(f) {
       if (f && f.error) { refused.push({ dir: String(f.dir || ""), error: String(f.error) }); return false }
@@ -816,7 +816,7 @@ Item {
         errors.push({ dir: m.dir, error: "didn't load: " + String(e && e.qmlErrors ? e.qmlErrors.map(function(q) { return q.message }).join("; ") : e) })
       }
     }
-    for (var j = 0; j < errors.length; j++) console.warn("commandbar: extension " + errors[j].dir + ": " + errors[j].error)
+    for (var j = 0; j < errors.length; j++) console.warn("punctum: extension " + errors[j].dir + ": " + errors[j].error)
     root.extensionObjects = objects
     Engine.setProviders(entries)
     Engine.setExtensionErrors(errors)
@@ -826,13 +826,13 @@ Item {
 
   Process {
     id: extensionsProc
-    command: ["python3", root.pluginDir + "/bin/commandbar-extensions", root.pluginDir + "/extensions", root.userExtensionsDir]
+    command: ["python3", root.pluginDir + "/bin/punctum-extensions", root.pluginDir + "/extensions", root.userExtensionsDir]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.installExtensions(String(text || ""))
     }
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: extensions: " + text.trim().slice(0, 300))
+      onStreamFinished: if (text.trim() !== "") console.warn("punctum: extensions: " + text.trim().slice(0, 300))
     }
   }
 
@@ -876,7 +876,13 @@ Item {
   // runtime binds when its config reloads, so this re-runs after every
   // reload, after config changes, and at startup. lib/Hotkey.js decides what
   // to bind or unbind; a key that something else already uses is left alone.
-  readonly property string toggleCommand: "omarchy-shell shell toggle hypha.commandbar"
+  // The id comes from the manifest, so a renamed clone binds its own; it goes
+  // into a shell command, so anything but [A-Za-z0-9._-] falls back.
+  readonly property string pluginId: {
+    var id = root.manifest && root.manifest.id
+    return typeof id === "string" && /^[A-Za-z0-9._-]+$/.test(id) ? id : "io.github.mycosavant.punctum"
+  }
+  readonly property string toggleCommand: "omarchy-shell shell toggle " + root.pluginId
   property bool configsLoaded: false
   property bool hotkeyQueued: false
   property string boundHotkey: ""     // what we bound, so unloading can unbind it
@@ -895,9 +901,9 @@ Item {
     root.boundHotkey = p.bound ? hotkey : ""
     if (p.conflict && root.warnedConflict !== hotkey) {
       root.warnedConflict = hotkey
-      console.warn("commandbar: " + hotkey + " is already used by \"" + p.conflict + "\"; not binding it")
-      Quickshell.execDetached(["notify-send", "-a", "Command Bar", "Command Bar has no hotkey",
-        hotkey + " already opens \"" + p.conflict + "\". Set a different \"hotkey\" in ~/.config/omarchy/extensions/commandbar.json."])
+      console.warn("punctum: " + hotkey + " is already used by \"" + p.conflict + "\"; not binding it")
+      Quickshell.execDetached(["notify-send", "-a", "Punctum", "Punctum has no hotkey",
+        hotkey + " already opens \"" + p.conflict + "\". Set a different \"hotkey\" in ~/.config/omarchy/extensions/punctum.json."])
     }
     if (root.hotkeyQueued) { root.hotkeyQueued = false; root.ensureHotkey() }
   }
@@ -949,7 +955,7 @@ Item {
     printErrors: false
     onLoaded: {
       try { root.defaultConfig = Engine.parseJsonc(text()) }
-      catch (e) { console.warn("commandbar: bad config.default.json: " + e) }
+      catch (e) { console.warn("punctum: bad config.default.json: " + e) }
       root.configLoaded()
     }
     onFileChanged: reload()
@@ -961,7 +967,7 @@ Item {
     printErrors: false
     onLoaded: {
       try { root.userConfig = Engine.parseJsonc(text()) }
-      catch (e) { console.warn("commandbar: bad " + root.userConfigPath + ": " + e); root.userConfig = ({}) }
+      catch (e) { console.warn("punctum: bad " + root.userConfigPath + ": " + e); root.userConfig = ({}) }
       root.configLoaded()
     }
     onLoadFailed: { root.userConfig = ({}); root.configLoaded() }
@@ -997,7 +1003,7 @@ Item {
       }
       root.ratesStatus = ""
     } catch (e) {
-      if (raw) console.warn("commandbar: bad rates cache: " + e)
+      if (raw) console.warn("punctum: bad rates cache: " + e)
     }
     if (root.opened) root.recompute()
   }
@@ -1045,11 +1051,11 @@ Item {
 
   // ---------------------------------------------------------------- cache files
 
-  // The shell never opens the cache files itself: bin/commandbar-cache does
+  // The shell never opens the cache files itself: bin/punctum-cache does
   // every read and write, refusing symlinks, foreign or oversized files, and
   // replacing a file atomically through a private temporary file. Requests run
   // one at a time, in order.
-  readonly property string cacheHelper: root.pluginDir + "/bin/commandbar-cache"
+  readonly property string cacheHelper: root.pluginDir + "/bin/punctum-cache"
   property var cacheQueue: []
   property var cacheDone: null
 
@@ -1089,7 +1095,7 @@ Item {
     }
     stdout: StdioCollector { id: cacheOut; waitForEnd: true }
     stderr: StdioCollector {
-      onStreamFinished: if (text.trim() !== "") console.warn("commandbar: " + text.trim())
+      onStreamFinished: if (text.trim() !== "") console.warn("punctum: " + text.trim())
     }
     onExited: function(exitCode) {
       var done = root.cacheDone
@@ -1171,7 +1177,7 @@ Item {
         var data = JSON.parse(text())
         root.emojis = Array.isArray(data) ? data : []
       } catch (e) {
-        console.warn("commandbar: bad emojis.json: " + e)
+        console.warn("punctum: bad emojis.json: " + e)
       }
     }
   }
@@ -1358,7 +1364,7 @@ Item {
             })
           }
         } catch (e) {
-          console.warn("commandbar: bad hyprctl clients output: " + e)
+          console.warn("punctum: bad hyprctl clients output: " + e)
         }
         root.windows = out
         if (root.opened) root.recompute()
@@ -1438,7 +1444,7 @@ Item {
     visible: root.opened
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.namespace: "omarchy-commandbar"
+    WlrLayershell.namespace: "punctum"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore

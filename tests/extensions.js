@@ -1,4 +1,4 @@
-// Finds and loads extensions the way CommandBar.qml does, for the tests:
+// Finds and loads extensions the way Punctum.qml does, for the tests:
 // every extensions/<id>/extension.json, validated by lib/Extensions.js, its
 // provider loaded (js) or wrapped (script), then handed to Engine.
 const fs = require("fs"), path = require("path")

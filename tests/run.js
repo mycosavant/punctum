@@ -173,7 +173,7 @@ expect("g foo bar", "Search Google: foo bar")
   console.log((ok ? "ok  " : "FAIL") + "  rates requested only for currency queries → " + asked.join(" | ")); if (!ok) fails++ }
 
 // Hotkey: which Lua gets sent to `hyprctl eval`.
-{ const H = load(P + "lib/Hotkey.js"), cmd = "omarchy-shell shell toggle hypha.commandbar"
+{ const H = load(P + "lib/Hotkey.js"), cmd = "omarchy-shell shell toggle io.github.mycosavant.punctum"
   const other = { modmask: 64, key: "K", description: "Keybindings", dispatcher: "__lua" }
   const mine = { modmask: 64, key: "PERIOD", description: "Command bar", dispatcher: "__lua" }
   const j = a => JSON.stringify(a)
@@ -191,8 +191,8 @@ expect("g foo bar", "Search Google: foo bar")
 
 // help: topics, a topic's examples with live answers, search, and quiet previews
 { const top = q("?"), titles = top.map(r => r.title).join("|")
-  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Reminders and alarms|Keybindings|Open a web address|Bangs|Bible|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Extensions|Keywords"
-    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[14].complete === "?calc" && !top[0].section
+  const ok = titles === "Open an app|Switch window|Inbox note|Clipboard history|Find files|Find everywhere|Search inside files|Packages|Reminders and alarms|Keybindings|Open a web address|Bangs|Colours|Calculator|Units|Currency|Time zones|Dates|Emoji|Kill a process|Ask your agent|Extensions|Keywords"
+    && top.every(r => r.help && !r.run && !r.copy && r.actionLabel === "Open") && top[13].complete === "?calc" && !top[0].section
   console.log((ok ? "ok  " : "FAIL") + "  \"?\" → " + titles); if (!ok) fails++ }
 { const u = q("?units"), sub = u.map(r => r.title + " " + r.subtitle)
   const ok = u[0].section === "Units" && u[0].title === "5 km to mi" && u[0].subtitle === "→ 3.1069 mi" && u[0].complete === "5 km to mi" && u[0].select
@@ -219,7 +219,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
 // Shell quoting, run for real. A broken quote only ever creates a marker file
 // in a fresh temporary folder: never put anything destructive in a payload.
 { const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-quote-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-quote-")
   const mark = n => "touch " + dir + "/" + n
   const payloads = [
     "it's; " + mark("semi"),
@@ -232,7 +232,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   const results = []
   for (const text of payloads) {
     const row = Engine.run("x " + text, { providers: ["commands"], commands: [{ keyword: "x", run: "printf %s {q} \"it's\"" }] }, {})[0]
-    const out = execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg]).toString()
+    const out = execFileSync("bash", ["-c", row.run.target, "punctum", row.run.arg]).toString()
     results.push(out === text + "it's")
   }
   const ran = fs.readdirSync(dir)
@@ -242,7 +242,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
 // Templates that evaluate a value or hide quoting from a naive scanner. Each
 // either refuses or runs with the payload left as text.
 { const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-tmpl-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-tmpl-")
   // No backtick here: bash rejects an arithmetic expression containing one
   // before it evaluates the subscript, which would hide the danger.
   const payload = "a[$(touch " + dir + "/sub)]"
@@ -261,7 +261,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   for (const tmpl of templates) {
     const row = Engine.run("x " + payload, { providers: ["commands"], commands: [{ keyword: "x", run: tmpl }] }, {})[0]
     if (!row.run) { verdicts.push("refused"); continue }
-    try { execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg], { stdio: "pipe" }) } catch (e) {}
+    try { execFileSync("bash", ["-c", row.run.target, "punctum", row.run.arg], { stdio: "pipe" }) } catch (e) {}
     verdicts.push("ran")
   }
   const marks = fs.readdirSync(dir)
@@ -270,7 +270,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   const ok = marks.length === 0 && verdicts.join("|") === want
   console.log((ok ? "ok  " : "FAIL") + "  templates that evaluate are refused, the rest run the text as text" + (ok ? "" : " → " + verdicts.join("|") + " marks:" + marks)); if (!ok) fails++ }
 { const row = Engine.run("x a b", { providers: ["commands"], commands: [{ keyword: "x", run: "printf '[%s]' {q} \"<{q}>\"" }] }, {})[0]
-  const out = require("child_process").execFileSync("bash", ["-c", row.run.target, "commandbar", row.run.arg]).toString()
+  const out = require("child_process").execFileSync("bash", ["-c", row.run.target, "punctum", row.run.arg]).toString()
   console.log((out === "[a b][<a b>]" ? "ok  " : "FAIL") + "  {q} is one word bare and inside double quotes → " + out); if (out !== "[a b][<a b>]") fails++ }
 { const dq = Engine.run("say hi", { providers: ["commands"], commands: [{ keyword: "say", run: "notify-send \"{q}\"" }] }, {})
   const sq = Engine.run("s1 hi", { providers: ["commands"], commands: [{ keyword: "s1", run: "echo '{q}'" }] }, {})
@@ -279,7 +279,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
 // An emoji with quotes and shell syntax reaches the insert script and wl-copy
 // unchanged, and nothing in it runs. Both tools are stubs that record what they got.
 { const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-emoji-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-emoji-")
   const evil = "x'; touch \"" + dir + "/pwned\"; echo '$(touch " + dir + "/pwned2)`touch " + dir + "/pwned3`"
   fs.writeFileSync(dir + "/omarchy-menu-emoji-insert", "#!/bin/bash\nprintf %s \"$1\" > \"$STUBS/typed\"\n", { mode: 0o755 })
   fs.writeFileSync(dir + "/wl-copy", "#!/bin/bash\ncat > \"$STUBS/copied\"\n", { mode: 0o755 })
@@ -329,8 +329,8 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   check("fallback needs a default agent", ai("how do i rebase", "", fb).length === 0)
   check("chats can be emptied", ai("ai hi", "claude", { chats: [] }).filter(r => r.provider === "ai").length === 1)
 
-  // Run bin/commandbar-agent with stub Omarchy commands and record what reached them.
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-ai-")
+  // Run bin/punctum-agent with stub Omarchy commands and record what reached them.
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-ai-")
   const stub = (name, body) => fs.writeFileSync(dir + "/" + name, "#!/bin/bash\n" + body + "\n", { mode: 0o755 })
   stub("omarchy-default-agent", "cat \"$STUBS/agent\" 2>/dev/null")
   stub("omarchy-cmd-missing", "[[ $1 != installed ]]")
@@ -340,7 +340,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
   const helper = (agent, prompt) => {
     for (const f of ["launched", "picked", "notified"]) fs.rmSync(dir + "/" + f, { force: true })
     if (agent === null) fs.rmSync(dir + "/agent", { force: true }); else fs.writeFileSync(dir + "/agent", agent + "\n")
-    const r = spawnSync(P + "bin/commandbar-agent", [prompt], { env: Object.assign({}, process.env, { PATH: dir + ":" + process.env.PATH, STUBS: dir }) })
+    const r = spawnSync(P + "bin/punctum-agent", [prompt], { env: Object.assign({}, process.env, { PATH: dir + ":" + process.env.PATH, STUBS: dir }) })
     const read = f => fs.existsSync(dir + "/" + f) ? fs.readFileSync(dir + "/" + f, "utf8").replace(/\n$/, "").split("\n") : null
     return { status: r.status, launched: read("launched"), picked: read("picked"), notified: read("notified") }
   }
@@ -356,10 +356,10 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     check("a damaged agent name opens the picker, not a notification", !r.launched && !r.notified && r.picked && r.picked[0] === "--pick") }
   fs.rmSync(dir, { recursive: true, force: true }) }
 
-// bin/commandbar-open: xdg-open on Hyprland ignores Terminal=true, so a text
+// bin/punctum-open: xdg-open on Hyprland ignores Terminal=true, so a text
 // file whose default is nvim.desktop must reach the editor instead.
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-open-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-open-")
   for (const d of ["bin", "data/applications", "sys", "home", "files"]) fs.mkdirSync(dir + "/" + d, { recursive: true })
   const stub = (name, body) => fs.writeFileSync(dir + "/bin/" + name, "#!/bin/bash\n" + body + "\n", { mode: 0o755 })
   // xdg-mime answers from two files the test writes: the type and the default.
@@ -373,7 +373,7 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     fs.writeFileSync(dir + "/mime", mime + "\n")
     if (def) fs.writeFileSync(dir + "/default", def + "\n"); else fs.rmSync(dir + "/default", { force: true })
     fs.rmSync(dir + "/ran", { force: true })
-    spawnSync(P + "bin/commandbar-open", [target], { env, cwd: dir })
+    spawnSync(P + "bin/punctum-open", [target], { env, cwd: dir })
     return fs.existsSync(dir + "/ran") ? fs.readFileSync(dir + "/ran", "utf8").replace(/\n$/, "").split("\n") : []
   }
   const md = dir + "/files/notes.md", rs = dir + "/files/$(touch pwned); `touch pwned`.rs", png = dir + "/files/a.png", spaced = dir + "/files/two words.md"
@@ -399,10 +399,10 @@ const r = q("g foo & bar")[0].run; console.log("      url:", r.target)
     check("open: a file:// URL is decoded to its path", r[0] === "omarchy-launch-tui" && r[r.length - 1] === spaced, r.join(" ")) }
   fs.rmSync(dir, { recursive: true, force: true }) }
 
-// bin/commandbar-cache, run against a throwaway HOME.
+// bin/punctum-cache, run against a throwaway HOME.
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const home = fs.mkdtempSync(os.tmpdir() + "/commandbar-home-"), dir = home + "/.cache/omarchy-commandbar"
-  const cache = (args, input) => spawnSync("python3", [P + "bin/commandbar-cache"].concat(args), { input: input || "", env: Object.assign({}, process.env, { HOME: home }) })
+  const home = fs.mkdtempSync(os.tmpdir() + "/punctum-home-"), dir = home + "/.cache/punctum"
+  const cache = (args, input) => spawnSync("python3", [P + "bin/punctum-cache"].concat(args), { input: input || "", env: Object.assign({}, process.env, { HOME: home }) })
   const check = (name, ok) => { console.log((ok ? "ok  " : "FAIL") + "  cache: " + name); if (!ok) fails++ }
   const read = name => { const r = cache(["read", name]); return r.status === 0 ? r.stdout.toString() : null }
 
@@ -441,7 +441,7 @@ function check(name, ok, detail) { console.log((ok ? "ok  " : "FAIL") + "  " + n
 // provider's key, and a search that has landed.
 const loadedText = (id, key, text, onRequest) => ({ cached: k => k === id + "\n" + key ? text : null, requestLoad: (k, a, o) => onRequest && onRequest(k, a, o) })
 const landed = (id, key, text, more) => Object.assign({ search: { key: id + "\n" + key, text, chunks: [text], timedOut: false, done: true }, requestSearch: () => {} }, more || {})
-const SANDBOX = P + "bin/commandbar-sandbox"
+const SANDBOX = P + "bin/punctum-sandbox"
 const run = (query, providers, extra) => Engine.run(query, Object.assign({}, config, { providers }), Object.assign({ now, apps, windows: [], launches: {} }, extra || {}))
 
 { const history = [
@@ -503,7 +503,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   // Run the dispatch for real against a stub script: the argument reaches
   // dispatch_binding as one literal, and nothing in it executes.
   const fs = require("fs"), os = require("os"), { execFileSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-hotkey-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-hotkey-")
   fs.mkdirSync(dir + "/bin")
   fs.writeFileSync(dir + "/bin/omarchy-menu-keybindings", "dispatch_binding() { printf '%s|%s' \"$1\" \"$2\" > \"" + dir + "/got\"; }\n")
   const evil = "x\"; touch " + dir + "/pwned; echo \"$(touch " + dir + "/pwned2)"
@@ -540,10 +540,10 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("notes: a relative inbox path counts as unset", !rel.run)
   check("notes: mode chip", (Engine.mode("n x", config) || {}).label === "Note") }
 
-// bin/commandbar-note, run for real in a temporary folder.
+// bin/punctum-note, run for real in a temporary folder.
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-note-")
-  const note = (path, input) => spawnSync("python3", ["-I", P + "bin/commandbar-note", path], { input })
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-note-")
+  const note = (path, input) => spawnSync("python3", ["-I", P + "bin/punctum-note", path], { input })
   const inbox = dir + "/Inbox.md"
   fs.writeFileSync(inbox, "# Inbox\n- old")                 // no trailing newline
   const a = note(inbox, "- first\u0007 $(touch " + dir + "/pwned)\n")
@@ -610,23 +610,24 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // bangs: listed bangs go straight to the site, unlisted ones to DuckDuckGo
 { const b = (query, cfg) => Engine.run(query, Object.assign({}, config, { providers: ["bangs"] }, cfg || {}), { now })
-  const r = b("!nasb john 3:16")
-  check("bangs: !nasb opens Bible Gateway NASB", r[0].title === "Bible (NASB): john 3:16" && r[0].run.target === "https://www.biblegateway.com/quicksearch/?quicksearch=john%203%3A16&version=NASB", JSON.stringify(r[0] && r[0].run))
-  check("bangs: a trailing bang works too", b("john 3:16 !nasb")[0].run.target === r[0].run.target)
-  check("bangs: !bible is NASB", /version=NASB$/.test(b("!bible love")[0].run.target))
+  const r = b("!w john 3:16")
+  check("bangs: !w opens Wikipedia", r[0].title === "Wikipedia: john 3:16" && /^https:\/\/en\.wikipedia\.org\/.*john%203%3A16/.test(r[0].run.target), JSON.stringify(r[0] && r[0].run))
+  check("bangs: a trailing bang works too", b("john 3:16 !w")[0].run.target === r[0].run.target)
+  { const d = JSON.parse(require("fs").readFileSync(P + "extensions/bangs/extension.json", "utf8")).defaults
+    check("bangs: the defaults are general sites, nothing personal", !/biblegateway|127\.0\.0\.1|localhost/.test(JSON.stringify(d)) && ["ddg", "g", "w", "yt", "gh", "aw", "maps"].every(k => d.engines[k]), Object.keys(d.engines).join(" ")) }
   const un = b("!imdb dune")
   check("bangs: an unlisted bang goes to DuckDuckGo whole", un[0].run.target === "https://duckduckgo.com/?q=!imdb%20dune", un[0] && un[0].run.target)
   check("bangs: fallback \"\" keeps unlisted bangs here", b("!imdb dune", { bangs: Object.assign({}, config.bangs, { fallback: "" }) }).length === 0)
-  check("bangs: \"!\" lists them, \"!na\" narrows", b("!").length >= 10 && b("!na").map(x => x.complete.trim()).join(" ") === "!nasb !nasb95")
-  check("bangs: a bang with no search asks for one", b("!nasb")[0].title === "Bible (NASB)…" || b("!nasb ")[0].title === "Bible (NASB)…")
+  check("bangs: \"!\" lists them, \"!a\" narrows", b("!").length >= 7 && b("!a").filter(x => x.provider === "bangs").map(x => x.complete.trim()).join(" ") === "!ap !aw")
+  check("bangs: a bang with no search asks for one", b("!w")[0].title === "Wikipedia…" || b("!w ")[0].title === "Wikipedia…")
   check("bangs: $& and quotes stay literal and encoded", b("!g $& 'x'")[0].run.target === "https://www.google.com/search?q=%24%26%20'x'", b("!g $& 'x'")[0].run.target)
-  const merged = Engine.deepMerge(defaults, { bangs: { engines: { g: null, ex: { title: "Example", open: "https://example.com/?s={q}" }, bad: { title: "Bad", open: "javascript:alert({q})" } } } })
+  const merged = Engine.deepMerge(defaults, { bangs: { engines: { g: null, nasb: { title: "Bible (NASB)", open: "https://www.biblegateway.com/quicksearch/?quicksearch={q}&version=NASB" }, ex: { title: "Example", open: "https://example.com/?s={q}" }, bad: { title: "Bad", open: "javascript:alert({q})" } } } })
   const m = (query) => Engine.run(query, Object.assign({}, merged, { providers: ["bangs"] }), { now })
-  check("bangs: yours merge over the defaults by name", m("!ex hi")[0].run.target === "https://example.com/?s=hi" && /biblegateway/.test(m("!nasb x")[0].run.target))
+  check("bangs: yours merge over the defaults by name", m("!ex hi")[0].run.target === "https://example.com/?s=hi" && /biblegateway/.test(m("!nasb x")[0].run.target) && /wikipedia/.test(m("!w x")[0].run.target))
   check("bangs: null drops a default (then DuckDuckGo takes it)", /^https:\/\/duckduckgo\.com\/\?q=!g%20hi$/.test(m("!g hi")[0].run.target), m("!g hi")[0].run.target)
   check("bangs: a non-http address is never opened", /duckduckgo/.test(m("!bad hi")[0].run.target))
   check("bangs: 5! is still factorial, not a bang", q("5!")[0].title === "120")
-  check("bangs: mode chip", (Engine.mode("!nasb x", config) || {}).label === "Bang") }
+  check("bangs: mode chip", (Engine.mode("!w x", config) || {}).label === "Bang") }
 
 // packages: one read per open, official repos, install through pacman's own prompt
 { const Pk = load(P + "extensions/packages/provider.js")
@@ -634,14 +635,17 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
                "S\textra\tkfind-extras\t1-1\tany\tMore\nS\textra\t$(touch x)\t1\tany\tevil name\nS\textra\tplocate\t1.1.25-1\tx86_64\tAlternative to locate, faster\n"
   const data = Pk.parse(text)
   let asked = 0
-  const pk = (query, t) => run(query, ["packages"], loadedText("packages", "list", t === undefined ? text : t, () => asked++))
+  const pk = (query, t, settings) => Engine.run(query, Object.assign({}, config, { providers: ["packages"], packages: settings || { install: true } }), Object.assign({ now, apps, windows: [], launches: {} }, loadedText("packages", "list", t === undefined ? text : t, () => asked++)))
   check("packages: a bad name never makes the list", data.list.length === 4 && !data.list.some(x => /\$/.test(x.name)))
   const r = pk("pkg kfind")
   check("packages: exact name first", r[0].title === "kfind" && r[1].title === "kfind-extras", r.map(x => x.title).join(","))
   check("packages: installed rows show details, and the installed version when it differs", r[0].run.label === "details" && /installed 26\.07\.0-1/.test(r[0].subtitle), r[0].subtitle)
-  check("packages: the name is $1, never in the script", r[0].run.target.slice(-2).join(" ") === "commandbar-pkg kfind" && !/kfind/.test(r[0].run.target[r[0].run.target.length - 3]))
+  check("packages: the name is $1, never in the script", r[0].run.target.slice(-2).join(" ") === "punctum-pkg kfind" && !/kfind/.test(r[0].run.target[r[0].run.target.length - 3]))
   const inst = pk("pkg kfind-extras")[0]
-  check("packages: Enter on a missing package runs pacman -S in a terminal (pacman asks)", inst.run.label === "install" && /sudo pacman -S -- "\$1"/.test(inst.run.target.join(" ")) && !/--noconfirm/.test(inst.run.target.join(" ")))
+  { const plain = pk("pkg kfind-extras", undefined, { install: false })[0], unset = pk("pkg kfind-extras", undefined, {})[0]
+    check("packages: by default Enter copies the install command and runs nothing", plain.run.kind === "copy" && plain.run.target === "sudo pacman -S extra/kfind-extras" && unset.run.kind === "copy", JSON.stringify(plain.run))
+    check("packages: the manifest's default is not to install", JSON.parse(require("fs").readFileSync(P + "extensions/packages/extension.json", "utf8")).defaults.install === false) }
+  check("packages: with install on, Enter on a missing package runs pacman -S in a terminal (pacman asks)", inst.run.label === "install" && /sudo pacman -S -- "\$1"/.test(inst.run.target.join(" ")) && !/--noconfirm/.test(inst.run.target.join(" ")))
   check("packages: install names the repo, so a name in two repos installs the chosen one", inst.run.target.slice(-1)[0] === "extra/kfind-extras")
   const two = pk("pkg ghostty", "S\tomarchy\tghostty\t1-1\tx86_64\tterminal\nS\textra\tghostty\t1-1\tx86_64\tterminal\n")
   check("packages: a repo that isn't Arch's shows pacman -Si, not a dead archlinux.org link", two.length === 2 && two.some(r => r.alt.kind === "argv" && r.alt.target.slice(-1)[0] === "omarchy/ghostty") && two.some(r => r.alt.kind === "open" && /packages\/extra\//.test(r.alt.target)))
@@ -665,7 +669,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("contents: Enter edits at the line, Shift+Enter opens", rows[0].run.kind === "edit" && rows[0].run.target === "/home/u/a.md" && rows[0].run.line === 12 && rows[0].alt.kind === "open" && rows[0].alt.target === "/home/u/a.md" && rows[0].subtitle === "~/a.md:12")
   check("contents: mode chip", (Engine.mode("rg x", config) || {}).label === "In files")
   // For real, in a scratch home: finds the line, and a $(…) query runs nothing.
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-rg-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-rg-")
   fs.writeFileSync(dir + "/note.md", "first\nthe zebra invoice\n")
   const env = Object.assign({}, process.env, { HOME: dir })
   const found = C.parse(spawnSync("bash", C.plan("zebra invoice", null).argv.slice(1), { encoding: "utf8", env }).stdout)
@@ -688,13 +692,15 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 { const top = (query) => { const r = Engine.run(query, config, { now, apps, windows: [], requestSearch: () => {}, requestHomeIndex: () => {}, requestPackages: () => {} }); return r[0] ? r[0].provider : "(none)" }
   check("bangs: /hosts !backup stays a file search", top("/hosts !backup") === "everywhere" && top("/x !w") === "everywhere", top("/hosts !backup"))
   check("bangs: rg and pkg keep their trailing !words", top("rg TODO !x") === "contents" && top("pkg foo !bar") === "packages")
-  check("bangs: outside a mode a trailing bang still works", top("john 3:16 !nasb") === "bangs")
+  check("bangs: outside a mode a trailing bang still works", top("john 3:16 !w") === "bangs")
   const t = Date.now(); Engine.run("a ".repeat(20000) + "!x", config, { now, apps, windows: [] })
   check("bangs and bible: a pasted blob is quick", Date.now() - t < 200, (Date.now() - t) + "ms") }
 
-// syncthing: a keyword that opens the local web UI
-{ const r = q("syncthing")
-  check("syncthing: opens the local web UI", r[0].title === "Syncthing" && r[0].run && r[0].run.target === "http://127.0.0.1:8384/", JSON.stringify(r[0] && r[0].run)) }
+// neutral defaults: nothing personal ships switched on
+{ const fs = require("fs"), man = id => JSON.parse(fs.readFileSync(P + "extensions/" + id + "/extension.json", "utf8"))
+  check("defaults: Bible is off until you turn it on", man("bible").enabled === false)
+  check("defaults: no personal keywords (a local web UI, a vault path)", !man("commands").defaults.some(c => /127\.0\.0\.1|localhost|syncthing/i.test(JSON.stringify(c))) && man("notes").defaults.inbox === "", JSON.stringify(man("commands").defaults.map(c => c.keyword)))
+  check("defaults: no package installs unless asked", man("packages").defaults.install === false) }
 
 // ---------------------------------------------------------------- extensions
 { const good = { schema: 1, id: "demo", name: "Demo", type: "js", entry: "provider.js", defaults: { a: 1, b: { c: 2 } }, order: 5 }
@@ -757,7 +763,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // a real script extension, run the way the bar runs it
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const dir = fs.mkdtempSync(os.tmpdir() + "/commandbar-script-")
+  const dir = fs.mkdtempSync(os.tmpdir() + "/punctum-script-")
   fs.writeFileSync(dir + "/echo", "#!/usr/bin/env python3\nimport json,sys\nr=json.load(sys.stdin)\nprint(json.dumps({'items':[{'title':'you typed '+r['text'],'copy':r['text']}]}))\n", { mode: 0o755 })
   const m = Ext.validate({ schema: 1, id: "echo", type: "script", command: ["./echo"], mode: { pattern: "^\\s*echo\\s" } }, dir)
   const sp = Ext.scriptProvider(m)
@@ -791,16 +797,16 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   const rows = Engine.run("2+2", config, { now, apps: [pinta], windows: [], launches: {} })
   check("apps: 2+2 answers 4 and doesn't offer Pinta", rows[0].title === "4" && !rows.some(r => r.title === "Pinta"), rows.map(r => r.title).join("|")) }
 
-// bin/commandbar-extensions: finds manifests, refuses what others could have planted
+// bin/punctum-extensions: finds manifests, refuses what others could have planted
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
   // Under XDG_RUNTIME_DIR: /tmp is writable by everyone, which the helper rightly refuses.
-  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/commandbar-exts-"), user = root + "/user"
+  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/punctum-exts-"), user = root + "/user"
   fs.chmodSync(root, 0o700)
   fs.mkdirSync(user + "/ok", { recursive: true, mode: 0o700 }); fs.chmodSync(user, 0o700)
   fs.writeFileSync(user + "/ok/extension.json", JSON.stringify({ schema: 1, id: "ok", requires: ["sh", "no-such-command-zz"] }))
   fs.writeFileSync(user + "/ok/provider.js", "", { mode: 0o600 })
   fs.mkdirSync(user + "/linked", { mode: 0o700 }); fs.symlinkSync("/etc/hostname", user + "/linked/extension.json")
-  const list = () => JSON.parse(spawnSync("python3", [P + "bin/commandbar-extensions", P + "extensions", user], { encoding: "utf8" }).stdout)
+  const list = () => JSON.parse(spawnSync("python3", [P + "bin/punctum-extensions", P + "extensions", user], { encoding: "utf8" }).stdout)
   const got = list().filter(e => e.user)
   const ok = got.find(e => /\/ok$/.test(e.dir)), linked = got.find(e => /\/linked$/.test(e.dir))
   check("ext helper: reads yours and reports missing commands", ok && JSON.parse(ok.manifest).id === "ok" && ok.missing.join() === "no-such-command-zz", JSON.stringify(ok))
@@ -873,10 +879,10 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
   check("everywhere: ^name matches a name's start", ew("^downbeat").stdout.split("\n")[0] === home + "/Docs/downbeat.txt")
   ew("$(touch " + home + "/pwned)"); ew("--", "`touch " + home + "/pwned2`")
   check("everywhere: a $(…) query runs nothing", !fs.existsSync(home + "/pwned") && !fs.existsSync(home + "/pwned2"))
-  const cb = spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: [] } }), encoding: "utf8" })
+  const cb = spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: [] } }), encoding: "utf8" })
   const items = JSON.parse(cb.stdout).items
-  check("everywhere: --commandbar returns rows the bar accepts", items[0].title === "downbeat.txt" && Ext.parseOutput(cb.stdout).items[0].run.kind === "open" && Ext.parseOutput(cb.stdout).items[0].alt.kind === "argv", cb.stdout.slice(0, 200))
-  check("everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
+  check("everywhere: --punctum returns rows the bar accepts", items[0].title === "downbeat.txt" && Ext.parseOutput(cb.stdout).items[0].run.kind === "open" && Ext.parseOutput(cb.stdout).items[0].alt.kind === "argv", cb.stdout.slice(0, 200))
+  check("everywhere: exclusions from the bar's settings apply", JSON.parse(spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "downbeat", settings: { exclude: ["/Docs/"] } }), encoding: "utf8" }).stdout).items.every(i => !/Docs/.test(i.subtitle)))
   check("everywhere: --index --max-age skips a fresh index", (() => { const t = fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs; ew("--index", "--max-age", "60"); return fs.statSync(home + "/.cache/everywhere/home.db").mtimeMs === t })())
   fs.rmSync(home, { recursive: true }) }
 
@@ -948,7 +954,7 @@ const run = (query, providers, extra) => Engine.run(query, Object.assign({}, con
 
 // the sandbox, for real: bwrap with exactly what the manifest asked for
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/commandbar-sandbox-")
+  const root = fs.mkdtempSync((process.env.XDG_RUNTIME_DIR || os.tmpdir()) + "/punctum-sandbox-")
   const home = root + "/home", ext = root + "/ext"
   fs.mkdirSync(home + "/.cache/ok", { recursive: true }); fs.mkdirSync(home + "/.config"); fs.mkdirSync(ext)
   fs.writeFileSync(home + "/secret", "s3cret"); fs.writeFileSync(home + "/.config/thing", "cfg")
@@ -1024,7 +1030,7 @@ print(json.dumps({
   check("sandbox: nested or overlapping paths, ~/. and places that run code or hold keys are refused",
     /overlap/.test(v({ writes: ["~/.cache/x", "~/.cache/x/b/.ssh"] })) && /overlap/.test(v({ reads: ["~/.config/a"], writes: ["~/.config/a/b"] }))
     && /no empty/.test(v({ writes: ["~/."] })) && /may not write/.test(v({ writes: ["~/.ssh"] })) && /may not write/.test(v({ writes: ["~/.config"] }))
-    && /may not write/.test(v({ writes: ["~/.config/omarchy/commandbar/extensions"] })) && /may not write/.test(v({ writes: ["~/.bashrc"] })) && v({ writes: ["~/.cache/mine"] }) === "")
+    && /may not write/.test(v({ writes: ["~/.config/omarchy/punctum/extensions"] })) && /may not write/.test(v({ writes: ["~/.bashrc"] })) && v({ writes: ["~/.cache/mine"] }) === "")
   const items = Ext.scriptProvider(Ext.validate({ schema: 1, id: "w", type: "script", command: ["./w"], mode: { pattern: "^w " } }, "/e/w"))
     .match("w x", { home: "/h", sandboxHelper: SANDBOX, search: { key: "x", text: JSON.stringify({ items: [{ title: "t", run: { kind: "argv", target: ["curl", "x"] } }] }) } })
   check("sandbox: a command a sandboxed script's row runs on Enter runs in the same sandbox", items[0].run.target[1] === SANDBOX && items[0].run.target.slice(-2).join(" ") === "curl x" && /sandboxed/.test(items[0].run.label), JSON.stringify(items[0].run))
@@ -1042,20 +1048,21 @@ print(json.dumps({
   check("switches: add to or take from an older providers list", Ext.withSwitches({ providers: ["apps", "locate"] }, { bible: true, apps: false }).providers.join() === "everywhere,bible")
   check("switches: the user's own config object isn't changed", (() => { const u = { extensions: { a: true } }; Ext.withSwitches(u, { a: false }); return u.extensions.a === true })())
   const rows = q("?extensions")
-  const bible = rows.find(r => r.title === "Bible")
-  check("switches: Enter on an extension switches it, and says which way", bible.run.kind === "toggle-extension" && bible.run.target === "bible" && bible.run.on === false && bible.actionLabel === "Turn off" && bible.complete === "")
-  const offCfg = Ext.effectiveConfig(defaults, loaded.manifests, Ext.withSwitches({}, { bible: false }))
-  Engine.setExtensionSwitches({ bible: false })
-  const after = Engine.run("?extensions", offCfg, { now }).find(r => r.title === "Bible")
+  const units = rows.find(r => r.title === "Units"), bible = rows.find(r => r.title === "Bible")
+  check("switches: Enter on an extension switches it, and says which way", units.run.kind === "toggle-extension" && units.run.target === "units" && units.run.on === false && units.actionLabel === "Turn off" && units.complete === "")
+  check("switches: an extension off by default offers to turn it on", bible.run.on === true && bible.actionLabel === "Turn on", bible.subtitle)
+  const offCfg = Ext.effectiveConfig(defaults, loaded.manifests, Ext.withSwitches({}, { units: false }))
+  Engine.setExtensionSwitches({ units: false })
+  const after = Engine.run("?extensions", offCfg, { now }).find(r => r.title === "Units")
   Engine.setExtensionSwitches({})
   check("switches: switched off in the bar, it says so and offers to turn it on", /^Off: switched off in the bar/.test(after.subtitle) && after.run.on === true && after.actionLabel === "Turn on", after.subtitle)
-  check("switches: and it stops answering", !Engine.run("john 3:16", offCfg, { now, apps }).some(r => r.provider === "bible"))
+  check("switches: and it stops answering", Engine.run("5 km to mi", config, { now, apps }).some(r => r.provider === "units") && !Engine.run("5 km to mi", offCfg, { now, apps }).some(r => r.provider === "units"))
   check("switches: reset and settings commands are findable", q("reset extension")[0].run.kind === "reset-switches" && q("open settings")[0].run.kind === "open-settings") }
 { const fs = require("fs"), os = require("os"), { spawnSync } = require("child_process")
-  const home = fs.mkdtempSync(os.tmpdir() + "/commandbar-sw-")
+  const home = fs.mkdtempSync(os.tmpdir() + "/punctum-sw-")
   const env = Object.assign({}, process.env, { HOME: home, XDG_CACHE_HOME: home + "/.cache" })
-  const w = spawnSync("python3", [P + "bin/commandbar-cache", "write", "extension-switches.json"], { input: '{"bible":false}', env, encoding: "utf8" })
-  const r = spawnSync("python3", [P + "bin/commandbar-cache", "read", "extension-switches.json"], { env, encoding: "utf8" })
+  const w = spawnSync("python3", [P + "bin/punctum-cache", "write", "extension-switches.json"], { input: '{"bible":false}', env, encoding: "utf8" })
+  const r = spawnSync("python3", [P + "bin/punctum-cache", "read", "extension-switches.json"], { env, encoding: "utf8" })
   check("switches: the cache helper keeps them", w.status === 0 && r.stdout === '{"bible":false}', w.stderr + r.stderr)
   fs.rmSync(home, { recursive: true, force: true }) }
 
@@ -1084,7 +1091,7 @@ print(json.dumps({
   check("filters: ext:txt alone finds the .txt files and nothing else", txt.length === 3 && txt.every(p => p.endsWith(".txt")), txt.join(","))
   check("filters: type:dir and type:file", ew("docs", "type:dir").out[0] === "~/Docs" && !ew("docs", "type:file").out.includes("~/Docs"))
   check("filters: a filter it doesn't understand is an error, not a silent miss", ew("x", "dm:banana").rc === 2 && /dm:banana/.test(ew("x", "dm:banana").err))
-  const cb = JSON.parse(spawnSync(EW, ["--commandbar"], { env, input: JSON.stringify({ text: "note dm:3d", settings: { exclude: [] } }), encoding: "utf8" }).stdout)
+  const cb = JSON.parse(spawnSync(EW, ["--punctum"], { env, input: JSON.stringify({ text: "note dm:3d", settings: { exclude: [] } }), encoding: "utf8" }).stdout)
   const mine = cb.items.filter(i => i.run.target.startsWith(home + "/"))
   check("filters: with a date or size, the bar's rows show size and age", mine.length === 1 && / B · (just now|.*ago)$/.test(mine[0].subtitle), JSON.stringify(mine))
   // A distinctive folder name, so only the exclusion can keep .git out of the top rows.

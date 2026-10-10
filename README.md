@@ -2,7 +2,7 @@
 
 Spotlight-style command bar - app launcher, calculator, currency, time zones, date maths, emoji, kill process, ask your AI agent and your own keyword commands
 
-**This is a personal fork** of [Saikomantisu/omarchy-commandbar](https://github.com/Saikomantisu/omarchy-commandbar) 1.3.0, installed as `hypha.commandbar`. Upstream is the `upstream` remote; `git fetch upstream && git log main..upstream/main` shows what's new there. It adds:
+**This is a personal fork** of [Saikomantisu/omarchy-commandbar](https://github.com/Saikomantisu/omarchy-commandbar) 1.3.0, installed as `io.github.mycosavant.punctum`. Upstream is the `upstream` remote; `git fetch upstream && git log main..upstream/main` shows what's new there. It adds:
 
 - **Clipboard history** (`cb `), read from the history the `hypha.clipboard` plugin keeps, pinned entries first. Enter pastes, Shift+Enter copies.
 - **Files** (`~name`), found with `fd` under your home folder. Enter opens, Shift+Enter opens a terminal there.
@@ -10,7 +10,7 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Web addresses**: `example.com/docs` opens in your browser.
 - **Colours**: `#ff6644` or `rgb(…)` shows a swatch and its HEX, RGB and HSL forms.
 - **Pinned apps**: Alt+P pins an app; the empty bar lists your pins, so Super+Period then Alt+1 opens the first.
-- **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/commandbar-note` writes it: text on stdin, symlinks refused, never creates the folder.
+- **Inbox notes**: `n call the dentist` appends `- 2026-10-08 18:05 call the dentist` to the note named by `"notes": { "inbox": "~/Vault/Inbox.md" }`. `bin/punctum-note` writes it: text on stdin, symlinks refused, never creates the folder.
 - **Everywhere** (`/name`): every file on the disk as you type, like Everything on Windows. Also a command of its own, `everywhere`, with an fzf picker (`everywhere -i`); in the bar it's a script extension. plocate does the lookup (the system index for outside your home folder, rebuilt nightly; a private index of your home folder, refreshed on the first `/` query after the bar opens, at most once a minute), fzf filters with its query syntax (`'exact`, `^start` of a name, `.pdf$`, `!leave-out`), and the order puts a name that is the word first. `"everywhere": { "exclude": [...] }` keeps caches out. See [docs/everywhere.md](docs/everywhere.md).
 - **Inside files** (`rg words`): ripgrep under your home folder, the words as a fixed string. Enter opens your editor at the line; Shift+Enter opens the file. `"contents": { "hidden": true }` includes dot-folders.
 - **Syncthing**: the `syncthing` keyword opens the local web UI at 127.0.0.1:8384.
@@ -20,7 +20,7 @@ Spotlight-style command bar - app launcher, calculator, currency, time zones, da
 - **Bangs**: `!nasb john 3:16`, `!aw hyprland`, or the bang at the end. Yours go under `"bangs": { "engines": { … } }`, merged over the defaults by name (`"g": null` drops one). A bang you haven't listed goes to DuckDuckGo with the whole query, as Zen does with DuckDuckGo as its engine; `"fallback": ""` stops that. `!` lists them.
 - **Packages**: `pkg kfind` searches the repositories in your pacman.conf (Arch's and Omarchy's here; never the AUR), read once per open with `expac`. Enter on a package you don't have opens a terminal with `sudo pacman -S repo/name`, so pacman asks first and installs from the repository on that row; on one you have it shows `pacman -Qi`. Shift+Enter opens its archlinux.org page, or `pacman -Si` for a repository that isn't Arch's.
 - **Frosted glass**: the card is the theme's menu colour at `"glass": { "opacity": 0.78 }` with Hyprland blurring what's behind it. Needs `decoration.blur.enabled` in your Hyprland config; `"glass": { "enabled": false }` makes it solid.
-- **Move and resize**: drag the card by its edges or footer, resize from the grip in the bottom-right corner. It stays where you leave it (`~/.cache/omarchy-commandbar/geometry.json`); the command "Reset command bar position" goes back to `"window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 }`.
+- **Move and resize**: drag the card by its edges or footer, resize from the grip in the bottom-right corner. It stays where you leave it (`~/.cache/punctum/geometry.json`); the command "Reset command bar position" goes back to `"window": { "cx": 0.5, "top": 0.22, "width": 640, "rows": 7 }`.
 
 File search, keybindings, web addresses and colours are adapted from [evindor/keystroke](https://github.com/evindor/keystroke) (MIT); each file says which part.
 
@@ -98,10 +98,10 @@ After you copy, open or run something, the bar starts empty next time. If you cl
 
 ## Install
 
-This fork lives in `~/.config/omarchy/plugins/hypha.commandbar` as a git repository; enable it with:
+This fork lives in `~/.config/omarchy/plugins/io.github.mycosavant.punctum` as a git repository; enable it with:
 
 ```sh
-omarchy plugin enable hypha.commandbar
+omarchy plugin enable io.github.mycosavant.punctum
 ```
 
 Press Super + Period to open it. You can change the key with `"hotkey"` in the config. If another action already uses the key, the bar leaves it alone and shows a notification.
@@ -109,7 +109,7 @@ Press Super + Period to open it. You can change the key with `"hotkey"` in the c
 To open the bar with text already filled in, pass a query. For example, to open emoji search directly:
 
 ```sh
-omarchy-shell shell toggle hypha.commandbar '{"query": ":"}'
+omarchy-shell shell toggle io.github.mycosavant.punctum '{"query": ":"}'
 ```
 
 ### Dependencies
@@ -124,9 +124,9 @@ All of these come with Omarchy:
 - `uwsm-app` and `gtk-launch`: opening apps, the same way Omarchy's own launcher does
 - `hyprctl`: setting the hotkey, and listing and focusing windows
 - `notify-send`: warning when the hotkey is already taken
-- `python3`: reading and writing the cache files safely (`bin/commandbar-cache`)
+- `python3`: reading and writing the cache files safely (`bin/punctum-cache`)
 - `omarchy-menu-emoji-insert` and Omarchy's `emojis.json`: emoji
-- `omarchy-default-agent`, `omarchy-cmd-missing`, `omarchy-agent-prompt` and `omarchy-agent --pick`: asking your agent (`bin/commandbar-agent`)
+- `omarchy-default-agent`, `omarchy-cmd-missing`, `omarchy-agent-prompt` and `omarchy-agent --pick`: asking your agent (`bin/punctum-agent`)
 - `fd`: file search
 - `omarchy-menu-keybindings`: the keybinding list and running a binding
 - `omarchy-clipboard-paste-file` and `wtype`: pasting clipboard images and text
@@ -135,11 +135,11 @@ All of these come with Omarchy:
 ### Network, files and processes
 
 - The only network request is to `https://open.er-api.com/v6/latest/USD`, made when you convert currency and the saved rates are out of date. The rates update once a day. What you type is not sent anywhere, except the text you search with a web keyword like `g` and the prompt you give your agent with `ai`.
-- It writes only to `~/.cache/omarchy-commandbar/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches) and your pinned apps. It does not change your Hyprland or Omarchy config files.
+- It writes only to `~/.cache/punctum/`: the saved rates, your last query, how often you've opened each app from the bar (used to order equally good matches) and your pinned apps. It does not change your Hyprland or Omarchy config files.
 - It reads `~/.local/state/omarchy/clipboard-history.json` once, the first time you type `cb ` after opening the bar, and forgets it and every row built from it when the bar closes. It isn't watched, so a copy landing while you browse can't move the rows under the selection; reopen to see it. It never writes that file.
 - `~` searches run `fd` as an argument list with your words regex-escaped, under your home folder, stopping after 400 hits or 3 seconds. Hidden files are left out unless `"files": { "hidden": true }`.
 - Keybindings come from sourcing Omarchy's `omarchy-menu-keybindings`, at most every 30 seconds and only once you type something. They depend on that script doing nothing but define functions when sourced with `--print`.
-- The cache files are read and written only through `bin/commandbar-cache`. It refuses symlinks, hard links, files you don't own and files over a size limit (4 KiB for the last query, 64 KiB for app counts, 256 KiB for rates), and saves each file through a private temporary file.
+- The cache files are read and written only through `bin/punctum-cache`. It refuses symlinks, hard links, files you don't own and files over a size limit (4 KiB for the last query, 64 KiB for app counts, 256 KiB for rates), and saves each file through a private temporary file.
 - It sets its hotkey in the running Hyprland with `hyprctl eval`, and sets it again after Hyprland reloads its config. The hotkey is removed when the plugin is disabled or removed.
 - It lists only your own processes, and quits one only when you press Enter on it.
 - It asks `omarchy-default-agent` for your default agent each time it opens, reading at most 64 bytes of the answer, and starts that agent only when you press Enter on an `ai` row. The bar itself sends nothing to an AI service; the agent does, as it would if you started it yourself.
@@ -147,15 +147,15 @@ All of these come with Omarchy:
 ## Remove
 
 ```sh
-omarchy plugin disable hypha.commandbar
-rm -rf ~/.cache/omarchy-commandbar ~/.config/omarchy/extensions/commandbar.json
+omarchy plugin disable io.github.mycosavant.punctum
+rm -rf ~/.cache/punctum ~/.config/omarchy/extensions/punctum.json
 ```
 
 The hotkey is removed with the plugin.
 
 ## Configure
 
-Put your settings in `~/.config/omarchy/extensions/commandbar.json`. They override the defaults in [`config.default.json`](config.default.json) and in each extension's `extension.json`, and changes apply when you save. You can use comments and trailing commas. [Configuration](docs/configuration.md) lists every setting.
+Put your settings in `~/.config/omarchy/extensions/punctum.json`. They override the defaults in [`config.default.json`](config.default.json) and in each extension's `extension.json`, and changes apply when you save. You can use comments and trailing commas. [Configuration](docs/configuration.md) lists every setting.
 
 ```jsonc
 {
@@ -204,7 +204,7 @@ Under the agent, a "Chat websites" section lists each site, so Alt+2 and Alt+3 o
 
 ## Adding a feature
 
-Every feature is an extension: a folder with an `extension.json` and either a script in any language or a JavaScript provider. Put yours in `~/.config/omarchy/commandbar/extensions/<id>/` and run `omarchy-restart-shell`. The smallest one, [`examples/hello`](examples/hello), is a twelve-line Python script:
+Every feature is an extension: a folder with an `extension.json` and either a script in any language or a JavaScript provider. Put yours in `~/.config/omarchy/punctum/extensions/<id>/` and run `omarchy-restart-shell`. The smallest one, [`examples/hello`](examples/hello), is a twelve-line Python script:
 
 ```jsonc
 // extension.json

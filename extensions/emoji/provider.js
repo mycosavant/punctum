@@ -1,7 +1,7 @@
 .pragma library
 
 // Emoji search over Omarchy's own emojis.json ({ e, k } entries), loaded by
-// CommandBar.qml and passed in as ctx.emojis.
+// Punctum.qml and passed in as ctx.emojis.
 //
 //   :fire · :heart eyes · emoji thumbs up
 

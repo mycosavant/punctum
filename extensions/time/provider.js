@@ -4,7 +4,7 @@
 // Time zones and date maths.
 //
 // Zone offsets come from ctx.zones = { "Asia/Tokyo": { offset: 540, abbr: "JST" } },
-// probed with `date` by CommandBar.qml — V4's Intl/timeZone support is too thin
+// probed with `date` by Punctum.qml — V4's Intl/timeZone support is too thin
 // to trust for DST. Offsets are "right now", which is what these queries mean.
 //
 //   time · time in tokyo · tokyo time · 3pm lkt to pst · 15:30 in london

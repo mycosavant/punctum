@@ -1,7 +1,7 @@
 # Everywhere
 
 Find files anywhere on the disk by name, as you type: the Linux answer to
-Everything on Windows. A command, an fzf picker, and a Command Bar extension.
+Everything on Windows. A command, an fzf picker, and a Punctum extension.
 
 ```sh
 everywhere notes              # ranked paths, best first
@@ -12,7 +12,7 @@ everywhere --index            # refresh the index of your home folder
 everywhere --json dwnlds      # JSON, for other launchers
 ```
 
-In the Command Bar, type `/` and a name. Full account:
+In Punctum, type `/` and a name. Full account:
 [docs/everywhere.md](../../docs/everywhere.md).
 
 Needs `plocate` (with `plocate-updatedb.timer` on) and `fzf`. The index of

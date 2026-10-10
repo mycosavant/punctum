@@ -6,7 +6,7 @@
 //   !nasb john 3:16 · john 3:16 !nasb · !aw hyprland · !     (lists your bangs)
 //
 // Yours are "bangs": { "engines": { "nasb": { "title": "…", "open": "https://…{q}" } } }
-// in commandbar.json. They merge over the defaults by name, and "g": null
+// in punctum.json. They merge over the defaults by name, and "g": null
 // drops a default. A bang that isn't listed goes to "fallback" (DuckDuckGo,
 // which knows thousands) with the whole query, bang included, the way Zen
 // sends it when DuckDuckGo is its search engine. "fallback": "" keeps every
@@ -60,7 +60,7 @@ var provider = {
   help: function(ctx) {
     var list = sorted(engines(ctx.settings))
     var examples = list.slice(0, 20).map(function(e) { return { q: "!" + e.bang + " ", note: e.title + ". Opens " + host(e.open) } })
-    return [{ id: "bangs", title: "Bangs", icon: "󰈸", about: "! and a name sends the rest to that site. Unlisted bangs go to " + (fallback(ctx.settings) ? host(fallback(ctx.settings)) : "nowhere") + ". Set yours under \"bangs\" in commandbar.json", examples: examples }]
+    return [{ id: "bangs", title: "Bangs", icon: "󰈸", about: "! and a name sends the rest to that site. Unlisted bangs go to " + (fallback(ctx.settings) ? host(fallback(ctx.settings)) : "nowhere") + ". Set yours under \"bangs\" in punctum.json", examples: examples }]
   },
   match: function(query, ctx) {
     var list = engines(ctx.settings)
@@ -75,7 +75,7 @@ var provider = {
       })
       if (!out.length && p) {
         var f = fallback(ctx.settings)
-        out.push({ title: "!" + p + " isn't one of your bangs", subtitle: f ? "Add a search after it and " + host(f) + " will take it" : "Add it under \"bangs\" in commandbar.json", score: 90, copy: "" })
+        out.push({ title: "!" + p + " isn't one of your bangs", subtitle: f ? "Add a search after it and " + host(f) + " will take it" : "Add it under \"bangs\" in punctum.json", score: 90, copy: "" })
       }
       return out
     }

@@ -17,7 +17,7 @@ everywhere --json dwnlds      # rows for other launchers
 everywhere --index            # refresh the index of your home folder
 ```
 
-To have it on your PATH: `ln -s ~/.config/omarchy/plugins/hypha.commandbar/extensions/everywhere/everywhere ~/.local/bin/everywhere`.
+To have it on your PATH: `ln -s ~/.config/omarchy/plugins/io.github.mycosavant.punctum/extensions/everywhere/everywhere ~/.local/bin/everywhere`.
 In the bar it's a script extension: the bar sends the query as JSON on
 stdin and shows the rows it prints.
 

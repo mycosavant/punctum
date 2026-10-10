@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a script extension's command inside bubblewrap.
 
-    commandbar-sandbox '<spec JSON>' -- command [args...]
+    punctum-sandbox '<spec JSON>' -- command [args...]
 
 spec: {"dir": extension folder, "home": your home, "network": bool,
        "home_mode": "none" | "read" | "read-write",
@@ -33,7 +33,7 @@ DENY_WRITES = [
     ".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zprofile", ".zshenv",
     ".xinitrc", ".xprofile", ".pam_environment", ".ssh", ".gnupg", ".local/bin",
     ".config/hypr", ".config/systemd", ".config/autostart", ".config/uwsm", ".config/environment.d",
-    ".config/omarchy", ".cache/omarchy-commandbar", ".local/share/applications", ".config/fish",
+    ".config/omarchy", ".cache/punctum", ".local/share/applications", ".config/fish",
     ".config/nvim", ".config/git", ".gitconfig",
 ]
 RESOLVER = ["/run/systemd/resolve/stub-resolv.conf", "/run/systemd/resolve/resolv.conf",
@@ -166,7 +166,7 @@ def build(spec, command):
 
 def main(argv):
     if len(argv) < 3 or argv[1] != "--":
-        print("usage: commandbar-sandbox '<spec JSON>' -- command [args...]", file=sys.stderr)
+        print("usage: punctum-sandbox '<spec JSON>' -- command [args...]", file=sys.stderr)
         return 2
     try:
         spec = json.loads(argv[0])
@@ -174,10 +174,10 @@ def main(argv):
             raise Refused("bad spec")
         args = build(spec, argv[2:])
     except (Refused, ValueError) as e:
-        print("commandbar-sandbox: refused: %s" % e, file=sys.stderr)
+        print("punctum-sandbox: refused: %s" % e, file=sys.stderr)
         return 3
     except OSError as e:
-        print("commandbar-sandbox: %s" % e, file=sys.stderr)
+        print("punctum-sandbox: %s" % e, file=sys.stderr)
         return 3
     os.execvp("bwrap", args)
 

@@ -12,7 +12,7 @@ The top-level [README](../README.md) has the quick table; these pages go deeper.
 |---|---|
 | [Features](features.md) | Every feature: what to type, what Enter and Shift+Enter do, what it reads |
 | [Everywhere](everywhere.md) | The file search: how it finds, ranks and stays current, and its query syntax |
-| [Configuration](configuration.md) | Every setting in `commandbar.json`, with defaults |
+| [Configuration](configuration.md) | Every setting in `punctum.json`, with defaults |
 | [Security and privacy](security-and-privacy.md) | What runs, what is read, what leaves the machine, and how typed text is kept out of shell code |
 | [Writing extensions](writing-extensions.md) | Your own features: the manifest, script extensions in any language, JS extensions, actions, tests |
 | [Architecture](architecture.md) | How a keystroke becomes rows, and where each piece lives |
@@ -52,12 +52,12 @@ Anything else is matched by every feature at once: `firefox` finds the app,
 
 Every feature is an extension you can switch off (`"extensions": { "bible": false }`),
 and you can add your own, as a script in any language or in JavaScript, in
-`~/.config/omarchy/commandbar/extensions/`. Type `?extensions` to see them
+`~/.config/omarchy/punctum/extensions/`. Type `?extensions` to see them
 all and what each touches.
 
 ## Settings file
 
-`~/.config/omarchy/extensions/commandbar.json` (JSONC: comments allowed). It is
+`~/.config/omarchy/extensions/punctum.json` (JSONC: comments allowed). It is
 merged over [`config.default.json`](../config.default.json) and each
 extension's defaults: objects merge key by key, lists replace. See
 [Configuration](configuration.md).

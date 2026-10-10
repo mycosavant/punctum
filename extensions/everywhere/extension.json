@@ -8,7 +8,7 @@
   "type": "script",
   "command": [
     "./everywhere",
-    "--commandbar"
+    "--punctum"
   ],
   "enabled": true,
   "order": 60,

@@ -4,8 +4,8 @@
 //
 //   n call the dentist      → "- 2026-10-08 18:05 call the dentist" at the end of the inbox
 //
-// The inbox is "notes": { "inbox": "~/Vault/Inbox.md" } in commandbar.json,
-// and "format" shapes the line ({text}, {date}, {time}). bin/commandbar-note
+// The inbox is "notes": { "inbox": "~/Vault/Inbox.md" } in punctum.json,
+// and "format" shapes the line ({text}, {date}, {time}). bin/punctum-note
 // appends it: the text goes on stdin, a symlink is refused, and the folder has
 // to exist already, so a typo in the path can't create a stray vault.
 
@@ -44,7 +44,7 @@ var provider = {
     { title: "Add a note to the inbox", keywords: "note notes inbox obsidian capture jot todo", text: "n and your note", complete: "n " }
   ],
   help: [
-    { id: "notes", title: "Inbox note", about: "n and a line adds it to the end of your inbox note (notes.inbox in commandbar.json)",
+    { id: "notes", title: "Inbox note", about: "n and a line adds it to the end of your inbox note (notes.inbox in punctum.json)",
       examples: [{ q: "n call the dentist", note: "Appends \"- <date> <time> call the dentist\"" }] }
   ],
   match: function(query, ctx) {
@@ -52,7 +52,7 @@ var provider = {
     if (!m) return []
     var text = m[1].replace(/[\u0000-\u001f\u007f]/g, " ").trim()
     var path = inboxPath(ctx.settings, ctx.home)
-    if (!path) return [{ title: "Set your inbox note first", subtitle: "\"notes\": { \"inbox\": \"~/Vault/Inbox.md\" } in ~/.config/omarchy/extensions/commandbar.json", score: 98, copy: "" }]
+    if (!path) return [{ title: "Set your inbox note first", subtitle: "\"notes\": { \"inbox\": \"~/Vault/Inbox.md\" } in ~/.config/omarchy/extensions/punctum.json", score: 98, copy: "" }]
     if (!text) return [{ title: "Type your note", subtitle: "Added to the end of " + shortPath(path, ctx.home), score: 98, copy: "" }]
     return [{ title: "Add: " + text, subtitle: "→ " + shortPath(path, ctx.home), score: 98, copy: "",
               run: { kind: "note", target: line(text, ctx.settings, ctx.now()), path: path, label: "add note" } }]

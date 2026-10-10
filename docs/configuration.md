@@ -1,6 +1,6 @@
 # Configuration
 
-Your settings go in `~/.config/omarchy/extensions/commandbar.json`. It is
+Your settings go in `~/.config/omarchy/extensions/punctum.json`. It is
 JSONC, so `//` and `/* */` comments are fine. Create it if it doesn't exist.
 
 It is merged over the bar's own [`config.default.json`](../config.default.json)
@@ -37,7 +37,7 @@ A short example:
 | `extensions` | `{}` | `"id": false` switches an extension off, `true` on (`{ "enabled": false }` works too). Unlisted ones follow their manifest. Switches flipped in the bar (Enter in `?extensions`) are kept in the cache and win over these until "Reset extension switches" |
 | `providers` | unset | The older form: a list of ids that are on, in order. If present, it decides alone. `locate` in it means `everywhere`, and a `"locate"` section still sets Everywhere's exclusions when there's no `"everywhere"` one |
 
-Your own extensions go in `~/.config/omarchy/commandbar/extensions/<id>/`; see
+Your own extensions go in `~/.config/omarchy/punctum/extensions/<id>/`; see
 [Writing extensions](writing-extensions.md). One with a bundled extension's
 id replaces it.
 
@@ -53,7 +53,7 @@ id replaces it.
 | `glass.opacity` | `0.78` | The card's opacity, 0.3 to 1 |
 
 `window` is the default; once you drag or resize the card, the saved geometry
-in `~/.cache/omarchy-commandbar/geometry.json` wins until you run "Reset
+in `~/.cache/punctum/geometry.json` wins until you run "Reset
 command bar position".
 
 ## Features
@@ -152,7 +152,7 @@ the defaults, so copy the ones you want to keep. See
 
 ## Files the bar keeps
 
-All under `~/.cache/omarchy-commandbar/`, mode 600 in a 700 folder:
+All under `~/.cache/punctum/`, mode 600 in a 700 folder:
 
 | File | What |
 |---|---|
@@ -163,7 +163,7 @@ All under `~/.cache/omarchy-commandbar/`, mode 600 in a 700 folder:
 | `rates.json` | The last exchange rates, so currency works offline |
 | `extension-switches.json` | Extensions you switched on or off in `?extensions` |
 
-Each goes through `bin/commandbar-cache`, which knows only these names, caps
+Each goes through `bin/punctum-cache`, which knows only these names, caps
 each file's size, refuses symlinks and files it doesn't own, and writes
 through a private temporary file and a rename.
 

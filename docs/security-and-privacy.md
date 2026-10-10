@@ -29,7 +29,7 @@ apps is local. So is everything typed until Enter.
 | Packages (`pkg `) | pacman's sync databases, through `expac` | The list until the bar closes |
 | Apps, keybindings | Desktop entries; `omarchy-menu-keybindings` | Launch counts, pins (cache) |
 
-Everything the bar keeps is under `~/.cache/omarchy-commandbar/`, in a 700
+Everything the bar keeps is under `~/.cache/punctum/`, in a 700
 folder, each file 600. When the bar closes, the results list, per-open loads
 (clipboard history, the package list) and the last search's output are
 dropped: each process's output buffer is replaced by an empty run, since
@@ -47,12 +47,12 @@ to parse, except where noted, and in those cases the typed text is an
 | Everywhere | A JSON request on the `everywhere` command's stdin. It runs plocate with the words after `--` and fzf with the query as one `--filter=` value, all as argument lists |
 | Reminders | `remind-set --at <time>` with the message on stdin; the timer's command is a constant script with the message as an argument. `--cancel` accepts only a name matching `omarchy-reminder-*.timer` |
 | Script extensions | A JSON request on stdin, never the command line. Every row and action they print is validated: only `open` (http, https, mailto, file or an absolute path), `copy`, `paste`, `edit` and `argv`, labelled by the bar |
-| Inside files | `bash -c SCRIPT commandbar-rg <words>`; rg gets them as one fixed-string argument after `--` |
+| Inside files | `bash -c SCRIPT punctum-rg <words>`; rg gets them as one fixed-string argument after `--` |
 | Files | `fd` as an argument list; words regex-escaped, after `--` or inside `--and=` |
-| Packages | `bash -c SCRIPT commandbar-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
+| Packages | `bash -c SCRIPT punctum-pkg <repo>/<name>`. Only names matching pacman's own rules (`[a-z0-9@_+][a-z0-9@._+-]*`) are offered, so none starts with `-` |
 | Clipboard, copy | Text on `wl-copy`'s stdin, never on a command line (where any process could read it in `/proc`) |
-| Inbox note | Text on `commandbar-note`'s stdin |
-| Edit at line | `commandbar-edit <line> <path>`; the line must be digits, the path absolute |
+| Inbox note | Text on `punctum-note`'s stdin |
+| Edit at line | `punctum-edit <line> <path>`; the line must be digits, the path absolute |
 | Web rows | `{q}` URL-encoded, the address handed to `xdg-open` as one argument; only `http(s)` templates are accepted for bangs |
 | Keyword `run` commands | See below |
 
@@ -92,8 +92,8 @@ An extension runs as you. A JS extension runs inside the shell with
 everything you can do; a script extension is a program you're choosing to
 run. So:
 
-- `bin/commandbar-extensions` loads nothing from
-  `~/.config/omarchy/commandbar/extensions/` that another account could have
+- `bin/punctum-extensions` loads nothing from
+  `~/.config/omarchy/punctum/extensions/` that another account could have
   put there or could swap later. Every file the bar loads or runs
   (`extension.json`, a JS extension's entry, a script's `./` command and
   refresh command) must resolve inside its extension folder and be yours and
@@ -106,7 +106,7 @@ run. So:
   `"sandbox": false`: by default no network, an empty home folder, no desktop
   session, a cleared environment, nothing writable but a private `/tmp`. A
   manifest can ask for network, home read or write, and named paths;
-  `bin/commandbar-sandbox` opens those paths itself at each run without
+  `bin/punctum-sandbox` opens those paths itself at each run without
   following symlinks, refuses overlapping ones and writes to places that run
   code or hold keys. Commands their rows run on Enter run in the same
   sandbox. `?extensions` shows each one's sandbox. Limits: `open` rows open
@@ -131,5 +131,5 @@ run. So:
 - The plocate system index is built by root and filtered by plocate, which
   only shows paths you're allowed to list. The bar adds nothing to that.
 - `xdg-open` decides which app opens a file (or, for text whose default app
-  runs in a terminal, your editor; `bin/commandbar-open`); a file's type can
+  runs in a terminal, your editor; `bin/punctum-open`); a file's type can
   be chosen by whoever made it.

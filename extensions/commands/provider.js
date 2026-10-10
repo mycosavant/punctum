@@ -88,7 +88,7 @@ var provider = {
       examples.push({ q: takesQuery(cmd) ? kw + " " : kw, note: (cmd.title || kw) + ". " + what.replace(/%7Bq%7D|\{q\}/g, "…") })
     }
     if (examples.length === 0) return []
-    return [{ id: "keywords", title: "Keywords", icon: "󰌌", about: "Your shortcuts, set in commandbar.json", examples: examples }]
+    return [{ id: "keywords", title: "Keywords", icon: "󰌌", about: "Your shortcuts, set in punctum.json", examples: examples }]
   },
   // Searchable by keyword and title: "goo" finds Search Google, "lo" finds Lock screen.
   commands: function(ctx) {

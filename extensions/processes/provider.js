@@ -1,6 +1,6 @@
 .pragma library
 
-// Kill a running process. CommandBar.qml keeps a snapshot of the user's own
+// Kill a running process. Punctum.qml keeps a snapshot of the user's own
 // processes (ps, refreshed on demand) in ctx.processes:
 //   [{ pid, rss (KiB), cpu (%), name, args }]
 //

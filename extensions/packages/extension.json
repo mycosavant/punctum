@@ -14,13 +14,16 @@
     "pattern": "^\\s*(pkg|pacman)\\s",
     "label": "Packages"
   },
+  "defaults": {
+    "install": false
+  },
   "requires": [
     "expac"
   ],
   "permissions": {
     "runs": [
       "expac",
-      "sudo pacman -S in a terminal, on Enter (sudo and pacman both ask)"
+      "pacman -Qi or -Si in a terminal, on Enter; with \"install\": true, sudo pacman -S in a terminal, on Enter (sudo and pacman both ask)"
     ]
   }
 }

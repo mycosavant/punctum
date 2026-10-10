@@ -35,13 +35,6 @@
       "keyword": "lock",
       "title": "Lock screen",
       "run": "omarchy-system-lock"
-    },
-    {
-      "keyword": "syncthing",
-      "title": "Syncthing",
-      "keywords": "sync web ui",
-      "icon": "󰓦",
-      "open": "http://127.0.0.1:8384/"
     }
   ],
   "permissions": {

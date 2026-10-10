@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""List the Command Bar's extensions for CommandBar.qml.
+"""List the Punctum's extensions for Punctum.qml.
 
-    commandbar-extensions <bundled dir> <user dir>
+    punctum-extensions <bundled dir> <user dir>
 
 Prints a JSON list, one entry per extension folder:
     { "dir", "manifest" (the extension.json text), "missing" (required
@@ -208,7 +208,7 @@ def scan(root, user):
 
 def main(argv):
     if len(argv) != 2:
-        print("usage: commandbar-extensions <bundled dir> <user dir>", file=sys.stderr)
+        print("usage: punctum-extensions <bundled dir> <user dir>", file=sys.stderr)
         return 2
     print(json.dumps(scan(argv[0], False) + scan(argv[1], True)))
     return 0

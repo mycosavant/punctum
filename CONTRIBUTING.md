@@ -14,7 +14,7 @@ Clone your fork into Omarchy's plugin folder so the shell loads it:
 
 ```sh
 omarchy plugin remove io.github.saikomantisu.commandbar   # if the released version is installed
-git clone https://github.com/<you>/omarchy-commandbar ~/.config/omarchy/plugins/io.github.saikomantisu.commandbar
+git clone https://github.com/<you>/punctum ~/.config/omarchy/plugins/io.github.saikomantisu.commandbar
 omarchy plugin enable io.github.saikomantisu.commandbar
 ```
 
@@ -39,8 +39,8 @@ The plugin is published through the Omarchy plugin marketplace, and its automate
 - Don't ask for administrator rights, and don't start, stop or change system services. The marketplace's automated check flags these.
 - Don't download something and then run it.
 - Don't add network requests unless the feature needs one, and only make them when the user asks for that feature.
-- Don't write to the user's config files. The bar writes only to `~/.cache/omarchy-commandbar/`.
-- Keep the defaults neutral. Personal choices, such as a currency, time zone or hotkey, go in your own `~/.config/omarchy/extensions/commandbar.json`, not in `config.default.json`.
+- Don't write to the user's config files. The bar writes only to `~/.cache/punctum/`.
+- Keep the defaults neutral. Personal choices, such as a currency, time zone or hotkey, go in your own `~/.config/omarchy/extensions/punctum.json`, not in `config.default.json`.
 - Never put what the user types into a shell string. Use argument lists, or pass it as an argument or on stdin to a constant script. See `{q}` handling in `extensions/commands/provider.js`.
 - List any new command-line tool in the README's Dependencies section.
 

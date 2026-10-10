@@ -1,6 +1,6 @@
 .pragma library
 
-// Clipboard history, from the file the hypha.clipboard plugin keeps
+// Clipboard history, from the file Omarchy's clipboard plugin keeps
 // (~/.local/state/omarchy/clipboard-history.json). It is read with ctx.load
 // the first time "cb " is typed after the bar opens, once (not watched, so a
 // copy landing while you browse can't move the rows under the selection),
