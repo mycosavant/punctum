@@ -1362,6 +1362,10 @@ for (const [IMPL, EW] of EW_IMPLS) { const fs = require("fs"), os = require("os"
     const rows = Ext.nativeProvider(m).match("roman x", { home: "/h", native: () => ({ rows: [
       { title: "web", run: { kind: "open", target: "https://example.com" } }, { title: "file", run: { kind: "open", target: "/etc/passwd" } },
       { title: "local", run: { kind: "open", target: "file:///etc/passwd" } }, { title: "act", run: { kind: "action", name: "look", args: ["https://x.org"] } }] }) })
+    let askedFor = []
+    Ext.nativeProvider(m).match("~readme", { native: q => { askedFor.push(q); return { rows: [{ title: "x" }] } } })
+    Ext.nativeProvider(m).match("roman 12", { native: q => { askedFor.push(q); return { rows: [{ title: "x" }] } } })
+    check("wasm: one with a mode is asked only about queries in it", askedFor.join("|") === "roman 12", askedFor.join("|"))
     check("wasm: a module opens web addresses, never a local file; its group says sandboxed", rows.map(r => r.run ? r.run.target + "" : "-").join(" ") === "https://example.com - - xdg-open,https://x.org"
       && Ext.nativeProvider(m).name === "Roman numerals · sandboxed")
     // End to end, with the example built (examples/wasm-roman/build).

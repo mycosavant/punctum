@@ -56,7 +56,11 @@ fn row(title: String, subtitle: &str) -> Row {
 
 impl Guest for Roman {
     fn respond(query: String, _settings: String, _now_ms: i64) -> Answer {
-        let text = query.trim_start().strip_prefix("roman").unwrap_or("").trim();
+        // The bar asks only about queries in its mode ("roman "), but an
+        // extension shouldn't count on it.
+        let Some(text) = query.trim_start().strip_prefix("roman").map(str::trim) else {
+            return Answer { rows: vec![], ttl_ms: None };
+        };
         let rows = if text.is_empty() {
             vec![Row { copy: String::new(), run: None, ..row("Type a number or a numeral".into(), "Roman numerals") }]
         } else if let Ok(n) = text.parse::<u32>() {

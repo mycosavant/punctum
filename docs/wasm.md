@@ -95,8 +95,9 @@ Build for `wasm32-wasip2` (`rustup target add wasm32-wasip2`, or Arch's
 }
 ```
 
-Without a `mode` it's asked about every query, so it should answer nothing
-quickly when the query isn't for it.
+With a `mode`, it's asked only about queries in it: the rest of what you
+type never reaches it. Without one it's asked about every query, so it
+should answer nothing quickly when the query isn't for it.
 
 ## How it runs
 
