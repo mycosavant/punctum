@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "full screen, keys: your keybindings, by what they do",
   "icon": "󰌌",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 200,
@@ -13,6 +13,25 @@
   "mode": {
     "pattern": "^\\s*keys\\s",
     "label": "Keybindings"
+  },
+  "commands": [
+    {"title": "Keybindings", "keywords": "hotkeys keys shortcuts bindings hyprland", "text": "Every keybinding, searchable", "complete": "keys "}
+  ],
+  "help": [
+    {"id": "hotkeys", "title": "Keybindings", "about": "Type what you want to do to see its keys. keys and a space lists every binding",
+     "examples": [{"q": "full screen", "hint": "Shows Super + F"}, {"q": "keys ", "note": "Every binding, in Super+K's order"}, {"q": "keys screenshot", "hint": "Bindings about screenshots"}]}
+  ],
+  "loads": {
+    "binds": {
+      "command": ["bash", "-c", "source \"$0\" --print >/dev/null && output_binding_records", "{omarchy}/bin/omarchy-menu-keybindings"],
+      "ttl": 30000
+    }
+  },
+  "actions": {
+    "dispatch": {
+      "command": ["bash", "-c", "source \"$0\" --print >/dev/null && dispatch_binding \"$1\" \"$2\"", "{omarchy}/bin/omarchy-menu-keybindings", "{1}", "{2}"],
+      "label": "run"
+    }
   },
   "permissions": {
     "runs": [

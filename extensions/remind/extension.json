@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "remind 10m tea, alarm 6:45: reminders and alarms that show with Omarchy's own",
   "icon": "󰢌",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 15,
@@ -18,6 +18,106 @@
     "systemd-run",
     "omarchy-reminder"
   ],
+  "commands": [
+    {
+      "title": "Set a reminder",
+      "keywords": "remind reminder remindme timer later notify",
+      "text": "remind 10m tea · remind 3pm call mom",
+      "complete": "remind "
+    },
+    {
+      "title": "Set an alarm",
+      "keywords": "alarm wake clock morning",
+      "text": "alarm 6:45 · alarm tomorrow 7am",
+      "complete": "alarm "
+    }
+  ],
+  "help": [
+    {
+      "id": "remind",
+      "title": "Reminders and alarms",
+      "about": "remind and a time: 10m, 1h30m, 3pm, tomorrow 9am, friday noon. alarm also plays a sound. remind alone lists them",
+      "examples": [
+        {
+          "q": "remind 10m take out the laundry",
+          "note": "A notification in ten minutes"
+        },
+        {
+          "q": "remind me to call mom at 3pm",
+          "note": "At 15:00, or tomorrow if that's passed"
+        },
+        {
+          "q": "!remindme tomorrow 9am dentist",
+          "note": "The bang form"
+        },
+        {
+          "q": "alarm 6:45",
+          "note": "A critical notification and a sound"
+        },
+        {
+          "q": "remind ",
+          "note": "What's set; Shift+Enter cancels one"
+        }
+      ]
+    }
+  ],
+  "loads": {
+    "list": {
+      "command": [
+        "omarchy-reminder",
+        "show",
+        "--json"
+      ]
+    }
+  },
+  "actions": {
+    "remind_in": {
+      "command": [
+        "{dir}/remind-set",
+        "--in",
+        "{1}"
+      ],
+      "label": "set reminder",
+      "input": true
+    },
+    "remind_at": {
+      "command": [
+        "{dir}/remind-set",
+        "--at",
+        "{1}"
+      ],
+      "label": "set reminder",
+      "input": true
+    },
+    "alarm_in": {
+      "command": [
+        "{dir}/remind-set",
+        "--in",
+        "{1}",
+        "--alarm"
+      ],
+      "label": "set alarm",
+      "input": true
+    },
+    "alarm_at": {
+      "command": [
+        "{dir}/remind-set",
+        "--at",
+        "{1}",
+        "--alarm"
+      ],
+      "label": "set alarm",
+      "input": true
+    },
+    "cancel": {
+      "command": [
+        "{dir}/remind-set",
+        "--cancel",
+        "{1}"
+      ],
+      "label": "cancel"
+    }
+  },
   "permissions": {
     "runs": [
       "remind-set: systemd-run --user timers named like Omarchy's",

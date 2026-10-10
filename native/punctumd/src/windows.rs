@@ -215,12 +215,7 @@ mod tests {
 
     fn rows(q: &str) -> Vec<Row> {
         let d = data();
-        let ctx = Context {
-            settings: &Value::Null,
-            now: jiff::Timestamp::now(),
-            local_zone: jiff::tz::TimeZone::UTC,
-            data: &d,
-        };
+        let ctx = Context::new(&Value::Null, jiff::Timestamp::now(), jiff::tz::TimeZone::UTC, &d);
         Windows.matches(q, &ctx).rows
     }
 

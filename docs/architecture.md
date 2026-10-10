@@ -17,7 +17,7 @@ omarchy-shell (Quickshell, long-running)
     ├── lib/Hotkey.js          binding the hotkey without stealing a taken one (pure)
     ├── extensions/<id>/       one feature each: extension.json + provider.js,
     │                          a script (everywhere; the example in examples/),
-    │                          or native, in punctumd (units, time, url)
+    │                          or native, in punctumd (most bundled ones)
     └── bin/
         ├── punctum-extensions  finds extensions and reads their manifests
         ├── punctum-cache       the only reader and writer of the cache files
@@ -79,7 +79,7 @@ All in `Punctum.qml`, all argument lists:
 | load | `ctx.load(key, argv, { ttl })` | one at a time; once per open and dropped on close (a late result for a closed bar is discarded), or kept and re-read every `ttl` |
 | job | `ctx.requestJob(key, argv, { every, rerun })` | at most every N seconds, one at a time; `rerun` drops the extension's search so it asks again |
 | input | an `argv` action with `input` | stdin, one at a time |
-| native | `ctx.native(query)` | punctumd, every keystroke; answers cached until the config changes or their `ttl` runs out, null until the first lands |
+| native | `ctx.native(query)` | punctumd, every keystroke; answers cached until the config changes, a load lands or their `ttl` runs out, null until the first lands. An answer's `needs` become loads, run from the manifest's `loads` and sent to punctumd |
 
 Keys are prefixed with the extension's id in Engine, so one extension never
 sees another's results. On close the bar stops the search, drops per-open

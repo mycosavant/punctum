@@ -10,14 +10,27 @@ as a fallback, so the bar works without punctumd.
 | Windows | `windows.rs` | nucleo-matcher | Finds a window by its title's letters in order (`w gthb` → GitHub, `w rqst` → Pull request), after everything the old rules find |
 | Units | `units.rs` | — | Nothing yet: a port, digit for digit |
 | Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
-| Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words |
+| Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words. The `formats` setting adds HSV, HWB, LAB, LCH, OKLAB, CMYK, `vec4`, decimal and `0x` forms. `#fff on #333` gives the WCAG contrast ratio and the levels it passes. The screen colour picker copies the hex, opens the bar on the colour and keeps a history (`pick `) |
+| Hotkeys | `hotkeys.rs` | nucleo-matcher | In `keys` mode, finds a binding by its label's letters in order (`keys fllscrn` → Full screen), after everything the old rules find |
+| Clipboard | `clipboard.rs` | [serde_json](https://docs.rs/serde_json) | Nothing new: a port. Says it's reading the history instead of calling it empty while the file loads |
+| Packages | `packages.rs` | — | A port; about 1 ms a keystroke over 15,000 packages, against 6 ms in JS |
+| Reminders | `remind.rs` | jiff, [fancy-regex](https://docs.rs/fancy-regex) | A port. Dates are worked out with jiff in the system's zone, as the JS's `Date` does, and the parity check holds across clock changes in six zones |
 | Web address | `url.rs` | [psl](https://docs.rs/psl) (Public Suffix List), [idna](https://docs.rs/idna), `std::net` | A bare name needs a real top-level domain, so `mr.smith` and `notes.txt/` stay words. Private-network names (`.local`, `.lan`, `.internal`, `home.arpa`, …) still open |
 
 Time zones come from `/usr/share/zoneinfo`, the same data `date` reads, which
 the distribution keeps current. punctumd falls back to a copy built into the
 binary only where the system has none. A copy compiled in goes stale. The
 first time port used one, and the parity check caught it: it disagreed with
-`date` about Vancouver's offset in December 2026. The plan is to move the bundled extensions over one at a time, and
+`date` about Vancouver's offset in December 2026.
+
+punctumd runs no programs. Extensions that need a program's output
+(keybindings, the clipboard history, the package list, Omarchy's reminders,
+the colours you picked) and ones whose rows run something on Enter name
+those commands in their manifest (see [the manifest](#the-manifest)); the bar
+runs them and passes the output in. So every program a native extension can
+cause to run is listed in its `extension.json`.
+
+The plan is to move the bundled extensions over one at a time, and
 later to run third-party extensions in punctumd as WebAssembly, where they can
 be sandboxed even though they answer every keystroke.
 
@@ -122,6 +135,15 @@ in order, one JSON object per line. It exits when stdin closes.
 → {"id": "data", "op": "data", "key": "apps", "value": [{"id": "firefox", "name": "Firefox", ...}]}
 ← {"id": "data", "ok": true}
 
+// a load: the output of a command the extension's manifest lists under
+// "loads", which the bar ran because an answer said it needed it; null drops it
+→ {"id": "load", "op": "load", "ext": "packages", "key": "list", "text": "Q\tkfind\t25.08-1\n…"}
+← {"id": "load", "ok": true}
+
+// an answer that read a load (or wanted one it didn't have yet) says so
+→ {"id": "packages\npkg kfind", "ext": "packages", "query": "pkg kfind", "settings": {}}
+← {"id": "packages\npkg kfind", "rows": [{"title": "Reading the package list…", …}], "needs": ["list"]}
+
 // tests fix the clock and the system zone; the bar never sends these
 → {"id": 1, "ext": "time", "query": "time", "now": 1790152230000, "local_zone": "Asia/Colombo"}
 
@@ -129,13 +151,38 @@ in order, one JSON object per line. It exits when stdin closes.
 ← {"id": …, "error": "no extension \"x\""}
 ```
 
-Rows may carry `run` and `alt` actions from the bar's short list (open, copy,
-paste, edit, argv). The bar checks them the way it checks a script's actions.
-Native rows may also use the bar's own `app` (an id of letters, digits and
-`._+-`, and an optional action index) and `window` (a `0x…` address)
-actions, which scripts can't. They may set `swatch`, `image`, `group`,
-`appId` and `pinned`, each checked too. Apps and windows share the letters-in-order rule: three characters or more, the first letter at the start of a word, and all of them close together (spanning at most twice the query's length plus two), so letters from far-apart words don't count. A manifest with `"empty": true` has
-its answer to `""` listed on the empty bar (Apps' pinned apps).
+Rows may carry `run` and `alt` actions: open, copy, paste and edit, checked
+the way a script's are; the bar's own `app` (an id of letters, digits and
+`._+-`, and an optional action index) and `window` (a `0x…` address); and
+`action`, one of the manifest's actions by name:
+
+```jsonc
+{"kind": "action", "name": "install", "args": ["kfind", "extra/kfind"], "input": "…"}
+```
+
+A native row can't name a program (`argv` is refused). Its `action` gets the
+manifest's command with `args` in place of `{1}`…`{9}`, each a whole
+argument, and its `input` on stdin if the manifest says `"input": true`; an
+action the manifest doesn't list, or one missing an argument, is dropped. The
+footer shows the manifest's label. Rows may also set `swatch`, `image`,
+`group`, `complete`, `appId` and `pinned`, each checked too.
+
+Apps, windows and hotkeys share the letters-in-order rule: three characters
+or more, the first letter at the start of a word, each next letter in the
+same word or at the start of the next one, and all of them close together
+(spanning at most twice the query's length plus two). So `fllscrn` finds Full
+screen, but `men` doesn't find Move window. A manifest with `"empty": true`
+has its answer to `""` listed on the empty bar (Apps' pinned apps).
+
+An answer's `needs` lists the loads it read or wanted, by the manifest's
+keys. The bar runs each one's command through the same queue as a JS
+extension's `ctx.load` (once per open, or again after its `ttl`), sends the
+output with `op: "load"`, drops that extension's cached answers and asks
+again. When the bar closes it sends `null` for every load read for that open,
+so the clipboard history and the package list don't stay in punctumd's
+memory, and drops its cache of punctumd's answers too. A load the bar keeps
+on a timer (keybindings) is sent again only when its text changes, and
+again after punctumd restarts.
 
 When the bar sends new shell state, it drops every cached answer and every
 answer still coming, since those used the old state. Requests and replies
@@ -156,12 +203,31 @@ The daemon keeps running.
 
 ```jsonc
 {
-  "schema": 1, "id": "units", "type": "native",
+  "schema": 1, "id": "packages", "type": "native",
   "entry": "provider.js",   // optional: the JS fallback
-  "hero": true,
-  "help": [...], "commands": [...]   // from the manifest, as for scripts
+  "help": [...], "commands": [...],   // from the manifest, as for scripts
+  // Output punctumd may ask for, by key. ttl (ms) keeps it and reads it
+  // again when it's older; without one it's read once per open.
+  "loads": {
+    "list": { "command": ["bash", "-c", "expac -Q 'Q\\t%n\\t%v' && …"] }
+  },
+  // What its rows may run on Enter, by name.
+  "actions": {
+    "install": {
+      "command": ["uwsm-app", "--", "xdg-terminal-exec", "--title=Install {1}", "-e",
+                  "bash", "-c", "sudo pacman -S -- \"$1\"", "punctum-pkg", "{2}"],
+      "label": "install",
+      "input": false        // true: the row's "input" goes on stdin
+    }
+  }
 }
 ```
+
+In both, `{omarchy}` is Omarchy's folder, `{home}` your home and `{dir}` the
+extension's folder. `{1}`…`{9}` are an action's arguments from punctumd. They
+can't appear in a load, nor in the argument after a `-c`, where a string
+would become code; such a manifest is refused. Put them in a script's
+arguments and read them as `$1`, `$2`.
 
 Only bundled extensions can be native. The bar refuses `"type": "native"` from
 your extensions folder, because native code is compiled into punctumd and is
@@ -173,7 +239,10 @@ not loaded from that folder.
    `Extension` (`id` and `matches`), and add it to `extensions()` in `lib.rs`.
 2. Port the JS provider's tests to `#[cfg(test)]` in the same file.
 3. Set the manifest's `"type"` to `"native"`, keep `"entry"` as the fallback,
-   and move `help` and `commands` into the manifest.
+   and move `help` and `commands` into the manifest. Commands the JS ran
+   with `ctx.load` become `loads`, read with `ctx.load(key)` in Rust (which
+   adds the key to the answer's `needs`); `argv` actions become `actions`.
+   Keep a parse of a load in a `Memo`, so it's done once per text.
 4. Add a parity test like [`tests/units-parity.js`](../tests/units-parity.js).
    It puts thousands of queries to both the JS and the Rust provider and fails
    on any difference. Where the Rust version is better on purpose, pin the new

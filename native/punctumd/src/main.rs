@@ -8,13 +8,13 @@ fn main() {
     std::panic::set_hook(Box::new(|_| {}));
     let stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
-    let mut data = punctumd::Data::new();
+    let mut state = punctumd::State::new();
     for line in stdin.lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
         }
-        let reply = punctumd::handle(&line, &mut data);
+        let reply = punctumd::handle(&line, &mut state);
         if writeln!(stdout, "{reply}").and_then(|_| stdout.flush()).is_err() {
             break;
         }

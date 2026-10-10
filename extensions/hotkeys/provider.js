@@ -18,6 +18,11 @@
 // Enter runs the bind through the same script's dispatch_binding, so it does
 // exactly what pressing the keys does. The dispatcher and its argument are
 // separate argv entries; no shell parses them.
+//
+// This is the JS fallback for native/punctumd/src/hotkeys.rs, used when
+// punctumd isn't installed; tests/hotkeys-parity.js keeps the two the same,
+// so change both together. The Rust one also finds a binding in "keys" mode
+// by its letters in order ("fllscrn"), after everything these rules find.
 
 var ARROW = " → "
 var ROOT_LIMIT = 3

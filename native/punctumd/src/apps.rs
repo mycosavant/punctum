@@ -123,10 +123,11 @@ fn fuzzy(app: &App, q: &str) -> Option<u32> {
 }
 
 /// The text's letters in the query's order, the first at the start of a
-/// word and all of them close together (spanning at most twice the query's
-/// length and two), so "frfx" finds Firefox but "ima" doesn't stitch
-/// together "Inbox - Proton Mail"; nucleo's score for it, or None. Needs
-/// three characters and a letter.
+/// word, all of them close together (spanning at most twice the query's
+/// length and two), and a letter in a later word only that word's first: so
+/// "frfx" finds Firefox and "fllscrn" Full screen, but "ima" doesn't stitch
+/// together "Inbox - Proton Mail" nor "men" "Move window". nucleo's score
+/// for it, or None. Needs three characters and a letter.
 pub(crate) fn letters_in_order(text: &str, q: &str) -> Option<u32> {
     if q.chars().count() < 3 || !q.bytes().any(|b| b.is_ascii_alphabetic()) {
         return None;
@@ -136,15 +137,22 @@ pub(crate) fn letters_in_order(text: &str, q: &str) -> Option<u32> {
     let mut buf = Vec::new();
     let mut indices = Vec::new();
     let score = MATCHER.with(|m| pattern.indices(Utf32Str::new(text, &mut buf), &mut m.borrow_mut(), &mut indices))?;
-    let first = *indices.iter().min()? as usize;
-    let last = *indices.iter().max()? as usize;
+    indices.sort_unstable();
+    indices.dedup();
+    let first = *indices.first()? as usize;
+    let last = *indices.last()? as usize;
     if last - first + 1 > 2 * q.chars().count() + 2 {
         return None;
     }
-    let at_word = first == 0
-        || !chars[first - 1].is_alphanumeric()
-        || (chars[first - 1].is_lowercase() && chars[first].is_uppercase());
-    at_word.then_some(score)
+    let starts_word = |i: usize| {
+        i == 0 || !chars[i - 1].is_alphanumeric() || (chars[i - 1].is_lowercase() && chars[i].is_uppercase())
+    };
+    if !starts_word(first) {
+        return None;
+    }
+    // Each next letter is in the same word as the one before, or starts one.
+    let same_word = |a: usize, b: usize| (a + 1..=b).all(|i| !starts_word(i));
+    indices.windows(2).all(|w| starts_word(w[1] as usize) || same_word(w[0] as usize, w[1] as usize)).then_some(score)
 }
 
 /// A launch history nudge: never enough to beat a better match, only to order
@@ -391,12 +399,7 @@ mod tests {
 
     fn rows(q: &str) -> Vec<Row> {
         let d = data();
-        let ctx = Context {
-            settings: &Value::Null,
-            now: jiff::Timestamp::now(),
-            local_zone: jiff::tz::TimeZone::UTC,
-            data: &d,
-        };
+        let ctx = Context::new(&Value::Null, jiff::Timestamp::now(), jiff::tz::TimeZone::UTC, &d);
         Apps.matches(q, &ctx).rows
     }
 
@@ -439,12 +442,7 @@ mod tests {
     fn a_bad_entry_is_skipped_not_the_list() {
         let mut d = data();
         d.get_mut("apps").unwrap().as_array_mut().unwrap().push(json!({ "id": "bad", "name": 5, "keywords": "x" }));
-        let ctx = Context {
-            settings: &Value::Null,
-            now: jiff::Timestamp::now(),
-            local_zone: jiff::tz::TimeZone::UTC,
-            data: &d,
-        };
+        let ctx = Context::new(&Value::Null, jiff::Timestamp::now(), jiff::tz::TimeZone::UTC, &d);
         assert_eq!(Apps.matches("firefox", &ctx).rows[0].title, "Firefox");
     }
 

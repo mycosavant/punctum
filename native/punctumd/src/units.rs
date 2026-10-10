@@ -337,12 +337,8 @@ mod tests {
     use super::*;
 
     fn rows(q: &str) -> Vec<Row> {
-        let ctx = Context {
-            settings: &serde_json::Value::Null,
-            now: jiff::Timestamp::now(),
-            local_zone: jiff::tz::TimeZone::UTC,
-            data: &crate::NO_DATA,
-        };
+        let ctx =
+            Context::new(&serde_json::Value::Null, jiff::Timestamp::now(), jiff::tz::TimeZone::UTC, &crate::NO_DATA);
         Units.matches(q, &ctx).rows
     }
 

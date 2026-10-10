@@ -195,8 +195,14 @@ Item {
     // Loads read for this open go, queued ones too; ones kept on a timer
     // (keybindings) stay.
     var kept = {}
-    for (var k in root.loadCache) if (root.loadCache[k].keep) kept[k] = root.loadCache[k]
+    for (var k in root.loadCache) {
+      if (root.loadCache[k].keep) kept[k] = root.loadCache[k]
+      else if (root.loadCache[k].native) root.pushNativeLoad(k, null)
+    }
     root.loadCache = kept
+    // punctumd's answers too: they hold clipboard texts and package lists.
+    root.nativeCache = ({})
+    root.nativePending = ({})
     root.loadQueue = root.loadQueue.filter(function(j) { return j.keep })
     var still = {}
     for (var q = 0; q < root.loadQueue.length; q++) still[root.loadQueue[q].key] = true
@@ -618,7 +624,7 @@ Item {
     var e = root.loadCache[key]
     if (e && (ttl <= 0 || Date.now() - e.at < ttl)) return
     root.loading[key] = true
-    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, generation: root.loadGeneration })
+    root.loadQueue.push({ key: key, argv: argv.map(String), keep: ttl > 0, native: !!(opts && opts.native), generation: root.loadGeneration })
     if (!loadProc.running) root.loadNext()
   }
 
@@ -660,8 +666,12 @@ Item {
         // A failed re-read of something kept (empty output) keeps the old text.
         if (job.keep || job.generation === root.loadGeneration) {
           var next = Object.assign({}, root.loadCache)
-          next[job.key] = { text: (!text.trim() && old && job.keep) ? old.text : text, at: Date.now(), keep: job.keep }
+          var kept = (!text.trim() && old && job.keep) ? old.text : text
+          next[job.key] = { text: kept, at: Date.now(), keep: job.keep, native: job.native }
           root.loadCache = next
+          // A native extension's load goes to punctumd, unless a re-read
+          // found the same text.
+          if (job.native && !(old && old.text === kept)) root.pushNativeLoad(job.key, kept)
           if (root.opened) root.recompute()
         }
       }
@@ -678,8 +688,9 @@ Item {
       console.warn("punctum: couldn't start " + JSON.stringify(job.argv))
       delete root.loading[job.key]
       var next = Object.assign({}, root.loadCache)
-      next[job.key] = { text: "", at: Date.now(), keep: job.keep, failed: true }
+      next[job.key] = { text: "", at: Date.now(), keep: job.keep, native: job.native, failed: true }
       root.loadCache = next
+      if (job.native) root.pushNativeLoad(job.key, "")
       if (root.opened) root.recompute()
     }
     root.loadNext()
@@ -913,18 +924,19 @@ Item {
     }
   }
 
-  // ctx.native: the rows for this query, or null while punctumd works them out.
-  // An answer that has gone stale (a clock) is shown while the fresh one comes.
+  // ctx.native: punctumd's answer to this query, { rows, needs }, or null
+  // while it works it out. An answer that has gone stale (a clock) is shown
+  // while the fresh one comes.
   function native(id, query, settings) {
     if (!root.nativeServed[id] || !nativeProc.running) return null
     var key = id + "\n" + query
     var have = root.nativeCache.hasOwnProperty(key) ? root.nativeCache[key] : null
-    if (have && (!have.until || have.until > Date.now())) return have.rows
+    if (have && (!have.until || have.until > Date.now())) return have
     if (!root.nativePending[key]) {
       root.nativePending[key] = true
       nativeProc.write(JSON.stringify({ id: key, ext: id, query: query, settings: settings === undefined ? {} : settings }) + "\n")
     }
-    return have ? have.rows : null
+    return have
   }
 
   // The shell's state a native extension needs (apps, launches, pins,
@@ -945,6 +957,23 @@ Item {
     root.pushNative("launches", root.launches)
     root.pushNative("pinned", root.pinnedApps)
     root.pushNative("windows", root.windows)
+    for (var k in root.loadCache) if (root.loadCache[k].native) root.pushNativeLoad(k, root.loadCache[k].text)
+  }
+
+  // A load a native extension asked for (its manifest's command, run by
+  // the bar), or null when the bar drops it. key is "<ext>\n<load key>".
+  // Only that extension's answers are dropped and asked again.
+  function pushNativeLoad(key, text) {
+    if (!nativeProc.running || !Object.keys(root.nativeServed).length) return
+    var at = String(key).indexOf("\n")
+    if (at < 0) return
+    var ext = key.slice(0, at), prefix = ext + "\n"
+    var cache = {}
+    for (var c in root.nativeCache) if (c.indexOf(prefix) !== 0) cache[c] = root.nativeCache[c]
+    root.nativeCache = cache
+    for (var p in root.nativePending) if (p.indexOf(prefix) === 0) delete root.nativePending[p]
+    nativeProc.write(JSON.stringify({ id: "load", op: "load", ext: ext, key: key.slice(at + 1), text: text }) + "\n")
+    if (root.opened) Qt.callLater(root.recompute)
   }
 
   onAppsChanged: root.pushNative("apps", root.apps)
@@ -976,7 +1005,7 @@ Item {
     // all at once.
     if (++root.nativeCached > 2000) { root.nativeCache = ({}); root.nativeCached = 1 }
     var ttl = Number(r.ttl)
-    root.nativeCache[r.id] = { rows: Array.isArray(r.rows) ? r.rows : [], until: ttl > 0 ? Date.now() + ttl : 0 }
+    root.nativeCache[r.id] = { rows: Array.isArray(r.rows) ? r.rows : [], needs: Array.isArray(r.needs) ? r.needs : [], until: ttl > 0 ? Date.now() + ttl : 0 }
     if (root.opened) Qt.callLater(root.recompute)
   }
 

@@ -11,8 +11,9 @@
 //
 // This is the JS fallback for native/punctumd/src/colors.rs, used when
 // punctumd isn't installed; tests/colors-parity.js keeps the two the same, so
-// change both together. The Rust one also reads every CSS colour function
-// and adds an OKLCH row.
+// change both together. The Rust one also reads every CSS colour function,
+// adds an OKLCH row and more forms ("formats"), contrast ratios ("#fff on
+// #333"), and lists the colours you picked ("pick ").
 
 function clamp(n) { return Math.max(0, Math.min(255, n)) }
 
@@ -71,6 +72,9 @@ var provider = {
       examples: ["#ff6644", "rgb(40, 120, 200)"] }
   ],
   match: function(query, ctx) {
+    // "pick ": just the picker; what was picked before is listed by the Rust one.
+    if (/^\s*pick\s/i.test(query)) return [{ title: "Pick a colour from the screen", subtitle: "Click any pixel; its hex is copied", icon: "󰈊", score: 97, copy: "",
+      run: { kind: "argv", target: [(ctx.dir || "") + "/pick", "--copy"], label: "pick" } }]
     var c = parse(query)
     if (!c) return []
     return c.values.map(function(v, i) {

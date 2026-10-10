@@ -18,6 +18,10 @@
 // Enter on one you have shows `pacman -Qi`. Shift+Enter opens its page on
 // archlinux.org for Arch's own repositories, `pacman -Si` for others. The
 // name reaches bash as $1, and only names pacman itself allows are offered.
+//
+// This is the JS fallback for native/punctumd/src/packages.rs, used when
+// punctumd isn't installed; tests/packages-parity.js keeps the two the same,
+// so change both together.
 
 var LIMIT = 30
 var NAME = /^[a-z0-9@_+][a-z0-9@._+-]{0,127}$/

@@ -2,8 +2,8 @@
   "schema": 1,
   "id": "colors",
   "name": "Colour",
-  "version": "1.0.0",
-  "description": "#ff6644, hsl(11 100% 63%): a colour swatch with HEX, RGB, HSL and OKLCH",
+  "version": "1.1.0",
+  "description": "#ff6644, #fff on #333, pick: a colour's forms, contrast, and a screen colour picker",
   "icon": "󰏘",
   "type": "native",
   "entry": "provider.js",
@@ -11,11 +11,34 @@
   "order": 110,
   "helpOrder": 130,
   "hero": true,
+  "mode": {
+    "pattern": "^\\s*pick\\s",
+    "label": "Colour picker",
+    "icon": "󰈊"
+  },
+  "defaults": {
+    "formats": ["hex", "rgb", "hsl", "oklch"],
+    "copyOnPick": true
+  },
   "help": [
-    {"id": "colors", "title": "Colours", "about": "A hex, rgb(), hsl() or oklch() colour shows a swatch and its other forms", "examples": ["#ff6644", "rgb(40, 120, 200)", "hsl(210 70% 50%)"]}
+    {"id": "colors", "title": "Colours", "about": "A hex, rgb(), hsl() or oklch() colour shows a swatch and its other forms; \"formats\" picks which (hex, rgb, hsl, oklch, hsv, hwb, lab, lch, oklab, cmyk, vec4, decimal, 0x)", "examples": ["#ff6644", "rgb(40, 120, 200)", "hsl(210 70% 50%)"]},
+    {"id": "contrast", "title": "Contrast", "about": "Two colours on each other: their WCAG contrast ratio, and whether text and large text pass", "examples": ["#fff on #333", "contrast #777 #fff"]},
+    {"id": "picker", "title": "Colour picker", "about": "Click any pixel on screen; its hex is copied and the bar opens on it. pick and a space lists what you picked",
+     "examples": [{"q": "pick", "note": "Pick a colour from the screen"}, {"q": "pick ", "note": "What you picked, newest first; Tab shows a colour's forms"}]}
   ],
   "commands": [
-    {"title": "Pick a colour from the screen", "keywords": "color colour picker eyedropper hex", "text": "Click any pixel; its hex is copied", "icon": "󰈊", "run": {"kind": "argv", "target": ["hyprpicker", "-a"], "label": "pick"}}
+    {"title": "Pick a colour from the screen", "keywords": "color colour picker eyedropper hex hyprpicker", "text": "Click any pixel; its hex is copied", "icon": "󰈊", "complete": "pick "}
   ],
-  "permissions": {}
+  "loads": {
+    "picks": {"command": ["{dir}/pick", "--history"]}
+  },
+  "actions": {
+    "pick": {"command": ["{dir}/pick", "--copy"], "label": "pick"},
+    "pick_only": {"command": ["{dir}/pick"], "label": "pick"}
+  },
+  "permissions": {
+    "runs": ["hyprpicker, on Enter", "wl-copy (with \"copyOnPick\")", "omarchy-shell, to open the bar on the colour"],
+    "writes": ["~/.local/state/punctum/colors (the last 30 colours picked)"],
+    "reads": ["~/.local/state/punctum/colors"]
+  }
 }

@@ -30,11 +30,12 @@ apps is local. So is everything typed until Enter.
 | Files (`~`), Inside files (`rg `) | Your home folder, live | Results until the bar closes |
 | Packages (`pkg `) | pacman's sync databases, through `expac` | The list until the bar closes |
 | Apps, keybindings | Desktop entries; `omarchy-menu-keybindings` | Launch counts, pins (cache) |
+| Colour picker (`pick`) | The screen, through `hyprpicker`, when you press Enter on the picker | The last 30 colours picked, in `~/.local/state/punctum/colors`; with `"copyOnPick"` (on by default) the hex goes to the clipboard |
 
 Everything the bar keeps is under `~/.cache/punctum/`, in a 700
 folder, each file 600. When the bar closes, the results list, per-open loads
 (clipboard history, the package list) and the last search's output are
-dropped: each process's output buffer is replaced by an empty run, since
+dropped, in punctumd too: each process's output buffer is replaced by an empty run, since
 Quickshell keeps the last output a process printed (checked 2026-10-09).
 Only the typed text is kept, so it can come back next time (`last-query`).
 
@@ -48,7 +49,7 @@ to parse, except where noted, and in those cases the typed text is an
 |---|---|
 | Everywhere | A JSON request on the `everywhere` command's stdin. It runs plocate with the words after `--` and fzf with the query as one `--filter=` value, all as argument lists |
 | Reminders | `remind-set --at <time>` with the message on stdin; the timer's command is a constant script with the message as an argument. `--cancel` accepts only a name matching `omarchy-reminder-*.timer` |
-| Native extensions (apps, windows, units, time, colours, web address) | A JSON line on the stdin of punctumd, which the bar started once with no arguments; the text never reaches a command line. punctumd runs no programs, opens no network connections and reads only the system's tzdata (`/etc/localtime`, `/usr/share/zoneinfo`). The bar also sends it the app list, launch counts, pinned apps and open windows' classes and titles, which it keeps in memory only. Its rows and actions go through the same checks as a script's, plus checks on the app and window actions only it may use |
+| Native extensions (apps, windows, hotkeys, clipboard, packages, reminders, units, time, colours, web address) | A JSON line on the stdin of punctumd, which the bar started once with no arguments; the text never reaches a command line. punctumd runs no programs, opens no network connections and reads only the system's tzdata (`/etc/localtime`, `/usr/share/zoneinfo`). The bar also sends it the app list, launch counts, pinned apps and open windows' classes and titles, and the output of the commands an extension's manifest lists under `loads` (keybindings, the clipboard history, the package list, Omarchy's reminders, the colours you picked), which it keeps in memory only; what was read for one open of the bar is dropped when it closes. Its rows can't name a program: Enter runs only one of the manifest's `actions`, with punctumd's strings as whole arguments, never inside a `bash -c` script. Its other actions go through the same checks as a script's, plus checks on the app and window actions only it may use |
 | Script extensions | A JSON request on stdin, never the command line. Every row and action they print is validated: only `open` (http, https, mailto, file or an absolute path), `copy`, `paste`, `edit` and `argv`, labelled by the bar |
 | Inside files | `bash -c SCRIPT punctum-rg <words>`; rg gets them as one fixed-string argument after `--` |
 | Files | `fd` as an argument list; words regex-escaped, after `--` or inside `--and=` |

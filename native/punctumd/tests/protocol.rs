@@ -20,7 +20,21 @@ fn talk(input: &str) -> Vec<Value> {
 fn hello_names_the_extensions() {
     let r = talk("{\"id\":0,\"op\":\"hello\"}\n");
     assert_eq!(r[0]["protocol"], 1);
-    assert_eq!(r[0]["extensions"], serde_json::json!(["units", "time", "url", "colors", "apps", "windows"]));
+    assert_eq!(
+        r[0]["extensions"],
+        serde_json::json!([
+            "units",
+            "time",
+            "url",
+            "colors",
+            "apps",
+            "windows",
+            "hotkeys",
+            "clipboard",
+            "packages",
+            "remind"
+        ])
+    );
 }
 
 #[test]
@@ -55,4 +69,27 @@ fn answers_in_order_and_survives_bad_lines() {
     assert!(r[2]["error"].is_string());
     assert_eq!(r[3]["id"], "three");
     assert_eq!(r[3]["rows"], serde_json::json!([]));
+}
+
+#[test]
+fn an_answer_says_which_loads_it_needs_and_uses_them_once_sent() {
+    let r = talk(concat!(
+        "{\"id\":1,\"ext\":\"packages\",\"query\":\"pkg kfind\"}\n",
+        "{\"id\":2,\"op\":\"load\",\"ext\":\"packages\",\"key\":\"list\",\"text\":\"S\\textra\\tkfind\\t1-1\\tx86_64\\tFind files\"}\n",
+        "{\"id\":3,\"ext\":\"packages\",\"query\":\"pkg kfind\"}\n",
+        "{\"id\":4,\"op\":\"load\",\"ext\":\"packages\",\"key\":\"list\",\"text\":null}\n",
+        "{\"id\":5,\"ext\":\"packages\",\"query\":\"pkg kfind\"}\n",
+        "{\"id\":6,\"op\":\"load\",\"ext\":\"nope\",\"key\":\"list\",\"text\":\"x\"}\n",
+        "{\"id\":7,\"op\":\"load\",\"ext\":\"packages\",\"key\":\"../x\",\"text\":\"x\"}\n",
+        "{\"id\":8,\"ext\":\"units\",\"query\":\"5 km to mi\"}\n",
+    ));
+    assert_eq!(r[0]["rows"][0]["title"], "Reading the package list…");
+    assert_eq!(r[0]["needs"], serde_json::json!(["list"]));
+    assert_eq!(r[1]["ok"], true);
+    assert_eq!(r[2]["rows"][0]["title"], "kfind");
+    assert_eq!(r[2]["needs"], serde_json::json!(["list"]));
+    // Dropped when the bar closes: asked for again.
+    assert_eq!(r[4]["rows"][0]["title"], "Reading the package list…");
+    assert!(r[5]["error"].is_string() && r[6]["error"].is_string());
+    assert!(r[7].get("needs").is_none());
 }

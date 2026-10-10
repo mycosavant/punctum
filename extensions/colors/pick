@@ -1,0 +1,48 @@
+#!/bin/bash
+# Pick a colour from the screen, for Punctum's colour extension: its
+# manifest's "pick" and "pick_only" actions and its "picks" load.
+#
+#   pick [--copy]     hyprpicker; the colour goes into the history (and with
+#                     --copy the clipboard), then the bar opens on it, showing
+#                     its forms
+#   pick --history    the history, newest first: "<unix time> #rrggbb" lines
+#
+# The history is ${XDG_STATE_HOME:-~/.local/state}/punctum/colors, the last
+# 30 colours picked, each once. Esc in hyprpicker picks nothing.
+set -u
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/punctum"
+file="$state/colors"
+
+case "${1:-}" in
+  --history)
+    [ -f "$file" ] && head -c 65536 -- "$file"
+    exit 0
+    ;;
+  "" | --copy) ;;
+  *)
+    echo "usage: pick [--copy] | pick --history" >&2
+    exit 2
+    ;;
+esac
+
+# The bar's card closes as Enter runs this; let it go before the screen is
+# frozen for picking.
+sleep 0.2
+color=$(hyprpicker --format=hex --lowercase-hex --quiet --no-fancy 2>/dev/null | tail -n 1)
+color=${color,,}
+[[ $color =~ ^#[0-9a-f]{6}$ ]] || exit 0
+
+mkdir -p -- "$state"
+{
+  printf '%s %s\n' "$(date +%s)" "$color"
+  [ -f "$file" ] && grep -v -- " $color\$" "$file"
+} | head -n 30 >"$file.tmp" && mv -f -- "$file.tmp" "$file"
+
+[ "${1:-}" = --copy ] && printf '%s' "$color" | wl-copy
+
+# Back to the bar, on the colour. Its id is the plugin's own.
+plugin=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+id=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$plugin/manifest.json" 2>/dev/null)
+[[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || id=io.github.mycosavant.punctum
+omarchy-shell -q shell summon "$id" "{\"query\": \"$color\"}"

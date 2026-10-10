@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "pkg name: packages in your pacman repositories",
   "icon": "󰏖",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 80,
@@ -20,6 +20,30 @@
   "requires": [
     "expac"
   ],
+  "commands": [
+    {"title": "Search packages", "keywords": "packages pacman install software arch repo", "text": "pkg and a name, from your pacman repositories", "complete": "pkg "}
+  ],
+  "help": [
+    {"id": "packages", "title": "Packages", "about": "pkg and a name searches your pacman repositories. Enter copies the install command for one you don't have (or, with \"install\": true, runs it in a terminal) and shows one you do; Shift+Enter opens archlinux.org",
+     "examples": [{"q": "pkg ", "note": "Type a name after it"}, {"q": "pkg kfind", "hint": "A package by name"}, {"q": "pkg file search", "hint": "Words in the description"}]}
+  ],
+  "loads": {
+    "list": {"command": ["bash", "-c", "expac -Q 'Q\\t%n\\t%v' && expac -S 'S\\t%r\\t%n\\t%v\\t%a\\t%d'"]}
+  },
+  "actions": {
+    "details": {
+      "command": ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=Package {1}", "-e", "bash", "-c", "pacman -Qi -- \"$1\"; omarchy-show-done", "punctum-pkg", "{1}"],
+      "label": "details"
+    },
+    "repo_details": {
+      "command": ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=Package {1}", "-e", "bash", "-c", "pacman -Si -- \"$1\"; omarchy-show-done", "punctum-pkg", "{2}"],
+      "label": "details"
+    },
+    "install": {
+      "command": ["uwsm-app", "--", "xdg-terminal-exec", "--app-id=org.omarchy.terminal", "--title=Install {1}", "-e", "bash", "-c", "sudo pacman -S -- \"$1\"; s=$?; [ \"$s\" = 130 ] || omarchy-show-done", "punctum-pkg", "{2}"],
+      "label": "install"
+    }
+  },
   "permissions": {
     "runs": [
       "expac",

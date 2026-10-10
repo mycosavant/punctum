@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "description": "cb: clipboard history from Omarchy's clipboard plugin, pinned first",
   "icon": "󰅍",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 40,
@@ -13,6 +13,20 @@
   "mode": {
     "pattern": "^\\s*(cb|clip)\\s",
     "label": "Clipboard"
+  },
+  "commands": [
+    {"title": "Clipboard history", "keywords": "clipboard paste history copied cb clip", "text": "Search what you copied, pinned first", "complete": "cb "}
+  ],
+  "help": [
+    {"id": "clipboard", "title": "Clipboard history", "about": "cb and a space lists what you copied, pinned first. Enter pastes, Shift+Enter copies",
+     "examples": [{"q": "cb ", "note": "Everything, pinned first"}, {"q": "cb http", "hint": "Entries containing http"}]}
+  ],
+  "loads": {
+    "history": {"command": ["head", "-c", "16777216", "--", "{home}/.local/state/omarchy/clipboard-history.json"]}
+  },
+  "actions": {
+    "paste_file": {"command": ["{omarchy}/bin/omarchy-clipboard-paste-file", "{1}", "{2}"], "label": "paste"},
+    "copy_file": {"command": ["{omarchy}/bin/omarchy-clipboard-paste-file", "--copy-only", "{1}", "{2}"], "label": "copy"}
   },
   "permissions": {
     "reads": [

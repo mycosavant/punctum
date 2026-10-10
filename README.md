@@ -44,9 +44,11 @@ Saikomantisu.
 | `kill`, `kill chrome`, `kill -9 node` | Quit one of your processes, or all processes with that name |
 | `cb `, `cb invoice` | Clipboard history, pinned first. Enter pastes into the app you were using, Shift+Enter only copies |
 | `~readme`, `~docs report` | Files and folders under `~`, letters in order (`~dwnlds` finds Downloads). Enter opens, Shift+Enter opens a terminal in the folder |
-| `full screen`, `super f`, `keys `, `keys screenshot` | Your keybindings, with their keys. Enter runs one, as pressing the keys would |
+| `full screen`, `super f`, `keys `, `keys screenshot` | Your keybindings, with their keys. Enter runs one, as pressing the keys would. With [native extensions](docs/native.md), also by letters in order: `keys fllscrn` |
 | `example.com`, `localhost:3000` | Open a web address in your default browser. File names like `readme.md` stay files |
-| `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one. With [native extensions](docs/native.md), also `hsl()`, `oklch()` and the other CSS colour functions, and an OKLCH row |
+| `#ff6644`, `ff6644`, `rgb(40, 120, 200)` | A colour swatch with its HEX, RGB and HSL forms; Enter copies one. With [native extensions](docs/native.md), also `hsl()`, `oklch()` and the other CSS colour functions, an OKLCH row, and more forms if you list them in `"colors": {"formats": [...]}` |
+| `pick`, `pick ` | Pick a colour from the screen. With native extensions its hex is copied, the bar opens on it with its forms, and `pick ` lists what you picked |
+| `#fff on #333`, `contrast #777 #fff` | With native extensions, the WCAG contrast ratio of two colours and whether text and large text pass |
 | `ai why is my wifi slow` | Open Omarchy's default agent (`omarchy default agent`) in a terminal with that prompt, or ChatGPT or Claude in your browser. |
 | `/notes`, `/report .pdf$`, `/hosts !backup` | Every file on the disk by name (plocate, ranked through fzf). Your home folder is current; elsewhere as of last night |
 | `remind 10m tea`, `alarm 6:45`, `!remindme 3pm call mom` | Reminders and alarms, alongside Omarchy's own |
@@ -105,9 +107,12 @@ and adds it switched off, so you can read the code before you enable it.
 `omarchy plugin update io.github.mycosavant.punctum` shows the changes before
 pulling them. Nothing is installed with sudo, and no install script runs.
 
-Apps, windows, units, time zones, colours and web addresses can also run natively, in punctumd, a
+Apps, windows, keybindings, clipboard history, packages, reminders, units,
+time zones, colours and web addresses can also run natively, in punctumd, a
 small Rust daemon. It's optional, and the bar works without it; with it,
-time zones come from your system's tzdata and every IANA zone answers. With Rust installed,
+time zones come from your system's tzdata and every IANA zone answers.
+punctumd runs no programs: what the bar runs for an extension is listed in
+its manifest. With Rust installed,
 `cargo build --release` in the plugin folder builds it, and the bar picks it
 up on its own ([docs/native.md](docs/native.md)).
 
@@ -146,7 +151,7 @@ off, and `?extensions` says which command it needs.
 - `systemd-run` and `omarchy-reminder`: reminders and alarms
 - `omarchy-menu-keybindings`: the keybinding list and running a binding
 - `omarchy-clipboard-paste-file` and `wtype`: pasting clipboard images and text
-- `hyprpicker`: Pick a colour from the screen
+- `hyprpicker`: Pick a colour from the screen (with native extensions, `extensions/colors/pick` runs it and keeps the last 30 colours in `~/.local/state/punctum/colors`)
 
 ### Network, files and processes
 

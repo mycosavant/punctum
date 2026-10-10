@@ -1182,15 +1182,22 @@ print(json.dumps({
   // as a Sri Lanka user at 14:00 on 23 Sep 2026, wherever the tests run.
   // The shell's state goes first, as the bar pushes it.
   let shell = { apps, launches: { firefox: 12 }, pinned: ["signal"], windows: [] }
+  // Loads: what the bar has read for a native extension, by "<ext>\n<key>",
+  // sent along as the bar sends them once they land; and what was asked for.
+  const loaded = {}, asked = {}
   const native = (id, query, settings) => {
     const data = Object.keys(shell).map(key => JSON.stringify({ id: "d", op: "data", key, value: shell[key] }))
-    const r = spawnSync(bin, [], { input: data.concat([JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8" })
-    return JSON.parse(r.stdout.trim().split("\n").pop()).rows
+    const loads = Object.keys(loaded).filter(k => k.indexOf(id + "\n") === 0).map(k => JSON.stringify({ id: "l", op: "load", ext: id, key: k.split("\n")[1], text: loaded[k] }))
+    const r = spawnSync(bin, [], { input: data.concat(loads, [JSON.stringify({ id: "t", ext: id, query, settings, now: Date.UTC(2026, 8, 23, 8, 30), local_zone: "Asia/Colombo" })]).join("\n") + "\n", encoding: "utf8", maxBuffer: 1 << 26 })
+    const reply = JSON.parse(r.stdout.trim().split("\n").pop())
+    return { rows: reply.rows, needs: reply.needs }
   }
-  const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
+  const requestLoad = (key, argv, opts) => { asked[key] = { argv, opts } }
+  const cached = key => loaded[key] === undefined ? null : loaded[key]
+  const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native, requestLoad, cached, omarchyPath: "/usr/share/omarchy", home: "/home/u" }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true, hotkeys: true, clipboard: true, packages: true, remind: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1230,6 +1237,43 @@ print(json.dumps({
     const open = x => (nq(x).find(r => r.provider === "url") || {}).run
     check("native: web addresses open through punctumd, actions checked by the bar", open("example.com/a?b=1").target === "https://example.com/a?b=1" && open("example.com").label === "open"
       && open("localhost:3000").target === "http://localhost:3000" && nq("example.com")[0].alt.kind === "copy" && !open("readme.md") && !open("mr.smith") && open("nas.local").target === "https://nas.local")
+    // Loads and actions: the bar runs what the manifest lists, punctumd names it.
+    const pick = (q, ext) => nq(q).filter(r => r.provider === ext)
+    check("native: hotkeys asks for its load, and the bar fills in the manifest's command", pick("keys ", "hotkeys")[0].title === "Reading keybindings…"
+      && asked["hotkeys\nbinds"].argv.join(" ") === "bash -c source \"$0\" --print >/dev/null && output_binding_records /usr/share/omarchy/bin/omarchy-menu-keybindings"
+      && asked["hotkeys\nbinds"].opts.ttl === 30000 && asked["hotkeys\nbinds"].opts.native === true, JSON.stringify(asked))
+    loaded["hotkeys\nbinds"] = "SUPER + F            → Full screen\tlua\thl.dsp.window.fullscreen(0)\nSUPER + W → Close window\n"
+    const full = pick("full screen", "hotkeys")[0]
+    check("native: a hotkey runs the manifest's dispatch, its strings as $1 and $2", full.title === "Full screen" && full.run.kind === "argv" && full.run.label === "run"
+      && JSON.stringify(full.run.target) === JSON.stringify(["bash", "-c", "source \"$0\" --print >/dev/null && dispatch_binding \"$1\" \"$2\"", "/usr/share/omarchy/bin/omarchy-menu-keybindings", "lua", "hl.dsp.window.fullscreen(0)"])
+      && pick("keys fllscrn", "hotkeys")[0].title === "Full screen" && pick("keys close", "hotkeys")[0].run === null, JSON.stringify(full.run))
+    check("native: clipboard reads its history from {home}", pick("cb ", "clipboard")[0].title === "Reading the clipboard history…"
+      && JSON.stringify(asked["clipboard\nhistory"].argv) === JSON.stringify(["head", "-c", "16777216", "--", "/home/u/.local/state/omarchy/clipboard-history.json"]) && !asked["clipboard\nhistory"].opts.ttl)
+    loaded["clipboard\nhistory"] = JSON.stringify([{ type: "text", text: "hello there", addedAt: 1 }, { type: "image", path: "/tmp/a b.png", mime: "image/png", pinned: true }])
+    const cb = pick("cb ", "clipboard")
+    check("native: clipboard rows paste text, and images through Omarchy's script", cb[0].title === "Image" && cb[0].section === "Pinned"
+      && JSON.stringify(cb[0].run.target) === JSON.stringify(["/usr/share/omarchy/bin/omarchy-clipboard-paste-file", "image/png", "/tmp/a b.png"]) && cb[0].run.label === "paste"
+      && cb[0].alt.target[1] === "--copy-only" && cb[1].run.kind === "paste" && cb[1].run.target === "hello there" && cb[1].alt.kind === "copy", JSON.stringify(cb.map(r => r.run)))
+    loaded["packages\nlist"] = "Q\tkfind\t1-1\nS\textra\tkfind\t1-1\tx86_64\tFind files\nS\tomarchy\tomarchy-thing\t2-1\tany\tIts own\n"
+    const kf = pick("pkg kfind", "packages")[0], om = pick("pkg omarchy", "packages")[0]
+    check("native: packages show one you have, and copy the install command for one you don't", kf.run.target.slice(-4).join(" ") === "-c pacman -Qi -- \"$1\"; omarchy-show-done punctum-pkg kfind"
+      && kf.run.target.indexOf("--title=Package kfind") > 0 && kf.run.label === "details" && kf.alt.target === "https://archlinux.org/packages/extra/x86_64/kfind/"
+      && om.run.kind === "copy" && om.run.target === "sudo pacman -S omarchy/omarchy-thing" && om.alt.target.slice(-1)[0] === "omarchy/omarchy-thing", JSON.stringify([kf.run, om.run, om.alt]))
+    const rem = pick("remind 10m tea", "remind")[0]
+    check("native: a reminder runs remind-set from the extension's folder, the message on stdin", rem.title === "Remind me at 14:10: tea"
+      && JSON.stringify(rem.run.target) === JSON.stringify([P + "extensions/remind/remind-set", "--in", "600"]) && rem.run.input === "tea" && rem.run.label === "set reminder"
+      && pick("alarm 6:45", "remind")[0].run.target.slice(-1)[0] === "--alarm", JSON.stringify(rem.run))
+    loaded["remind\nlist"] = JSON.stringify({ reminders: [{ timer: "omarchy-reminder-1-a.timer", label: "Tea", atTime: "14:10", remaining: "9m" }] })
+    const set = pick("remind ", "remind")
+    check("native: what's set comes from omarchy-reminder, and Shift+Enter cancels it", set.length === 2 && set[1].title === "Tea"
+      && JSON.stringify(set[1].alt.target) === JSON.stringify([P + "extensions/remind/remind-set", "--cancel", "omarchy-reminder-1-a.timer"]) && asked["remind\nlist"].argv.join(" ") === "omarchy-reminder show --json")
+    const picker = pick("color picker", "colors")[0], pickMode = pick("pick ", "colors")
+    check("native: the colour picker runs the pick script beside its manifest, and pick lists what it picked", picker.title === "Pick a colour from the screen"
+      && JSON.stringify(picker.run.target) === JSON.stringify([P + "extensions/colors/pick", "--copy"]) && pickMode[0].run.target[0] === P + "extensions/colors/pick"
+      && asked["colors\npicks"].argv.join(" ") === P + "extensions/colors/pick --history" && (Engine.mode("pick x", config) || {}).label === "Colour picker"
+      && !nq("pick a colour").some(r => r.provider === "colors" && r.group === "Commands" && !r.run), JSON.stringify(picker.run))
+    const ratio = nq("#fff on #333")[0]
+    check("native: two colours give their contrast ratio, as the answer", ratio.provider === "colors" && ratio.title === "12.63:1" && ratio.hero && ratio.copy === "12.63")
     check("native: while a reply is coming (null), nothing shows", !Engine.run("5 km to mi", config, { now, native: () => null }).some(x => x.provider === "units"))
   }
   // Rows from punctumd get the same checks as a script's, keeping their scores.
@@ -1238,6 +1282,20 @@ print(json.dumps({
     { title: "ok", score: 77, copy: "1", run: { kind: "open", target: "relative/path" } },
     { title: 5 }, null, { title: "nan score", score: NaN }] })
   check("native: bad rows dropped, bad actions refused, scores kept", fake.length === 2 && fake[0].score === 77 && fake[0].run === null && fake[1].score === 97 - 0.001, JSON.stringify(fake))
+  // A native row can't name a program: only one of its manifest's actions.
+  { const nm = Ext.validate({ schema: 1, id: "hotkeys", type: "native", actions: { go: { command: ["{dir}/go", "--x", "{1}", "{2}"], label: "go", input: true }, plain: { command: ["true"] } },
+      loads: { list: { command: ["cat", "{home}/f"] } } }, "/ext")
+    const rows = Ext.nativeProvider(nm).match("q", { home: "", omarchyPath: "", native: () => ({ rows: [
+      { title: "argv", run: { kind: "argv", target: ["rm", "-rf", "/"] } }, { title: "unknown", run: { kind: "action", name: "toString" } },
+      { title: "short", run: { kind: "action", name: "go", args: ["a"] } }, { title: "ok", run: { kind: "action", name: "go", args: ["a b", "$(c)"], input: "msg" }, alt: { kind: "action", name: "plain", input: "ignored" } },
+      { title: "nul", run: { kind: "action", name: "go", args: ["a", "b\u0000"] } }, { title: "notlist", run: { kind: "action", name: "go", args: "ab" } }], needs: ["list", "nope", 5] }), load: () => { throw new Error("no home, no load") } })
+    check("native: actions are the manifest's, filled with punctumd's strings as whole arguments", rows.map(r => r.run && r.run.target.join("|")).join(",") === ",,,/ext/go|--x|a b|$(c),,"
+      && rows[3].run.input === "msg" && rows[3].run.label === "go" && rows[3].alt.target.join() === "true" && rows[3].alt.input === undefined && rows[3].alt.label === "run true", JSON.stringify(rows.map(r => r.run)))
+    check("native: a manifest may not put {1} in a script, or name a command that isn't a list", /never in a script/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["bash", "-c", "echo {1}"] } } }, "/x").error || "")
+      && /no \{1\}/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { a: { command: ["cat", "{1}"] } } }, "/x").error || "")
+      && /loads\.A/.test(Ext.validate({ schema: 1, id: "n", type: "native", loads: { A: { command: ["x"] } } }, "/x").error || "")
+      && /actions must/.test(Ext.validate({ schema: 1, id: "n", type: "native", actions: [] }, "/x").error || "")
+      && !Ext.validate({ schema: 1, id: "n", type: "native", actions: { a: { command: ["x", "--title=Install {1}", "-e", "bash", "-c", "echo \"$1\"", "n", "{1}"] } } }, "/x").error) }
   const mine = Ext.collect([{ dir: "/home/x/ext/n", manifest: JSON.stringify({ schema: 1, id: "n", type: "native" }), user: true }])
   check("native: only the bar's own extensions may be native", mine.list.length === 0 && /come with Punctum/.test(mine.errors[0].error))
   check("native: a native entry must be a .js file", /entry must be/.test(Ext.validate({ schema: 1, id: "n", type: "native", entry: "../x.sh" }, "/x").error || ""))
@@ -1245,14 +1303,14 @@ print(json.dumps({
   { const T = c => ["term", c]
     const first = st => { Engine.setNativeStatus(Object.assign({ build: T("build"), fetch: T("fetch"), remove: T("remove") }, st)); return Engine.run("?extensions", config, { now })[0] }
     const offCargo = first({ running: false, cargo: true, release: true })
-    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · Web address, [^·]* run in JavaScript/.test(offCargo.subtitle)
-      && /runs no programs, opens no connections/.test(offCargo.subtitle) && offCargo.run.target.join() === "term,build" && offCargo.actionLabel === "Build" && offCargo.alt.target.join() === "term,fetch", offCargo.subtitle)
+    check("native row: off with cargo, Enter builds in a terminal, Shift+Enter downloads", offCargo.title === "Native extensions" && /^Off · [^·]*Web address, [^·]* run in JavaScript/.test(offCargo.subtitle)
+      && /runs no programs and opens no connections: the bar runs only what each extension's manifest lists/.test(offCargo.subtitle) && offCargo.run.target.join() === "term,build" && offCargo.actionLabel === "Build" && offCargo.alt.target.join() === "term,fetch", offCargo.subtitle)
     const offRelease = first({ running: false, cargo: false, release: true })
     check("native row: off without cargo, Enter downloads the checked release", offRelease.run.target.join() === "term,fetch" && !offRelease.alt && /checks its SHA-256/.test(offRelease.subtitle))
     const offNone = first({ running: false, cargo: false, release: false })
     check("native row: with neither, Enter copies how to get Rust", offNone.run.kind === "copy" && offNone.run.target === "sudo pacman -S rust")
     const onMine = first({ running: true, version: "0.1.0", installed: true, cargo: true })
-    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · Web address, [^·]* run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
+    check("native row: on from bin/, Enter rebuilds, Shift+Enter goes back to JavaScript", /^On · [^·]*Web address, [^·]* run in punctumd 0\.1\.0 ·/.test(onMine.subtitle) && onMine.run.target.join() === "term,build" && onMine.alt.target.join() === "term,remove" && onMine.alt.label === "use JavaScript", onMine.subtitle)
     const onPkg = first({ running: true, version: "0.1.0", installed: false, packaged: "/usr/bin/punctumd" })
     check("native row: on from a package, it says where and offers nothing to undo", /from \/usr\/bin\/punctumd/.test(onPkg.subtitle) && !onPkg.run && !onPkg.alt)
     Engine.setNativeStatus(null)

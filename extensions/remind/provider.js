@@ -14,6 +14,10 @@
 // time (--at a clock time, --in a duration, counted from Enter) as an
 // argument and the message on stdin. A reminder doesn't survive a reboot or
 // logout, as with Omarchy's own.
+//
+// This is the JS fallback for native/punctumd/src/remind.rs, used when
+// punctumd isn't installed; tests/remind-parity.js keeps the two the same,
+// so change both together.
 
 // "alarm" and "wake" need a time after them (or nothing), so "alarm clock"
 // and "wake on lan" stay ordinary searches.

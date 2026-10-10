@@ -16,6 +16,10 @@
 // up again by position, so a copy landing while the bar is open can't shift
 // a different entry under Enter. Images go through Omarchy's paste script,
 // which takes only the file's path.
+//
+// This is the JS fallback for native/punctumd/src/clipboard.rs, used when
+// punctumd isn't installed; tests/clipboard-parity.js keeps the two the
+// same, so change both together.
 
 var LIMIT = 50
 var PREVIEW = 160
