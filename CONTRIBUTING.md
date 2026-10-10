@@ -22,7 +22,7 @@ Keep only one copy in that folder. Two copies register the same plugin ID.
 
 After changing the code, run `omarchy restart shell` to load it. The shell reloads plugins on its own when files change, but that isn't always reliable, so restart before you decide something works. `journalctl --user -f | grep -i commandbar` shows the bar's warnings and errors.
 
-New features go in `providers/`. The README's "Adding a feature" section shows the format.
+New features are extensions: a folder in `extensions/` with an `extension.json`. [docs/writing-extensions.md](docs/writing-extensions.md) has the format; `examples/hello` is the smallest one.
 
 ## Tests
 
@@ -41,7 +41,7 @@ The plugin is published through the Omarchy plugin marketplace, and its automate
 - Don't add network requests unless the feature needs one, and only make them when the user asks for that feature.
 - Don't write to the user's config files. The bar writes only to `~/.cache/omarchy-commandbar/`.
 - Keep the defaults neutral. Personal choices, such as a currency, time zone or hotkey, go in your own `~/.config/omarchy/extensions/commandbar.json`, not in `config.default.json`.
-- Put what the user types into shell commands only through the existing quoting. See `{q}` handling in `providers/commands.js`.
+- Never put what the user types into a shell string. Use argument lists, or pass it as an argument or on stdin to a constant script. See `{q}` handling in `extensions/commands/provider.js`.
 - List any new command-line tool in the README's Dependencies section.
 
 ## License

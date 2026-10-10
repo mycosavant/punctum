@@ -1,6 +1,6 @@
 # Proposal: extensions, Everywhere on its own, and a community release
 
-Status, 2026-10-09: **steps 2 to 5 are built** (commits `70904cc`, `12d1b02`);
+Status, 2026-10-09: **steps 2 to 5 are built** (commits `fa78d96`, `12d1b02`);
 step 1 is drafted in [`upstream/`](upstream/README.md) and step 6 is open.
 The rest of this page is the proposal as written, against commit `b66fd1c`,
 with what changed in the building noted under [As built](#as-built).
