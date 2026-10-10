@@ -8,6 +8,7 @@ pub mod format;
 pub mod time;
 pub mod units;
 pub mod url;
+pub mod windows;
 
 use std::collections::HashMap;
 
@@ -98,7 +99,7 @@ pub trait Extension: Sync {
 
 /// Every extension this build serves.
 pub fn extensions() -> &'static [&'static dyn Extension] {
-    &[&units::Units, &time::Time, &url::Url, &colors::Colors, &apps::Apps]
+    &[&units::Units, &time::Time, &url::Url, &colors::Colors, &apps::Apps, &windows::Windows]
 }
 
 pub const PROTOCOL: u32 = 1;

@@ -3,6 +3,7 @@
 // give the same rows in the same order. Rust may add rows after them: apps
 // found by their letters in order (apps.rs), each an app row ranked below
 // every row the JS gave. The empty bar's pinned list must match too.
+// SHOW=1 lists what Rust adds.
 const { spawnSync } = require("child_process")
 const path = require("path")
 const load = require("./loader")
@@ -106,7 +107,7 @@ queries.forEach((q, id) => {
   const tail = rs.slice(js.length)
   const lowest = Math.min(...js.filter(r => r.appId).map(r => r.score))
   const ok = head && tail.every(r => r.run && r.run.kind === "app" && r.appId && (!js.length || r.score < lowest))
-  if (ok) { if (tail.length) extra++; return }
+  if (ok) { if (tail.length) { extra++; if (process.env.SHOW) console.log("  + " + JSON.stringify(q) + " → " + tail.map(r => r.title).join(" | ")) } return }
   if (diffs++ < 10) console.log("FAIL  " + JSON.stringify(q) + "\n  js:   " + JSON.stringify(js.map(r => r.title + "@" + r.score)) + "\n  rust: " + JSON.stringify(rs.map(r => r.title + "@" + r.score)))
 })
 console.log((diffs ? "FAIL" : "ok  ") + "  apps: JS and Rust agree on " + (queries.length - diffs) + " of " + queries.length + " queries over " + apps.length + " apps ("

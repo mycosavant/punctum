@@ -1190,7 +1190,7 @@ print(json.dumps({
   const nq = (query, extra) => Engine.run(query, config, Object.assign({ now, apps: [], windows: [], native }, extra || {}))
   if (!fs.existsSync(bin)) console.log("--    native: untested, no " + bin + " (cargo build)")
   else {
-    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true })
+    const got = Extensions.install(Engine, Ext, found, { units: true, time: true, url: true, colors: true, apps: true, windows: true })
     const units = got.manifests.find(m => m.id === "units")
     const r = nq("5 km to mi")
     check("native: units answers through punctumd, as the hero", units.runtime === "punctumd" && r[0].provider === "units" && r[0].title === "3.1069 mi" && r[0].hero && r[0].score === 90 && r[0].copy === "3.1069", JSON.stringify(r[0]))
@@ -1217,6 +1217,11 @@ print(json.dumps({
     check("native: the empty bar lists pinned apps from punctumd", empty.length === 1 && empty[0].title === "Signal" && empty[0].section === "Pinned" && empty[0].run.kind === "app", JSON.stringify(empty.map(r => r.title)))
     shell = Object.assign({}, shell, { windows: [{ address: "0xb1", cls: "brave-browser", title: "x", workspace: "1", focus: 1 }] })
     check("native: a running app opens a new window", appRows("brave")[0].run.label === "open new")
+    shell = Object.assign({}, shell, { windows })
+    const winRows = x => nq(x).filter(r => r.provider === "windows")
+    check("native: windows through punctumd, the one you're in and odd addresses left out", winRows("w git").map(r => r.title).join() === "GitHub - Brave" && /^No window/.test(winRows("w zzz")[0].title)
+      && winRows("w ").length === 4 && winRows("brave")[0].run.kind === "window" && winRows("brave")[0].score > appRows("brave")[0].score && winRows("w gthb")[0].title === "GitHub - Brave"
+      && (Engine.mode("w x", config) || {}).label === "Windows", winRows("w ").map(r => r.title).join())
     const forged = Ext.nativeProvider(Ext.validate({ schema: 1, id: "apps", type: "native" }, "/x")).match("q", { native: () => [
       { title: "a", run: { kind: "app", target: "x; rm -rf ~" } }, { title: "b", run: { kind: "app", target: "ok.app", action: 1.5 } },
       { title: "c", run: { kind: "window", target: "$(x)" } }, { title: "d", run: { kind: "window", target: "0xb1", label: "anything" }, appId: "../x", group: "G", pinned: "yes" }] })

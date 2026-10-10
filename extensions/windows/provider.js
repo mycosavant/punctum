@@ -8,6 +8,11 @@
 //   brave → its open windows, most recently used first, above "open new"
 //   netflix → the window whose title says so
 //   w · w github → every window, or windows matching a filter
+//
+// This is the JS fallback for native/punctumd/src/windows.rs, used when
+// punctumd isn't installed; tests/windows-parity.js keeps the two the same,
+// so change both together. The Rust one also finds a window by its title's
+// letters in order ("w omrch"), after everything these rules find.
 
 var LIMIT = 8
 

@@ -5,18 +5,17 @@
   "version": "1.0.0",
   "description": "w name: switch to an open window",
   "icon": "󰖯",
-  "type": "js",
+  "type": "native",
   "entry": "provider.js",
   "enabled": true,
   "order": 180,
   "helpOrder": 20,
-  "mode": {
-    "pattern": "^\\s*w\\s",
-    "label": "Windows"
-  },
-  "permissions": {
-    "runs": [
-      "hyprctl"
-    ]
-  }
+  "mode": {"pattern": "^\\s*w\\s", "label": "Windows"},
+  "help": [
+    {"id": "windows", "title": "Switch window", "about": "Type an app or a window title. w and a space lists them all", "examples": [{"q": "w ", "note": "Every other open window, most recent first"}, {"q": "w github", "hint": "Windows with github in the title"}, {"q": "brave", "hint": "Brave's windows first, then Brave to open a new one"}]}
+  ],
+  "commands": [
+    {"title": "Switch window", "keywords": "window windows switch focus open alt tab", "text": "Go to an open window", "complete": "w "}
+  ],
+  "permissions": {"runs": ["hyprctl"]}
 }

@@ -20,7 +20,7 @@ fn talk(input: &str) -> Vec<Value> {
 fn hello_names_the_extensions() {
     let r = talk("{\"id\":0,\"op\":\"hello\"}\n");
     assert_eq!(r[0]["protocol"], 1);
-    assert_eq!(r[0]["extensions"], serde_json::json!(["units", "time", "url", "colors", "apps"]));
+    assert_eq!(r[0]["extensions"], serde_json::json!(["units", "time", "url", "colors", "apps", "windows"]));
 }
 
 #[test]

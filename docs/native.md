@@ -7,6 +7,7 @@ as a fallback, so the bar works without punctumd.
 | Extension | Rust file | What the Rust version uses | Where it does better than the JS |
 |---|---|---|---|
 | Apps | `apps.rs` | [nucleo-matcher](https://docs.rs/nucleo-matcher) (Helix's fuzzy matcher), [icu_collator](https://docs.rs/icu_collator) | Finds an app by its letters in order from the start of a word (`frfx` → Firefox, `spfy` → Spotify), ranked below everything the old rules find. Ties sort by Unicode collation, as `localeCompare` does |
+| Windows | `windows.rs` | nucleo-matcher | Finds a window by its title's letters in order (`w gthb` → GitHub, `w rqst` → Pull request), after everything the old rules find |
 | Units | `units.rs` | — | Nothing yet: a port, digit for digit |
 | Time | `time.rs` | [jiff](https://docs.rs/jiff) and the system's tzdata | Every IANA zone by name or city. Converted times use the offset at that moment, which is right across DST changes. A misspelled zone in your config is left out instead of shown as UTC. A month added to the 31st ends on the month's last day |
 | Colour | `colors.rs` | [csscolorparser](https://docs.rs/csscolorparser) | Reads every CSS colour function (`hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `rgb()` with percentages) and `#rgba` hex, and adds an OKLCH row. Colour names stay words |
@@ -133,7 +134,7 @@ paste, edit, argv). The bar checks them the way it checks a script's actions.
 Native rows may also use the bar's own `app` (an id of letters, digits and
 `._+-`, and an optional action index) and `window` (a `0x…` address)
 actions, which scripts can't. They may set `swatch`, `image`, `group`,
-`appId` and `pinned`, each checked too. A manifest with `"empty": true` has
+`appId` and `pinned`, each checked too. Apps and windows share the letters-in-order rule: three characters or more, the first letter at the start of a word, and all of them close together (spanning at most twice the query's length plus two), so letters from far-apart words don't count. A manifest with `"empty": true` has
 its answer to `""` listed on the empty bar (Apps' pinned apps).
 
 When the bar sends new shell state, it drops every cached answer and every

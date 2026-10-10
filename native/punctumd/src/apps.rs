@@ -79,7 +79,7 @@ pub fn prefixes_all(query: &[String], hay: &[String]) -> bool {
 }
 
 /// How well the query names this app, best first; 0 means no match.
-fn rank(app: &App, q: &str, qw: &[String]) -> f64 {
+pub(crate) fn rank(app: &App, q: &str, qw: &[String]) -> f64 {
     // A query with no letters (2+2, 15%) is arithmetic, never an app name.
     if !q.bytes().any(|b| b.is_ascii_alphabetic()) {
         return 0.0;
@@ -119,16 +119,28 @@ fn rank(app: &App, q: &str, qw: &[String]) -> f64 {
 /// The name's letters in the query's order, the first at the start of a
 /// word; nucleo's score for it, or None.
 fn fuzzy(app: &App, q: &str) -> Option<u32> {
+    letters_in_order(&app.name, q)
+}
+
+/// The text's letters in the query's order, the first at the start of a
+/// word and all of them close together (spanning at most twice the query's
+/// length and two), so "frfx" finds Firefox but "ima" doesn't stitch
+/// together "Inbox - Proton Mail"; nucleo's score for it, or None. Needs
+/// three characters and a letter.
+pub(crate) fn letters_in_order(text: &str, q: &str) -> Option<u32> {
     if q.chars().count() < 3 || !q.bytes().any(|b| b.is_ascii_alphabetic()) {
         return None;
     }
     let pattern = Pattern::new(q, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy);
-    let chars: Vec<char> = app.name.chars().collect();
+    let chars: Vec<char> = text.chars().collect();
     let mut buf = Vec::new();
     let mut indices = Vec::new();
-    let score =
-        MATCHER.with(|m| pattern.indices(Utf32Str::new(&app.name, &mut buf), &mut m.borrow_mut(), &mut indices))?;
+    let score = MATCHER.with(|m| pattern.indices(Utf32Str::new(text, &mut buf), &mut m.borrow_mut(), &mut indices))?;
     let first = *indices.iter().min()? as usize;
+    let last = *indices.iter().max()? as usize;
+    if last - first + 1 > 2 * q.chars().count() + 2 {
+        return None;
+    }
     let at_word = first == 0
         || !chars[first - 1].is_alphanumeric()
         || (chars[first - 1].is_lowercase() && chars[first].is_uppercase());
@@ -178,7 +190,7 @@ struct State {
 
 /// Each entry of a list that reads as T; one that doesn't is skipped, not
 /// the whole list.
-fn each<T: serde::de::DeserializeOwned>(v: &Value) -> Vec<T> {
+pub(crate) fn each<T: serde::de::DeserializeOwned>(v: &Value) -> Vec<T> {
     v.as_array().map(|a| a.iter().filter_map(|x| serde_json::from_value(x.clone()).ok()).collect()).unwrap_or_default()
 }
 
